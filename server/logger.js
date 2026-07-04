@@ -1,9 +1,18 @@
 import pino from "pino";
 
+// pino-pretty is a devDependency and absent from production images — use it
+// only when it actually resolves, regardless of what NODE_ENV claims.
 const isDev = process.env.NODE_ENV !== "production";
+let prettyAvailable = false;
+if (isDev) {
+  try {
+    await import("pino-pretty");
+    prettyAvailable = true;
+  } catch { /* pruned — fall through to plain JSON logs */ }
+}
 
 export const logger = pino(
-  isDev
+  prettyAvailable
     ? {
         level: "debug",
         transport: {
@@ -11,7 +20,7 @@ export const logger = pino(
           options: { colorize: true, translateTime: "HH:MM:ss", ignore: "pid,hostname" },
         },
       }
-    : { level: "info" }
+    : { level: isDev ? "debug" : "info" }
 );
 
 // Wrap a route handler so thrown/rejected errors are logged with full context
