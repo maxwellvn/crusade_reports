@@ -2,23 +2,15 @@ import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
+import { requireAdmin } from "../auth.js";
 import { loadZones } from "./zones.js";
 
 export const zonePortal = Router();
 
-// ---- Admin: link generation (requires ADMIN_KEY) ----------------------------
-
-function requireAdmin(req) {
-  const key = process.env.ADMIN_KEY;
-  if (!key) throw new ApiError(503, "ADMIN_UNCONFIGURED", "ADMIN_KEY is not set on the server");
-  if (req.get("x-admin-key") !== key) throw new ApiError(401, "UNAUTHORIZED", "Invalid admin key");
-}
-
 // GET /api/zone-links — ALL zones (upstream list) and ALL networks, each with
 // its token if one exists. Data-only names (e.g. a zone missing upstream but
 // present in reports) are included too, so nothing is unreachable.
-zonePortal.get("/zone-links", wrap(async (req, res) => {
-  requireAdmin(req);
+zonePortal.get("/zone-links", requireAdmin, wrap(async (req, res) => {
   const tokens = db.prepare("SELECT zone AS name, token, kind FROM zone_tokens").all();
   const tokenFor = (kind, name) => tokens.find((t) => t.kind === kind && t.name === name)?.token || null;
 
@@ -42,8 +34,7 @@ zonePortal.get("/zone-links", wrap(async (req, res) => {
 }));
 
 // POST /api/zone-links { name, kind } — create or regenerate a token.
-zonePortal.post("/zone-links", wrap((req, res) => {
-  requireAdmin(req);
+zonePortal.post("/zone-links", requireAdmin, wrap((req, res) => {
   const name = String(req.body?.name || "").trim();
   const kind = req.body?.kind === "network" ? "network" : "zone";
   if (!name) throw new ApiError(422, "VALIDATION", "Name is required");

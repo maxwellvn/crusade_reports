@@ -1,53 +1,28 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Copy, RefreshCw, Download, KeyRound, Loader2 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Copy, RefreshCw, Download, Loader2 } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Field } from "@/components/ui/field";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { getJSON, postJSON } from "@/lib/api";
 
-// Admin-only: generate/regenerate per-zone and per-network capability links and
-// export them in bulk. Every zone and network is listed — a link can be created
-// before any report or registration exists. Gated by ADMIN_KEY.
+// Generate/regenerate per-zone and per-network capability links and export
+// them in bulk. Lives inside the AdminGate; the admin key rides on every call.
 
-const KEY_LS = "crusades-admin-key";
 const linkFor = (token) => `${window.location.origin}/zone/${token}`;
 
 export function ZoneLinks() {
-  const [adminKey, setAdminKey] = React.useState(() => localStorage.getItem(KEY_LS) || "");
-  const [authed, setAuthed] = React.useState(false);
   const [data, setData] = React.useState(null); // { zones: [{name, token}], networks: [...] }
   const [busy, setBusy] = React.useState(false);
 
-  const hdrs = (k = adminKey) => ({ "Content-Type": "application/json", "x-admin-key": k });
-
-  const load = React.useCallback(async (k = adminKey) => {
-    setData(await api("/zone-links", { headers: hdrs(k) }));
-    setAuthed(true);
-  }, [adminKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
   React.useEffect(() => {
-    if (adminKey) load().catch(() => { setAuthed(false); localStorage.removeItem(KEY_LS); });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function unlock(e) {
-    e.preventDefault();
-    const k = e.target.key.value.trim();
-    try {
-      await load(k);
-      setAdminKey(k);
-      localStorage.setItem(KEY_LS, k);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }
+    getJSON("/zone-links").then(setData).catch((e) => toast.error(e.message));
+  }, []);
 
   const listKey = (kind) => (kind === "network" ? "networks" : "zones");
 
   async function generate(kind, name, quiet) {
-    const { token } = await api("/zone-links", { method: "POST", headers: hdrs(), body: JSON.stringify({ name, kind }) });
+    const { token } = await postJSON("/zone-links", { name, kind });
     setData((d) => ({ ...d, [listKey(kind)]: d[listKey(kind)].map((r) => (r.name === name ? { ...r, token } : r)) }));
     if (!quiet) toast.success(`Link ready for ${name}`);
   }
@@ -82,26 +57,6 @@ export function ZoneLinks() {
     URL.revokeObjectURL(url);
   }
 
-  if (!authed)
-    return (
-      <div className="mx-auto max-w-md">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><KeyRound className="size-4" /> Admin access</CardTitle>
-            <CardDescription>Enter the admin key to manage dashboard links.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={unlock} className="space-y-4">
-              <Field label="Admin key">
-                <Input name="key" type="password" placeholder="Paste the admin key" autoFocus />
-              </Field>
-              <Button type="submit" className="w-full">Unlock</Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-
   const missing = data ? data.zones.filter((z) => !z.token).length + data.networks.filter((n) => !n.token).length : 0;
 
   return (
@@ -115,7 +70,7 @@ export function ZoneLinks() {
           <Button type="button" variant="outline" size="sm" onClick={generateAllMissing} disabled={busy || !missing}>
             {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />} Generate all missing{missing ? ` (${missing})` : ""}
           </Button>
-          <Button type="button" size="sm" onClick={exportCsv}><Download /> Export CSV</Button>
+          <Button type="button" size="sm" onClick={exportCsv} disabled={!data}><Download /> Export CSV</Button>
         </div>
       </div>
 

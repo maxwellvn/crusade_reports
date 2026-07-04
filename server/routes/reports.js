@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { reportSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
+import { requireAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 
 export const reports = Router();
@@ -69,13 +70,13 @@ reports.post("/", wrap((req, res) => {
   res.status(201).json({ id });
 }));
 
-reports.get("/", wrap((_req, res) => {
+reports.get("/", requireAdmin, wrap((_req, res) => {
   const rows = db.prepare("SELECT * FROM reports ORDER BY created_at DESC LIMIT 500").all();
   const crus = db.prepare("SELECT * FROM crusades WHERE report_id = ?");
   res.json(rows.map((r) => ({ ...r, crusades: crus.all(r.id) })));
 }));
 
-reports.get("/:id", wrap((req, res) => {
+reports.get("/:id", requireAdmin, wrap((req, res) => {
   const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found");
   row.crusades = db.prepare("SELECT * FROM crusades WHERE report_id = ?").all(row.id);

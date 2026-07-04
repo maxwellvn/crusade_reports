@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
+import { requireAdmin } from "../auth.js";
 
 export const dashboardLayout = Router();
 
@@ -11,12 +12,12 @@ const setStmt = db.prepare(
   "INSERT INTO dashboard_layout (id, layout) VALUES (1, @layout) ON CONFLICT(id) DO UPDATE SET layout = @layout"
 );
 
-dashboardLayout.get("/", wrap((_req, res) => {
+dashboardLayout.get("/", requireAdmin, wrap((_req, res) => {
   const row = getStmt.get();
   res.json({ layout: row ? JSON.parse(row.layout) : null });
 }));
 
-dashboardLayout.put("/", wrap((req, res) => {
+dashboardLayout.put("/", requireAdmin, wrap((req, res) => {
   const layout = req.body?.layout;
   if (!Array.isArray(layout)) throw new ApiError(422, "VALIDATION", "layout must be an array");
   setStmt.run({ layout: JSON.stringify(layout) });

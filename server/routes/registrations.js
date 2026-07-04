@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { registrationSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
+import { requireAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 
 export const registrations = Router();
@@ -51,7 +52,7 @@ registrations.post("/", wrap((req, res) => {
 const ORG_LABEL = "COALESCE(r.church_name, r.group_name, r.network_name, r.zone, r.organization_type)";
 
 // GET /api/registrations/live — everything the live dashboard + landing page need.
-registrations.get("/live", wrap((_req, res) => {
+registrations.get("/live", requireAdmin, wrap((_req, res) => {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
@@ -87,7 +88,7 @@ registrations.get("/live", wrap((_req, res) => {
 }));
 
 // GET /api/registrations — paginated, filtered, sorted table for the admin view.
-registrations.get("/", wrap((req, res) => {
+registrations.get("/", requireAdmin, wrap((req, res) => {
   const where = [];
   const params = {};
 

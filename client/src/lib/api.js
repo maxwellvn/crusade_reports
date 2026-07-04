@@ -1,9 +1,18 @@
+export const ADMIN_KEY_LS = "crusades-admin-key";
+
 // Single fetch funnel. Throws Error(message) with .code on API errors so callers
 // can toast a user-safe message; full server-side detail lives in server logs.
+// The stored admin key rides along on every call — public endpoints ignore it,
+// admin endpoints require it.
 export async function api(path, options = {}) {
+  const adminKey = localStorage.getItem(ADMIN_KEY_LS);
   const res = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminKey ? { "x-admin-key": adminKey } : {}),
+      ...options.headers,
+    },
   });
   let body = null;
   try {

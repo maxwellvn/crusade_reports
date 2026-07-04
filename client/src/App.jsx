@@ -10,6 +10,7 @@ import { ZoneLinks } from "@/components/ZoneLinks";
 import { ZonePortal } from "@/components/ZonePortal";
 import { Landing } from "@/components/Landing";
 import { NotFound } from "@/components/NotFound";
+import { AdminGate } from "@/components/AdminGate";
 import { RegistrationForm } from "@/components/RegistrationForm";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
@@ -70,9 +71,9 @@ export default function App() {
           <Route path="/report" element={<ReportForm />} />
         </Route>
 
-        {/* Admin surface */}
-        <Route element={<Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/dashboard", "Dashboard", true], ["/crusades", "All crusades"], ["/registrations", "Registrations", true], ["/registrations/live", "Live"], ["/dashboard/zone-links", "Zone links"]]} />}>
+        {/* Admin surface — everything inside requires the admin key */}
+        <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
+          links={[["/", "Home", true], ["/dashboard", "Dashboard", true], ["/crusades", "All crusades"], ["/registrations", "Registrations", true], ["/registrations/live", "Live"], ["/dashboard/zone-links", "Zone links"]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />

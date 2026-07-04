@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
+import { requireAdmin } from "../auth.js";
 
 export const stats = Router();
 
@@ -8,7 +9,7 @@ export const stats = Router();
 const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 
 // GET /api/stats  -> overall totals + breakdowns by category / zone / network / country / month.
-stats.get("/", wrap((_req, res) => {
+stats.get("/", requireAdmin, wrap((_req, res) => {
   const totals = db.prepare(`SELECT COUNT(*) AS crusades, SUM(attendance) AS attendance, ${SUMS} FROM crusades`).get();
 
   // attendance = onsite; online_attendance = online_participation. Bars rank by combined reach.

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
+import { requireAdmin } from "../auth.js";
 
 export const crusades = Router();
 
@@ -8,7 +9,7 @@ export const crusades = Router();
 const FILTER_COLS = ["organization_type", "zone", "group_name", "church_name", "network_name", "country", "event_type", "format"];
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
-crusades.get("/", wrap((req, res) => {
+crusades.get("/", requireAdmin, wrap((req, res) => {
   const where = [];
   const params = {};
 

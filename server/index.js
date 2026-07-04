@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 
 import { logger, errorHandler } from "./logger.js";
+import { requireAdmin } from "./auth.js";
 import { reports } from "./routes/reports.js";
 import { networks } from "./routes/networks.js";
 import { zones } from "./routes/zones.js";
@@ -24,6 +25,8 @@ const PORT = process.env.PORT || 4000;
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+// Cheap probe the client's admin gate uses to validate the stored key.
+app.get("/api/admin/check", requireAdmin, (_req, res) => res.json({ ok: true }));
 app.use("/api/reports", reports);
 app.use("/api/networks", networks);
 app.use("/api/zones", zones);
