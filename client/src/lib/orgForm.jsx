@@ -1,0 +1,97 @@
+import * as React from "react";
+import { toast } from "sonner";
+import { Check } from "lucide-react";
+import { getJSON } from "@/lib/api";
+
+// Shared plumbing for the two multi-step forms (report + registration):
+// zone/group/network/country/city fetchers, the stepper, and review summary rows.
+
+const COUNTRY_ALIASES = {
+  uk: "united kingdom", gb: "united kingdom", britain: "united kingdom", england: "united kingdom",
+  usa: "united states", us: "united states", america: "united states",
+  uae: "united arab emirates", emirates: "united arab emirates", holland: "netherlands",
+  drc: "congo", burma: "myanmar", swaziland: "eswatini",
+};
+
+// zone: current zone value (group options depend on it).
+// countryCode: ISO code of the picked country (city autocomplete is scoped to it).
+export function useOrgData(zone, countryCode) {
+  const [allCountries, setAllCountries] = React.useState([]);
+  const [zones, setZones] = React.useState([]);
+  const [networks, setNetworks] = React.useState([]);
+  const groupCache = React.useRef({});
+
+  React.useEffect(() => {
+    getJSON("/zones").then(setZones).catch(() => toast.error("Could not load zones"));
+    getJSON("/networks").then(setNetworks).catch(() => toast.error("Could not load networks"));
+    getJSON("/countries").then(setAllCountries).catch(() => toast.error("Could not load countries"));
+  }, []);
+
+  const fetchCountries = React.useCallback(async (q) => {
+    const s = q.trim().toLowerCase();
+    const alias = COUNTRY_ALIASES[s];
+    return allCountries
+      .filter((c) => { const n = c.name.toLowerCase(); return !s || n.includes(s) || (alias && n.includes(alias)); })
+      .map((c) => ({ value: c.code, label: c.name }));
+  }, [allCountries]);
+
+  const fetchCities = React.useCallback(async (q) => {
+    const r = await getJSON(`/places/autocomplete?input=${encodeURIComponent(q)}${countryCode ? `&country=${countryCode}` : ""}`);
+    return r.map((p) => ({ value: p.place_id, label: p.main, sublabel: p.secondary }));
+  }, [countryCode]);
+
+  const fetchZones = React.useCallback(
+    async (q) => zones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone, sublabel: z.region })),
+    [zones]
+  );
+  const fetchGroups = React.useCallback(async (q) => {
+    if (!zone) return [];
+    if (!groupCache.current[zone]) groupCache.current[zone] = await getJSON(`/zones/groups?zone=${encodeURIComponent(zone)}`);
+    return groupCache.current[zone].filter((g) => g.name.toLowerCase().includes(q.toLowerCase())).map((g) => ({ value: g.id, label: g.name }));
+  }, [zone]);
+  const fetchNetworks = React.useCallback(
+    async (q) => networks.filter((n) => n.name.toLowerCase().includes(q.toLowerCase())).map((n) => ({ value: n.name, label: n.name })),
+    [networks]
+  );
+
+  const clearGroupCache = React.useCallback(() => { groupCache.current = {}; }, []);
+
+  return { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, networks, setNetworks, clearGroupCache };
+}
+
+export function Stepper({ steps, step }) {
+  return (
+    <ol className="flex items-center gap-2">
+      {steps.map((label, i) => {
+        const state = i < step ? "done" : i === step ? "current" : "todo";
+        return (
+          <li key={label} className="flex flex-1 items-center gap-2">
+            <span className={
+              "grid size-7 shrink-0 place-items-center rounded-full border transition-all duration-300 ease-emphasized " +
+              (state === "done" ? "border-primary bg-primary text-primary-foreground"
+                : state === "current" ? "border-primary text-primary ring-[3px] ring-ring/15"
+                : "border-muted-foreground/25 text-muted-foreground")
+            }>
+              {state === "done" ? <Check className="size-4" /> : <span className="text-xs font-semibold leading-none tabular-nums">{i + 1}</span>}
+            </span>
+            <span className={"text-sm font-medium transition-colors " + (state === "todo" ? "text-muted-foreground" : "text-foreground")}>{label}</span>
+            {i < steps.length - 1 && (
+              <span className="mx-1 h-px flex-1 overflow-hidden rounded-full bg-border">
+                <span className={"block h-full origin-left bg-primary transition-transform duration-300 ease-emphasized " + (i < step ? "scale-x-100" : "scale-x-0")} />
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function Summary({ label, value }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="font-medium capitalize">{value}</div>
+    </div>
+  );
+}

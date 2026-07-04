@@ -1,0 +1,10 @@
+node_modules
+client/dist
+data/*.sqlite
+data/*.sqlite-*
+data/zones_cache.json
+.env
+*.log
+.DS_Store
+.kombai/
+.refact/

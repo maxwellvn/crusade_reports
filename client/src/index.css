@@ -1,0 +1,45 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Runwai system (see DESIGN.md): monochrome neutral ladder, black-only
+       actions, no signal colours. Validation is carried by copy and borders,
+       so --destructive intentionally resolves to ink. */
+    --background: 0 0% 100%;        /* canvas */
+    --foreground: 0 0% 7%;          /* ink */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 0 0% 4%;             /* black pill */
+    --primary-foreground: 0 0% 98%; /* paper white */
+    --secondary: 0 0% 96%;          /* hairline infill (featured surface) */
+    --secondary-foreground: 0 0% 15%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 220 4% 42%; /* slate — the only tinted neutral */
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 7%;
+    --destructive: 0 0% 7%;         /* ponytail: spec forbids red — errors read via copy */
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 92%;             /* hairline-soft */
+    --input: 0 0% 85%;              /* field bottom rule */
+    --ring: 0 0% 7%;
+    --radius: 0.5rem;               /* rounded.md = 8px */
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "abcNormal", "Inter", system-ui, sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Runwai display voice: regular weight, tight negative tracking. */
+  h1, h2, h3 { font-weight: 400; letter-spacing: -0.025em; }
+}
