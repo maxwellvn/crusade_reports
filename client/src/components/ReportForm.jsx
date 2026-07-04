@@ -193,7 +193,7 @@ export function ReportForm() {
             onLoaded={(rows) => crusadeArray.replace(rows.map((r) => ({ ...emptyCrusade(), ...r })))}
           />
           <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
               <div>
                 <CardTitle>Crusades</CardTitle>
                 <CardDescription>Add one block per crusade held — each has its own city, date and results. Held several similar ones? Fill one, then use “Duplicate”.</CardDescription>

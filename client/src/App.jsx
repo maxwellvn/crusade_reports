@@ -28,16 +28,17 @@ function Shell({ subtitle, links }) {
   return (
     <div className="min-h-screen">
       <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4">
           {logoOk && (
             <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold tracking-tight">Rhapsody End-Time Crusades</h1>
             <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>
           </div>
           {links.length > 0 && (
-            <nav className="ml-auto flex shrink-0 gap-1">
+            // On phones the nav wraps to its own row and scrolls sideways if needed.
+            <nav className="flex gap-1 max-sm:w-full max-sm:overflow-x-auto max-sm:whitespace-nowrap sm:ml-auto sm:shrink-0">
               {links.map(([to, label, end]) => (
                 <NavLink key={to} to={to} end={end} className={navLink}>{label}</NavLink>
               ))}

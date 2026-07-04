@@ -75,9 +75,9 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight">Dashboard</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Global search: lands on /crusades backed by FTS5 across every field */}
           <form className="relative hidden sm:block"
             onSubmit={(e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) navigate(`/crusades?q=${encodeURIComponent(v)}`); }}>
