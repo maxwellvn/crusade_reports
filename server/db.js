@@ -159,6 +159,17 @@ if (!crusadeCols.includes("format")) {
   `);
 }
 
+// Canonical network list, seeded at every boot (idempotent — name is UNIQUE).
+// New networks added through the registration form persist alongside these.
+const NETWORKS = [
+  "REACHOUT CAMPAIGNS", "REON", "RIM", "RIN",
+  "Say Yes to Kids", "TEEVOLUTION", "TNI", "Youths Aglow",
+];
+{
+  const ins = db.prepare("INSERT OR IGNORE INTO networks (name) VALUES (?)");
+  NETWORKS.forEach((n) => ins.run(n));
+}
+
 // zone_tokens predates network links: `zone` holds the org name for both kinds;
 // `kind` says whether it scopes by zone or by network_name.
 const ztCols = db.prepare("PRAGMA table_info(zone_tokens)").all().map((c) => c.name);
