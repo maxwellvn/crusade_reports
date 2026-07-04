@@ -14,6 +14,8 @@ ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/client/dist ./client/dist
 COPY server ./server
+# importer.js shares the crusade-type constants with the client
+COPY client/src/lib/constants.js ./client/src/lib/constants.js
 COPY package.json ./
 # SQLite lives here — mount a persistent volume at /app/data in Coolify.
 RUN mkdir -p data
