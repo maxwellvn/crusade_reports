@@ -235,7 +235,7 @@ export function RegistrationForm() {
                           </div>
                           <Button type="button" variant="ghost" size="sm" className="mt-2 text-muted-foreground"
                             onClick={() => itemArray.append({ ...getValues(`items.${i}`) })}>
-                            <Copy className="size-4" /> Duplicate this row (same type & count, e.g. for another city)
+                            <Copy className="size-4" /> Duplicate this row<span className="max-sm:hidden"> (same type & count, e.g. for another city)</span>
                           </Button>
                         </div>
                       );

@@ -407,7 +407,7 @@ function CrusadeRow({ index, form, errors, fetchCities, countryReady, onRemove, 
       )}
 
       <Button type="button" variant="ghost" size="sm" onClick={onClone} className="mt-3 text-muted-foreground">
-        <Copy className="size-4" /> Duplicate this crusade (copy its details into a new one)
+        <Copy className="size-4" /> Duplicate this crusade<span className="max-sm:hidden"> (copy its details into a new one)</span>
       </Button>
     </div>
   );
