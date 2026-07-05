@@ -16,6 +16,7 @@ import { registrationSchema, registrationDefaults } from "@/lib/schema";
 import { CRUSADE_TYPES } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
+import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
 
 // Public crusade registration — the intent-side twin of the report form.
 // Zones/groups/churches/networks declare how many crusades of each type they
@@ -86,26 +87,27 @@ export function RegistrationForm() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="reg-page">
       {/* Pill header, campaign style */}
       <header className="fixed inset-x-0 top-4 z-50 px-4">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full border bg-card/85 pl-3 pr-4 backdrop-blur-md">
+        <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/crusade-registration" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Rhapsody End-Time Crusades" className="h-8 w-auto" />
+            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" className="h-8 w-auto" />
             <span className="hidden text-sm font-semibold sm:block">A Night of a Thousand Crusades</span>
           </Link>
           <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground">
+            className="reg-header-link inline-flex items-center gap-1 text-sm font-semibold transition-colors">
             rhapsodycrusades.org <ArrowUpRight className="size-3.5" />
           </a>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 pt-32">
+      <main className="reg-main">
+       <div className="reg-card">
         {done ? (
           <div className="animate-step-in space-y-6 pb-24 text-center motion-reduce:animate-none">
             <span className="mx-auto grid size-16 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="size-8" /></span>
-            <h1 className="text-4xl tracking-[-0.9px]">You’re registered.</h1>
+            <h1 className="reg-title text-4xl tracking-[-0.9px]">You’re registered.</h1>
             <p className="mx-auto max-w-md text-muted-foreground">
               <span className="font-semibold text-foreground">{nfull.format(done.planned)} crusades</span> planned
               for <span className="font-semibold text-foreground">{done.date}</span> have joined the global tally.
@@ -119,8 +121,8 @@ export function RegistrationForm() {
         ) : (
           <form onSubmit={handleSubmit(onSubmit, () => toast.error("Please fix the highlighted fields."))} onKeyDown={onFormKeyDown} className="space-y-6 pb-28">
             <div className="space-y-2">
-              <p className="text-sm font-medium uppercase tracking-[0.35px] text-muted-foreground">Crusade Registration</p>
-              <h1 className="text-3xl tracking-[-0.9px] sm:text-4xl">Register your crusades.</h1>
+              <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Crusade Registration</p>
+              <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your crusades.</h1>
             </div>
 
             <Stepper steps={STEPS} step={step} />
@@ -300,6 +302,7 @@ export function RegistrationForm() {
             </div>
           </form>
         )}
+       </div>
       </main>
     </div>
   );

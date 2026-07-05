@@ -99,6 +99,30 @@ const CONTACTS = [
   ["Nigeria", ["+234 201 8888 186"]],
 ];
 
+// Cookie consent — shows once, remembers the choice in localStorage.
+function CookiePrompt() {
+  const [show, setShow] = React.useState(false);
+  React.useEffect(() => {
+    try { if (!localStorage.getItem("cookie-consent")) setShow(true); } catch { /* private mode */ }
+  }, []);
+  const decide = (v) => {
+    try { localStorage.setItem("cookie-consent", v); } catch { /* ignore */ }
+    setShow(false);
+  };
+  if (!show) return null;
+  return (
+    <div className="cookie-prompt" role="dialog" aria-label="Cookie notice">
+      <p className="cookie-copy">
+        We use cookies to improve your experience and to count crusades on the live map.
+      </p>
+      <div className="cookie-actions">
+        <button type="button" className="cookie-decline" onClick={() => decide("declined")}>Decline</button>
+        <button type="button" className="cookie-accept" onClick={() => decide("accepted")}>Accept</button>
+      </div>
+    </div>
+  );
+}
+
 export function Landing() {
   const [navOpen, setNavOpen] = React.useState(false);
   const closeNav = () => setNavOpen(false);
@@ -325,10 +349,10 @@ export function Landing() {
               </div>
               <p className="footer-desc">Thousands of crusades held simultaneously across cities and nations of the world — reaching the whole world in one night.</p>
               <div className="footer-social">
-                <a href="#" aria-label="Facebook"><i className="ri-facebook-fill" /></a>
-                <a href="#" aria-label="Instagram"><i className="ri-instagram-line" /></a>
-                <a href="#" aria-label="YouTube"><i className="ri-youtube-fill" /></a>
-                <a href="#" aria-label="KingsChat"><i className="ri-chat-3-fill" /></a>
+                <a href="https://kingschat.online/user/rorcrusades1" target="_blank" rel="noreferrer"
+                  className="footer-kingschat" aria-label="KingsChat">
+                  <img src="/assets/kingschat.webp" alt="" />
+                </a>
               </div>
             </div>
 
@@ -374,6 +398,8 @@ export function Landing() {
           <span className="footer-watermark" aria-hidden="true">Rhapsody</span>
         </div>
       </footer>
+
+      <CookiePrompt />
     </div>
   );
 }
