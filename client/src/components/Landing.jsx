@@ -41,18 +41,27 @@ function useTypewriter(words, { typeMs = 85, deleteMs = 45, holdMs = 1600 } = {}
 // rotate the arrow to point forward, then navigate.
 function RegisterButton({ children, className = "" }) {
   const navigate = useNavigate();
+  const labelRef = React.useRef(null);
   const [igniting, setIgniting] = React.useState(false);
   const onClick = (e) => {
     if (igniting) return;
     e.preventDefault();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { navigate(REGISTER); return; }
+    // Pin the label to its exact width so the collapse starts moving instantly
+    // (no dead zone from an oversized max-width), then animate it to 0.
+    const label = labelRef.current;
+    if (label) {
+      label.style.maxWidth = `${label.scrollWidth}px`;
+      void label.offsetWidth; // force reflow so the next value transitions
+      requestAnimationFrame(() => { label.style.maxWidth = "0px"; });
+    }
     setIgniting(true);
-    setTimeout(() => navigate(REGISTER), 720);
+    setTimeout(() => navigate(REGISTER), 1250);
   };
   return (
     <Link to={REGISTER} onClick={onClick} aria-label="Register"
       className={`btn btn-primary reg-btn${igniting ? " igniting" : ""} ${className}`}>
-      <span className="reg-label">{children}</span>
+      <span className="reg-label" ref={labelRef}>{children}</span>
       <img src="/assets/icon-arrow.svg" className="btn-icon" alt="" />
     </Link>
   );
