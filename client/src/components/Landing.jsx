@@ -42,8 +42,6 @@ export function Landing() {
     gsap.ticker.lagSmoothing(0);
 
     const ctx = gsap.context(() => {
-      gsap.set(".hero-globe", { xPercent: -50 });
-
       const intro = gsap.timeline({ defaults: { ease: spring } });
       intro
         .fromTo(".site-header",
