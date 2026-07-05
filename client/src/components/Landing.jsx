@@ -67,6 +67,30 @@ function RegisterButton({ children, className = "" }) {
   );
 }
 
+// Donate link: on hover, cycle through money icons (each blurs in); stop on
+// leave. Uses the already-loaded Remix Icon font, so no extra network requests.
+const DONATE_ICONS = ["ri-money-euro-circle-fill", "ri-money-cny-box-fill", "ri-money-dollar-box-fill", "ri-money-cny-circle-fill"];
+function DonateLink({ onClick }) {
+  const [hover, setHover] = React.useState(false);
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    if (!hover) return;
+    setIdx(0);
+    const t = setInterval(() => setIdx((n) => (n + 1) % DONATE_ICONS.length), 1150);
+    return () => clearInterval(t);
+  }, [hover]);
+  return (
+    <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer"
+      className="nav-link donate-link" onClick={onClick}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      Donate
+      <span className="donate-icon" aria-hidden="true">
+        {hover && <i key={idx} className={`${DONATE_ICONS[idx]} donate-cycle`} />}
+      </span>
+    </a>
+  );
+}
+
 const CONTACTS = [
   ["USA", ["+1 (469) 656-1284", "+1 800 620 8522"]],
   ["UK", ["+44 (0) 170 855 6604"]],
@@ -79,80 +103,142 @@ export function Landing() {
   const [navOpen, setNavOpen] = React.useState(false);
   const closeNav = () => setNavOpen(false);
   const rootRef = React.useRef(null);
+  const loaderRef = React.useRef(null);
+  const [loaded, setLoaded] = React.useState(false);
   const heroWord = useTypewriter(HERO_WORDS);
 
-  // GSAP intro + scroll reveals + globe parallax, synced to Lenis smooth scroll.
-  // Ported from the ukcopy main.js; gsap/ScrollTrigger/Lenis come from CDN
-  // (see index.html). Scoped to the landing root and fully torn down on unmount.
+  // Page loader (globe icon zooms out + blurs away) → hero intro → scroll
+  // parallax + section reveals, synced to Lenis smooth scroll. gsap/ScrollTrigger/
+  // Lenis come from CDN (index.html). Scoped to the root; torn down on unmount.
   React.useEffect(() => {
     const { gsap, ScrollTrigger, Lenis } = window;
     const root = rootRef.current;
-    if (!gsap || !ScrollTrigger || !Lenis || !root) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animated = gsap && ScrollTrigger && Lenis && root && !reduce;
 
-    gsap.registerPlugin(ScrollTrigger);
-    const q = gsap.utils.selector(root);
-    const spring = "back.out(1.4)";
-    const blur = (px) => `blur(${px}px)`;
+    let lenis, ctx, onTick, safety, hardCap, started = false;
 
-    const lenis = new Lenis({ lerp: 0.1 });
-    lenis.on("scroll", ScrollTrigger.update);
-    const onTick = (t) => lenis.raf(t * 1000);
-    gsap.ticker.add(onTick);
-    gsap.ticker.lagSmoothing(0);
+    const play = () => {
+      if (started) return;
+      started = true;
+      clearTimeout(safety);
+      clearTimeout(hardCap);
+      if (!animated) { setLoaded(true); return; }
 
-    const ctx = gsap.context(() => {
-      const intro = gsap.timeline({ defaults: { ease: spring } });
-      intro
-        .fromTo(".site-header",
-          { autoAlpha: 0, y: -55, filter: blur(8) },
-          { autoAlpha: 1, y: 0, filter: blur(0), duration: 0.9, clearProps: "filter" })
-        .fromTo(".hero-content h1",
-          { autoAlpha: 0, y: 44, filter: blur(16) },
-          { autoAlpha: 1, y: 0, filter: blur(0), duration: 1.1, clearProps: "filter" }, "-=0.45")
-        .fromTo(".hero-sub",
-          { autoAlpha: 0, y: 28, filter: blur(10) },
-          { autoAlpha: 1, y: 0, filter: blur(0), duration: 0.9, clearProps: "filter" }, "-=0.75")
-        .fromTo(".hero-collage img",
-          { autoAlpha: 0, y: 64, scale: 0.92, filter: blur(12) },
-          { autoAlpha: 1, y: 0, scale: 1, filter: blur(0), duration: 1, stagger: 0.12, clearProps: "transform,filter" }, "-=0.55")
-        .fromTo(".hero-globe",
-          { autoAlpha: 0, scale: 1.06, filter: blur(12) },
-          { autoAlpha: 1, scale: 1, filter: blur(0), duration: 1.3, ease: "power2.out", clearProps: "filter" }, "-=1.15");
+      gsap.registerPlugin(ScrollTrigger);
+      const spring = "back.out(1.4)";
+      const blur = (px) => `blur(${px}px)`;
 
-      gsap.to(".hero-globe", {
-        yPercent: 9, ease: "none",
-        scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: true },
-      });
+      lenis = new Lenis({ lerp: 0.1 });
+      lenis.on("scroll", ScrollTrigger.update);
+      onTick = (t) => lenis.raf(t * 1000);
+      gsap.ticker.add(onTick);
+      gsap.ticker.lagSmoothing(0);
 
-      const reveal = (targets, opts = {}) =>
-        gsap.fromTo(targets,
-          { autoAlpha: 0, y: opts.y ?? 32, filter: blur(opts.blur ?? 10) },
-          {
-            autoAlpha: 1, y: 0, filter: blur(0),
-            duration: opts.duration ?? 0.9, ease: spring,
-            stagger: opts.stagger ?? 0, delay: opts.delay ?? 0,
-            scrollTrigger: { trigger: opts.trigger, start: opts.start ?? "top 82%" },
-            clearProps: "filter",
+      ctx = gsap.context(() => {
+        // ---- Loader reveal: globe zooms out + blurs, overlay fades to page ----
+        const loader = loaderRef.current;
+        if (loader) {
+          gsap.timeline()
+            .fromTo(loader.querySelector(".loader-globe"),
+              { scale: 0.42, filter: blur(0) },
+              { scale: 1.75, filter: blur(16), duration: 1.15, ease: "power2.inOut" })
+            .to(loader, { autoAlpha: 0, duration: 0.7, ease: "power1.out",
+              onComplete: () => setLoaded(true) }, "-=0.55");
+        }
+
+        // ---- Hero intro (plays as the loader dissolves) ----
+        const intro = gsap.timeline({ defaults: { ease: spring }, delay: 0.5 });
+        intro
+          .fromTo(".site-header",
+            { autoAlpha: 0, y: -55, filter: blur(8) },
+            { autoAlpha: 1, y: 0, filter: blur(0), duration: 0.9, clearProps: "filter" })
+          .fromTo(".hero-content h1",
+            { autoAlpha: 0, y: 44, filter: blur(16) },
+            { autoAlpha: 1, y: 0, filter: blur(0), duration: 1.1, clearProps: "filter" }, "-=0.45")
+          .fromTo(".hero-sub",
+            { autoAlpha: 0, y: 28, filter: blur(10) },
+            { autoAlpha: 1, y: 0, filter: blur(0), duration: 0.9, clearProps: "filter" }, "-=0.75")
+          .fromTo(".hero-collage img",
+            { autoAlpha: 0, y: 64, scale: 0.92, filter: blur(12) },
+            { autoAlpha: 1, y: 0, scale: 1, filter: blur(0), duration: 1, stagger: 0.12, clearProps: "filter" }, "-=0.55")
+          .fromTo(".hero-globe",
+            { autoAlpha: 0, scale: 1.06, filter: blur(12) },
+            { autoAlpha: 1, scale: 1, filter: blur(0), duration: 1.3, ease: "power2.out", clearProps: "filter" }, "-=1.15");
+
+        // ---- Scroll parallax: globe + collage at differing speeds ----
+        gsap.to(".hero-globe", {
+          yPercent: 9, ease: "none",
+          scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: true },
+        });
+        // Each collage image drifts up at its own rate — the top one moves ~1.5x
+        // the scroll (yPercent -50), the others progressively less. (approximate)
+        const drift = { ".collage-a": -50, ".collage-b": -16, ".collage-c": -32, ".collage-d": -8 };
+        Object.entries(drift).forEach(([sel, yPercent]) => {
+          gsap.to(sel, {
+            yPercent, ease: "none",
+            scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: 0.5 },
           });
+        });
 
-      reveal(".how-to h2, .how-to .section-sub", { trigger: ".how-to", start: "top 80%", stagger: 0.12, duration: 0.8 });
-      reveal(".step", { trigger: ".steps", start: "top 84%", y: 54, blur: 12, stagger: 0.16, duration: 0.9 });
-      reveal(".how-to .btn-primary", { trigger: ".steps", start: "top 66%", y: 24, blur: 6, duration: 0.7, delay: 0.15 });
-      reveal(".footer-cta > *", { trigger: ".footer-cta", start: "top 82%", y: 36, stagger: 0.13, duration: 0.9 });
-      reveal(".footer-brand, .footer-col, .footer-numbers", { trigger: ".footer-main", start: "top 88%", y: 30, blur: 8, stagger: 0.12, duration: 0.8 });
-      reveal(".footer-bottom", { trigger: ".footer-bottom", start: "top 95%", y: 20, blur: 5, duration: 0.7 });
-    }, root);
+        // ---- Section reveals on scroll ----
+        const reveal = (targets, opts = {}) =>
+          gsap.fromTo(targets,
+            { autoAlpha: 0, y: opts.y ?? 32, filter: blur(opts.blur ?? 10) },
+            {
+              autoAlpha: 1, y: 0, filter: blur(0),
+              duration: opts.duration ?? 0.9, ease: spring,
+              stagger: opts.stagger ?? 0, delay: opts.delay ?? 0,
+              scrollTrigger: { trigger: opts.trigger, start: opts.start ?? "top 82%" },
+              clearProps: "transform,filter",   // clear transform so CSS :hover works
+            });
+
+        reveal(".how-to h2, .how-to .section-sub", { trigger: ".how-to", start: "top 80%", stagger: 0.12, duration: 0.8 });
+        reveal(".step", { trigger: ".steps", start: "top 84%", y: 54, blur: 12, stagger: 0.16, duration: 0.9 });
+        reveal(".how-to .btn-primary", { trigger: ".steps", start: "top 66%", y: 24, blur: 6, duration: 0.7, delay: 0.15 });
+        reveal(".footer-cta > *", { trigger: ".footer-cta", start: "top 82%", y: 36, stagger: 0.13, duration: 0.9 });
+        reveal(".footer-brand, .footer-col, .footer-numbers", { trigger: ".footer-main", start: "top 88%", y: 30, blur: 8, stagger: 0.12, duration: 0.8 });
+        reveal(".footer-bottom", { trigger: ".footer-bottom", start: "top 95%", y: 20, blur: 5, duration: 0.7 });
+      }, root);
+    };
+
+    // Preload hero imagery, but keep the loader up for a minimum ~2.7s (the
+    // reveal itself adds ~1.3s → ~4s total) so it doesn't flash by on fast/cached
+    // loads. Hard cap in case images never resolve.
+    const MIN_LOADER_MS = 2700;
+    const t0 = performance.now();
+    const armed = () => {
+      const wait = Math.max(0, MIN_LOADER_MS - (performance.now() - t0));
+      safety = setTimeout(play, wait);
+    };
+    const sources = ["/assets/globe.webp", "/assets/crusade-1.webp", "/assets/crusade-2.webp", "/assets/crusade-3.webp", "/assets/crusade-4.webp"];
+    let remaining = sources.length;
+    sources.forEach((src) => {
+      const im = new Image();
+      im.onload = im.onerror = () => { if (--remaining <= 0) armed(); };
+      im.src = src;
+    });
+    hardCap = setTimeout(play, MIN_LOADER_MS + 3000);
 
     return () => {
-      gsap.ticker.remove(onTick);
-      lenis.destroy();
-      ctx.revert();
+      clearTimeout(safety);
+      clearTimeout(hardCap);
+      if (onTick) gsap.ticker.remove(onTick);
+      lenis?.destroy();
+      ctx?.revert();
     };
   }, []);
 
   return (
     <div ref={rootRef} className={`landing-page${navOpen ? " nav-open" : ""}`}>
+      {/* ===== Page loader: globe icon zooms out + blurs into the page ===== */}
+      {!loaded && (
+        <div className="page-loader" ref={loaderRef} aria-hidden="true">
+          <span className="loader-ring" />
+          <img className="loader-globe" src="/assets/globe.webp" alt="" />
+        </div>
+      )}
+
       {/* ===== Hero (gray card: header + title + globe + collage) ===== */}
       <section className="hero">
         <div className="hero-glow" aria-hidden="true" />
@@ -173,11 +259,11 @@ export function Landing() {
           </button>
           <nav className="nav" id="primary-nav">
             <div className="nav-pill">
-              <a href="https://rhapsodycrusades.org/resources" target="_blank" rel="noreferrer" className="nav-link" onClick={closeNav}>
+              <a href="https://rhapsodycrusades.org/resources" target="_blank" rel="noreferrer" className="nav-link resources-link" onClick={closeNav}>
                 Resources <img src="/assets/icon-resources.svg" className="nav-icon" alt="" />
               </a>
               <span className="nav-divider" />
-              <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer" className="nav-link" onClick={closeNav}>Donate</a>
+              <DonateLink onClick={closeNav} />
             </div>
             <RegisterButton>Register Now</RegisterButton>
           </nav>
