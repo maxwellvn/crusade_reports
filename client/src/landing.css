@@ -187,7 +187,30 @@
     font-family: "Instrument Sans", sans-serif;
     font-style: italic;
     font-weight: 500;
+    display: inline-block;
+    white-space: nowrap;   /* animated word stays on its own line, never wraps/jumps */
+    min-height: 0.9em;     /* reserve the line so it never collapses mid-delete */
+    /* Shader-style animated gradient sweep on the typewriter word. */
+    background: linear-gradient(100deg, #2c30a6 0%, #5a3fd6 30%, #b06cff 50%, #5a3fd6 70%, #2c30a6 100%);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: hero-shader 6s linear infinite;
 }
+@keyframes hero-shader { to { background-position: 300% 50%; } }
+.landing-page .type-caret {
+    display: inline-block;
+    width: 0.05em;
+    min-width: 3px;
+    height: 0.82em;
+    margin-left: 0.06em;
+    background: #5a3fd6;   /* explicit — text-fill on <em> is transparent */
+    vertical-align: baseline;
+    animation: type-caret-blink 1s steps(1) infinite;
+}
+@keyframes type-caret-blink { 50% { opacity: 0; } }
 .landing-page .hero-sub {
     max-width: 371px;
     margin-top: clamp(16px, 2vw, 24px);

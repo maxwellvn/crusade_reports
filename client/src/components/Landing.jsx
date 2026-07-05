@@ -8,6 +8,35 @@ import "../landing.css";
 
 const REGISTER = "/crusade-registration/register";
 
+const HERO_WORDS = ["Crusades", "Conferences", "Outreaches", "Rallies", "Distribution"];
+
+// Typewriter: deletes the current word, types the next, loops. Static on
+// reduced-motion. Speeds in ms per char / hold at full word.
+function useTypewriter(words, { typeMs = 85, deleteMs = 45, holdMs = 1600 } = {}) {
+  const [text, setText] = React.useState(words[0]);
+  React.useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let wordIdx = 0, charIdx = words[0].length, deleting = true, timer;
+    const tick = () => {
+      const word = words[wordIdx];
+      if (deleting) {
+        charIdx -= 1;
+        setText(word.slice(0, charIdx));
+        if (charIdx === 0) { deleting = false; wordIdx = (wordIdx + 1) % words.length; }
+        timer = setTimeout(tick, deleteMs);
+      } else {
+        charIdx += 1;
+        setText(words[wordIdx].slice(0, charIdx));
+        if (charIdx === words[wordIdx].length) { deleting = true; timer = setTimeout(tick, holdMs); return; }
+        timer = setTimeout(tick, typeMs);
+      }
+    };
+    timer = setTimeout(tick, holdMs);
+    return () => clearTimeout(timer);
+  }, []);
+  return text;
+}
+
 const CONTACTS = [
   ["USA", ["+1 (469) 656-1284", "+1 800 620 8522"]],
   ["UK", ["+44 (0) 170 855 6604"]],
@@ -20,6 +49,7 @@ export function Landing() {
   const [navOpen, setNavOpen] = React.useState(false);
   const closeNav = () => setNavOpen(false);
   const rootRef = React.useRef(null);
+  const heroWord = useTypewriter(HERO_WORDS);
 
   // GSAP intro + scroll reveals + globe parallax, synced to Lenis smooth scroll.
   // Ported from the ukcopy main.js; gsap/ScrollTrigger/Lenis come from CDN
@@ -96,11 +126,11 @@ export function Landing() {
       {/* ===== Hero (gray card: header + title + globe + collage) ===== */}
       <section className="hero">
         <div className="hero-glow" aria-hidden="true" />
-        <img src="/assets/globe.png" className="hero-globe" alt="" aria-hidden="true" />
+        <img src="/assets/globe.webp" className="hero-globe" alt="" aria-hidden="true" />
 
         <header className="site-header">
           <Link to="/" className="logo">
-            <img src="/logo.png" alt="Rhapsody End-Time Crusades" />
+            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" />
           </Link>
           <button
             className="nav-toggle"
@@ -126,7 +156,7 @@ export function Landing() {
         </header>
 
         <div className="hero-content">
-          <h1>Rhapsody End-Time Teaching <em>Crusades</em></h1>
+          <h1>Rhapsody End-Time Teaching<br /><em aria-live="polite">{heroWord}<span className="type-caret" aria-hidden="true" /></em></h1>
           <p className="hero-sub">
             A Night of a Thousand Crusades.<br />
             One night. Thousands of crusades, held simultaneously across cities and nations of the world.
@@ -134,10 +164,10 @@ export function Landing() {
         </div>
 
         <div className="hero-collage">
-          <img src="/assets/crusade-3.png" alt="Crusade stage" className="collage-a" />
-          <img src="/assets/crusade-1.png" alt="Crusade gathering" className="collage-b" />
-          <img src="/assets/crusade-4.png" alt="Crusade worship" className="collage-c" />
-          <img src="/assets/crusade-2.png" alt="Crusade crowd" className="collage-d" />
+          <img src="/assets/crusade-3.webp" alt="Crusade stage" className="collage-a" />
+          <img src="/assets/crusade-1.webp" alt="Crusade gathering" className="collage-b" />
+          <img src="/assets/crusade-4.webp" alt="Crusade worship" className="collage-c" />
+          <img src="/assets/crusade-2.webp" alt="Crusade crowd" className="collage-d" />
         </div>
       </section>
 
@@ -181,7 +211,7 @@ export function Landing() {
             <div className="footer-brand">
               <div className="footer-brand-head">
                 <img src="/logo.png" alt="" className="footer-logo" />
-                <span className="footer-brand-name">Rhapsody<br />End-Time Crusades</span>
+                <span className="footer-brand-name">Rhapsody End-Time<br />Teaching Crusades</span>
               </div>
               <p className="footer-desc">Thousands of crusades held simultaneously across cities and nations of the world — reaching the whole world in one night.</p>
               <div className="footer-social">
@@ -223,7 +253,7 @@ export function Landing() {
           </div>
 
           <div className="footer-bottom">
-            <p className="footer-copy">© 2026 Rhapsody End-Time Crusades. All rights reserved.</p>
+            <p className="footer-copy">© 2026 Rhapsody End-Time Teaching Crusades. All rights reserved.</p>
             <nav className="footer-legal">
               <a href="#">Privacy Policy</a>
               <a href="#">Terms of Service</a>
