@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { BrowserRouter, Routes, Route, NavLink, Outlet } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { BrowserRouter, Routes, Route, NavLink, Outlet, useLocation } from "react-router-dom";
 import { ReportForm } from "@/components/ReportForm";
 import { Dashboard } from "@/components/Dashboard";
 import { WidgetDetail } from "@/components/WidgetDetail";
@@ -14,6 +14,32 @@ import { AdminGate } from "@/components/AdminGate";
 import { RegistrationForm } from "@/components/RegistrationForm";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+
+const BRAND = "Rhapsody End-Time Teaching Crusades";
+
+// Per-route document title (first match wins; order matters for prefixes).
+const PAGE_TITLES = [
+  [/^\/$/, "A Night of a Thousand Crusades"],
+  [/^\/crusade-registration\/register/, "Register your crusades"],
+  [/^\/crusade-registration/, "A Night of a Thousand Crusades"],
+  [/^\/report/, "Report a crusade"],
+  [/^\/dashboard\/zone-links/, "Zone links"],
+  [/^\/dashboard\/widget/, "Dashboard"],
+  [/^\/dashboard/, "Dashboard"],
+  [/^\/crusades/, "All crusades"],
+  [/^\/registrations\/live/, "Live registrations"],
+  [/^\/registrations/, "Registrations"],
+  [/^\/zone\//, "Zone portal"],
+];
+
+function TitleManager() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const match = PAGE_TITLES.find(([re]) => re.test(pathname));
+    document.title = `${match ? match[1] : "Page not found"} — ${BRAND}`;
+  }, [pathname]);
+  return null;
+}
 
 const navLink = ({ isActive }) =>
   cn(
@@ -34,7 +60,7 @@ function Shell({ subtitle, links }) {
             <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
           )}
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold tracking-tight">Rhapsody End-Time Crusades</h1>
+            <h1 className="truncate text-base font-semibold tracking-tight">Rhapsody End-Time Teaching Crusades</h1>
             <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>
           </div>
           {links.length > 0 && (
@@ -57,6 +83,7 @@ function Shell({ subtitle, links }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <TitleManager />
       <Routes>
         {/* Public campaign surface — self-contained pages, no app chrome */}
         <Route path="/" element={<Landing />} />
