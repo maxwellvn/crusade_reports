@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "../landing.css";
 
 // Public campaign page — A Night of a Thousand Crusades.
@@ -35,6 +35,27 @@ function useTypewriter(words, { typeMs = 85, deleteMs = 45, holdMs = 1600 } = {}
     return () => clearTimeout(timer);
   }, []);
   return text;
+}
+
+// Register CTA: on click, collapse to a circle showing only the arrow icon,
+// rotate the arrow to point forward, then navigate.
+function RegisterButton({ children, className = "" }) {
+  const navigate = useNavigate();
+  const [igniting, setIgniting] = React.useState(false);
+  const onClick = (e) => {
+    if (igniting) return;
+    e.preventDefault();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { navigate(REGISTER); return; }
+    setIgniting(true);
+    setTimeout(() => navigate(REGISTER), 720);
+  };
+  return (
+    <Link to={REGISTER} onClick={onClick} aria-label="Register"
+      className={`btn btn-primary reg-btn${igniting ? " igniting" : ""} ${className}`}>
+      <span className="reg-label">{children}</span>
+      <img src="/assets/icon-arrow.svg" className="btn-icon" alt="" />
+    </Link>
+  );
 }
 
 const CONTACTS = [
@@ -149,9 +170,7 @@ export function Landing() {
               <span className="nav-divider" />
               <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer" className="nav-link" onClick={closeNav}>Donate</a>
             </div>
-            <Link to={REGISTER} className="btn btn-primary" onClick={closeNav}>
-              Register Now <img src="/assets/icon-arrow.svg" className="btn-icon" alt="" />
-            </Link>
+            <RegisterButton>Register Now</RegisterButton>
           </nav>
         </header>
 
@@ -190,9 +209,7 @@ export function Landing() {
           ))}
         </ol>
 
-        <Link to={REGISTER} className="btn btn-primary">
-          Start Registration <img src="/assets/icon-arrow.svg" className="btn-icon" alt="" />
-        </Link>
+        <RegisterButton>Start Registration</RegisterButton>
       </section>
 
       {/* ===== Footer ===== */}
@@ -201,9 +218,7 @@ export function Landing() {
           <span className="eyebrow">One night. Thousands of crusades.</span>
           <h2 className="footer-tagline">Reaching the whole world in one night.</h2>
           <p className="footer-cta-sub">Register your crusade and join the global tally — appear on the live map across cities and nations of the world.</p>
-          <Link to={REGISTER} className="btn btn-primary btn-lg">
-            Register your crusades <img src="/assets/icon-arrow.svg" className="btn-icon" alt="" />
-          </Link>
+          <RegisterButton className="btn-lg">Register your crusades</RegisterButton>
         </div>
 
         <div className="footer-main">

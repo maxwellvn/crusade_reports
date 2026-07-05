@@ -53,6 +53,35 @@
     border-radius: 50px;
 }
 
+/* ===== Register CTA: collapse to a circle + rotate arrow forward on click ===== */
+.landing-page .reg-btn {
+    overflow: hidden;
+    transition: padding 0.4s cubic-bezier(0.65, 0, 0.35, 1), gap 0.4s ease, border-radius 0.4s ease;
+}
+.landing-page .reg-btn .reg-label {
+    display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 320px;
+    opacity: 1;
+    transition: max-width 0.4s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.25s ease, margin 0.4s ease;
+}
+.landing-page .reg-btn .btn-icon {
+    transition: transform 0.35s ease 0.38s;   /* rotate only after the collapse */
+}
+.landing-page .reg-btn.igniting {
+    gap: 0;
+    border-radius: 50%;
+    padding-left: clamp(12px, 1.4vw, 20px);
+    padding-right: clamp(12px, 1.4vw, 20px);
+}
+.landing-page .reg-btn.btn-lg.igniting {
+    padding-left: clamp(16px, 1.7vw, 22px);   /* match btn-lg vertical padding → circle */
+    padding-right: clamp(16px, 1.7vw, 22px);
+}
+.landing-page .reg-btn.igniting .reg-label { max-width: 0; opacity: 0; margin: 0; }
+.landing-page .reg-btn.igniting .btn-icon { transform: rotate(45deg); }   /* ↗ → → */
+
 /* ===== Hero card (gray) — proportional to 1390x987 ===== */
 .landing-page .hero {
     position: relative;
