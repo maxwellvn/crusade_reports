@@ -140,14 +140,14 @@ export function ReportForm() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Zone" required error={errors.zone?.message}>
                   <Controller control={control} name="zone" render={({ field }) => (
-                    <Combobox value={field.value} invalid={!!errors.zone} placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
+                    <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
                       fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("group_name", ""); clearGroupCache(); }} />
                   )} />
                 </Field>
                 {needsGroup && (
                   <Field label="Group" required error={errors.group_name?.message}>
                     <Controller control={control} name="group_name" render={({ field }) => (
-                      <Combobox value={field.value} invalid={!!errors.group_name} disabled={!zone}
+                      <Combobox value={field.value} invalid={!!errors.group_name} caps disabled={!zone}
                         placeholder={zone ? "Select group" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
                         fetcher={fetchGroups} onSelect={(o) => field.onChange(o.label)} />
                     )} />
@@ -164,7 +164,7 @@ export function ReportForm() {
             {orgType === "network" && (
               <Field label="Network" required error={errors.network_name?.message} hint="Search, or type a new one to add it">
                 <Controller control={control} name="network_name" render={({ field }) => (
-                  <Combobox value={field.value} invalid={!!errors.network_name} placeholder="Select or add network" searchPlaceholder="Search networks…"
+                  <Combobox value={field.value} invalid={!!errors.network_name} caps placeholder="Select or add network" searchPlaceholder="Search networks…"
                     emptyText="No match — type to add" allowCreate fetcher={fetchNetworks} onSelect={onSelectNetwork} />
                 )} />
               </Field>

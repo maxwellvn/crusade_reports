@@ -106,6 +106,7 @@ db.exec(`
     zone              TEXT,
     group_name        TEXT,
     church_name       TEXT,
+    cell_name         TEXT,
     network_name      TEXT,
     country           TEXT NOT NULL,
     plan_date         TEXT NOT NULL
@@ -121,12 +122,14 @@ db.exec(`
     zone              TEXT,
     group_name        TEXT,
     church_name       TEXT,
+    cell_name         TEXT,
     network_name      TEXT,
     country           TEXT NOT NULL,
     plan_date         TEXT NOT NULL,
 
     event_type        TEXT NOT NULL,
     planned_count     INTEGER NOT NULL DEFAULT 0,
+    minister_name     TEXT,
     city              TEXT,
     city_place_id     TEXT,
     city_lat          REAL,
@@ -156,6 +159,15 @@ if (!crusadeCols.includes("format")) {
     ALTER TABLE crusades ADD COLUMN format TEXT NOT NULL DEFAULT 'physical';
     UPDATE crusades SET format = 'online'
       WHERE event_type IN ('tv','radio','social-media','online','mystreamspace');
+  `);
+}
+
+// Migration: cell org level + per-item minister (mega crusades) on registrations.
+if (!db.prepare("PRAGMA table_info(registrations)").all().some((c) => c.name === "cell_name")) {
+  db.exec(`
+    ALTER TABLE registrations ADD COLUMN cell_name TEXT;
+    ALTER TABLE registration_items ADD COLUMN cell_name TEXT;
+    ALTER TABLE registration_items ADD COLUMN minister_name TEXT;
   `);
 }
 

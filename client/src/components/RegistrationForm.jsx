@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Plus, Trash2, Copy, Loader2, Check, ArrowLeft, ArrowRight, ArrowUpRight } from "lucide-react";
+import { Plus, Trash2, Copy, Loader2, Check, ArrowLeft, ArrowRight, ArrowUpRight, X } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,10 +24,61 @@ import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page blo
 
 const STEPS = ["Who you are", "Your crusades", "Review"];
 const STEP_FIELDS = [
-  ["organization_type", "zone", "group_name", "church_name", "network_name", "country", "plan_date"],
+  ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date"],
   ["items"],
   [],
 ];
+
+function MinisterTags({ value = "", onChange, invalid }) {
+  const split = (names) => names.split(",").map((name) => name.trim()).filter(Boolean);
+  const [tags, setTags] = React.useState(() => split(value));
+  const [draft, setDraft] = React.useState("");
+  const previousValue = React.useRef(value);
+
+  React.useEffect(() => {
+    if (value !== previousValue.current) {
+      previousValue.current = value;
+      setTags(split(value));
+      setDraft("");
+    }
+  }, [value]);
+
+  function update(next) {
+    setTags(next);
+    onChange(next.join(", "));
+  }
+  function add(names = draft) {
+    const next = [...tags, ...split(names)];
+    if (next.length !== tags.length) update(next);
+    setDraft("");
+  }
+  function changeDraft(next) {
+    const parts = next.split(",");
+    if (parts.length === 1) return setDraft(next);
+    add(parts.slice(0, -1).join(","));
+    setDraft(parts.at(-1));
+  }
+
+  return (
+    <div className={`flex min-h-10 flex-wrap items-center gap-1.5 border-b border-input py-1 focus-within:border-foreground ${invalid ? "border-foreground" : ""}`}>
+      {tags.map((name, i) => (
+        <span key={`${name}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
+          {name}
+          <button type="button" onClick={() => update(tags.filter((_, index) => index !== i))} className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`Remove ${name}`}>
+            <X className="size-3" />
+          </button>
+        </span>
+      ))}
+      <input value={draft} onChange={(e) => changeDraft(e.target.value)} onBlur={() => add()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); add(); }
+          if (e.key === "Backspace" && !draft && tags.length) update(tags.slice(0, -1));
+        }}
+        aria-invalid={invalid} placeholder={tags.length ? "Add another minister" : "e.g. Pastor John Doe"}
+        className="min-w-36 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground" />
+    </div>
+  );
+}
 
 export function RegistrationForm() {
   const form = useForm({ resolver: zodResolver(registrationSchema), defaultValues: registrationDefaults, mode: "onBlur" });
@@ -40,9 +91,10 @@ export function RegistrationForm() {
   const country = watch("country");
   const items = watch("items");
 
-  const needsZone = ["zone", "group", "church"].includes(orgType);
-  const needsGroup = ["group", "church"].includes(orgType);
-  const needsChurch = orgType === "church";
+  const needsZone = ["zone", "group", "church", "cell"].includes(orgType);
+  const needsGroup = ["group", "church", "cell"].includes(orgType);
+  const needsChurch = ["church", "cell"].includes(orgType);
+  const needsCell = orgType === "cell";
 
   const [countryCode, setCountryCode] = React.useState("");
   const { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, clearGroupCache } = useOrgData(zone, countryCode);
@@ -142,6 +194,7 @@ export function RegistrationForm() {
                         <option value="zone">Zone</option>
                         <option value="group">Group</option>
                         <option value="church">Church</option>
+                        <option value="cell">Cell</option>
                         <option value="network">Network</option>
                       </Select>
                     </Field>
@@ -150,22 +203,27 @@ export function RegistrationForm() {
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Zone" required error={errors.zone?.message}>
                           <Controller control={control} name="zone" render={({ field }) => (
-                            <Combobox value={field.value} invalid={!!errors.zone} placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
+                            <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
                               fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("group_name", ""); clearGroupCache(); }} />
                           )} />
                         </Field>
                         {needsGroup && (
                           <Field label="Group" required error={errors.group_name?.message}>
                             <Controller control={control} name="group_name" render={({ field }) => (
-                              <Combobox value={field.value} invalid={!!errors.group_name} disabled={!zone}
+                              <Combobox value={field.value} invalid={!!errors.group_name} caps disabled={!zone}
                                 placeholder={zone ? "Select group" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
                                 fetcher={fetchGroups} onSelect={(o) => field.onChange(o.label)} />
                             )} />
                           </Field>
                         )}
                         {needsChurch && (
-                          <Field label="Church name" required error={errors.church_name?.message} className="sm:col-span-2">
+                          <Field label="Church name" required error={errors.church_name?.message} className={needsCell ? "" : "sm:col-span-2"}>
                             <Input {...register("church_name")} aria-invalid={!!errors.church_name} placeholder="e.g. Christ Embassy Lekki" />
+                          </Field>
+                        )}
+                        {needsCell && (
+                          <Field label="Cell name" required error={errors.cell_name?.message}>
+                            <Input {...register("cell_name")} aria-invalid={!!errors.cell_name} placeholder="e.g. Victory Cell" />
                           </Field>
                         )}
                       </div>
@@ -174,7 +232,7 @@ export function RegistrationForm() {
                     {orgType === "network" && (
                       <Field label="Network" required error={errors.network_name?.message}>
                         <Controller control={control} name="network_name" render={({ field }) => (
-                          <Combobox value={field.value} invalid={!!errors.network_name} placeholder="Select network" searchPlaceholder="Search networks…"
+                          <Combobox value={field.value} invalid={!!errors.network_name} caps placeholder="Select network" searchPlaceholder="Search networks…"
                             emptyText="No networks found" fetcher={fetchNetworks} onSelect={(o) => field.onChange(o.value)} />
                         )} />
                       </Field>
@@ -235,6 +293,13 @@ export function RegistrationForm() {
                               )} />
                             </Field>
                           </div>
+                          {items?.[i]?.event_type === "mega" && (
+                            <Field label="Ministers' names" required error={rowErr.minister_name?.message} className="mt-3" hint="Type a name and press comma to add another minister">
+                              <Controller control={control} name={`items.${i}.minister_name`} render={({ field }) => (
+                                <MinisterTags value={field.value} onChange={field.onChange} invalid={!!rowErr.minister_name} />
+                              )} />
+                            </Field>
+                          )}
                           <Button type="button" variant="ghost" size="sm" className="mt-2 text-muted-foreground"
                             onClick={() => itemArray.append({ ...getValues(`items.${i}`) })}>
                             <Copy className="size-4" /> Duplicate this row<span className="max-sm:hidden"> (same type & count, e.g. for another city)</span>
@@ -243,7 +308,7 @@ export function RegistrationForm() {
                       );
                     })}
                     <Button type="button" variant="outline" className="w-full"
-                      onClick={() => itemArray.append({ event_type: "", planned_count: "", city: "", city_place_id: "" })}>
+                      onClick={() => itemArray.append({ event_type: "", planned_count: "", minister_name: "", city: "", city_place_id: "" })}>
                       <Plus /> Add another crusade type
                     </Button>
                   </CardContent>
@@ -263,6 +328,7 @@ export function RegistrationForm() {
                       {zone && <Summary label="Zone" value={zone} />}
                       {watch("group_name") && <Summary label="Group" value={watch("group_name")} />}
                       {watch("church_name") && <Summary label="Church" value={watch("church_name")} />}
+                      {watch("cell_name") && <Summary label="Cell" value={watch("cell_name")} />}
                       {watch("network_name") && <Summary label="Network" value={watch("network_name")} />}
                       <Summary label="Plan date" value={watch("plan_date") || "—"} />
                       <Summary label="Total crusades" value={nfull.format(totalPlanned)} />
@@ -270,7 +336,7 @@ export function RegistrationForm() {
                     <div className="divide-y rounded-lg border">
                       {(items || []).map((it, i) => (
                         <div key={i} className="flex items-center justify-between gap-2 px-3 py-2">
-                          <span className="truncate">{typeLabel(it.event_type)}{it.city ? ` · ${it.city}` : ""}</span>
+                          <span className="truncate">{typeLabel(it.event_type)}{it.minister_name ? ` · ${it.minister_name}` : ""}{it.city ? ` · ${it.city}` : ""}</span>
                           <span className="shrink-0 tabular-nums text-muted-foreground">{nfull.format(+it.planned_count || 0)}</span>
                         </div>
                       ))}

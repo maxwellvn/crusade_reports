@@ -58,19 +58,26 @@ function issue(ctx, path, message) {
 
 // ---- Crusade registration (pre-crusade intent) ------------------------------
 
-const registrationItem = z.object({
-  event_type: z.string().trim().min(1, "Crusade type is required"),
-  planned_count: z.coerce.number().int().min(1, "How many of this type?"),
-  city: z.string().trim().optional().default(""),
-  city_place_id: z.string().trim().optional().default(""),
-});
+const registrationItem = z
+  .object({
+    event_type: z.string().trim().min(1, "Crusade type is required"),
+    planned_count: z.coerce.number().int().min(1, "How many of this type?"),
+    minister_name: z.string().trim().optional().default(""),
+    city: z.string().trim().optional().default(""),
+    city_place_id: z.string().trim().optional().default(""),
+  })
+  .refine((i) => i.event_type !== "mega" || i.minister_name.length > 0, {
+    message: "Minister name is required for mega crusades",
+    path: ["minister_name"],
+  });
 
 export const registrationSchema = z
   .object({
-    organization_type: z.enum(["zone", "group", "church", "network"]),
+    organization_type: z.enum(["zone", "group", "church", "cell", "network"]),
     zone: z.string().trim().optional().default(""),
     group_name: z.string().trim().optional().default(""),
     church_name: z.string().trim().optional().default(""),
+    cell_name: z.string().trim().optional().default(""),
     network_name: z.string().trim().optional().default(""),
     country: z.string().trim().min(1, "Country is required"),
     plan_date: z.string().trim().min(1, "Plan date is required"),
@@ -78,8 +85,9 @@ export const registrationSchema = z
   })
   .superRefine((d, ctx) => {
     const t = d.organization_type;
-    if (["zone", "group", "church"].includes(t) && !d.zone) issue(ctx, ["zone"], "Zone is required");
-    if (["group", "church"].includes(t) && !d.group_name) issue(ctx, ["group_name"], "Group is required");
-    if (t === "church" && !d.church_name) issue(ctx, ["church_name"], "Church name is required");
+    if (["zone", "group", "church", "cell"].includes(t) && !d.zone) issue(ctx, ["zone"], "Zone is required");
+    if (["group", "church", "cell"].includes(t) && !d.group_name) issue(ctx, ["group_name"], "Group is required");
+    if (["church", "cell"].includes(t) && !d.church_name) issue(ctx, ["church_name"], "Church name is required");
+    if (t === "cell" && !d.cell_name) issue(ctx, ["cell_name"], "Cell name is required");
     if (t === "network" && !d.network_name) issue(ctx, ["network_name"], "Network is required");
   });

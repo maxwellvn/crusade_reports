@@ -20,6 +20,7 @@ export function Combobox({
   searchPlaceholder = "Search…",
   emptyText = "No results",
   minChars = 0,
+  caps = false, // ponytail: display-only uppercase; stored values keep original case
   allowCreate = false,
   disabled = false,
   invalid = false,
@@ -79,7 +80,7 @@ export function Combobox({
             invalid && "border-foreground"
           )}
         >
-          <span className="truncate">{value || placeholder}</span>
+          <span className={cn("truncate", caps && value && "uppercase")}>{value || placeholder}</span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -102,7 +103,7 @@ export function Combobox({
                     <CommandItem key={opt.value} value={opt.value} onSelect={() => choose(opt)}>
                       <Check className={cn("mr-2 size-4", value === opt.label ? "opacity-100" : "opacity-0")} />
                       <div className="min-w-0">
-                        <div className="truncate">{opt.label}</div>
+                        <div className={cn("truncate", caps && "uppercase")}>{opt.label}</div>
                         {opt.sublabel && <div className="truncate text-xs text-muted-foreground">{opt.sublabel}</div>}
                       </div>
                     </CommandItem>

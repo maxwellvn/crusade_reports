@@ -8,10 +8,10 @@ import { backfillCityCoords } from "./places.js";
 export const registrations = Router();
 
 const insertRegStmt = db.prepare(`
-  INSERT INTO registrations (organization_type, zone, group_name, church_name, network_name, country, plan_date)
-  VALUES (@organization_type, @zone, @group_name, @church_name, @network_name, @country, @plan_date)
+  INSERT INTO registrations (organization_type, zone, group_name, church_name, cell_name, network_name, country, plan_date)
+  VALUES (@organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @country, @plan_date)
 `);
-const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "network_name", "country", "plan_date", "event_type", "planned_count", "city", "city_place_id"];
+const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date", "event_type", "planned_count", "minister_name", "city", "city_place_id"];
 const insertItemStmt = db.prepare(
   `INSERT INTO registration_items (${ITEM_COLS.join(", ")}) VALUES (${ITEM_COLS.map((c) => "@" + c).join(", ")})`
 );
@@ -22,6 +22,7 @@ const insertRegistration = db.transaction((d) => {
     zone: d.zone || null,
     group_name: d.group_name || null,
     church_name: d.church_name || null,
+    cell_name: d.cell_name || null,
     network_name: d.network_name || null,
     country: d.country,
     plan_date: d.plan_date,
@@ -33,6 +34,7 @@ const insertRegistration = db.transaction((d) => {
       registration_id: regId,
       event_type: it.event_type,
       planned_count: it.planned_count,
+      minister_name: it.minister_name || null,
       city: it.city || null,
       city_place_id: it.city_place_id || null,
     });
@@ -49,7 +51,7 @@ registrations.post("/", wrap((req, res) => {
 }));
 
 // The org display name, dashboard-style: most specific level first.
-const ORG_LABEL = "COALESCE(r.church_name, r.group_name, r.network_name, r.zone, r.organization_type)";
+const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_name, r.zone, r.organization_type)";
 
 // GET /api/registrations/live — everything the live dashboard + landing page need.
 registrations.get("/live", requireAdmin, wrap((_req, res) => {
@@ -130,7 +132,7 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
   // Item breakdowns for just this page's registrations.
   const ids = rows.map((r) => r.id);
   const items = ids.length
-    ? db.prepare(`SELECT registration_id, event_type, planned_count, city FROM registration_items
+    ? db.prepare(`SELECT registration_id, event_type, planned_count, minister_name, city FROM registration_items
                   WHERE registration_id IN (${ids.map(() => "?").join(",")}) ORDER BY planned_count DESC`).all(...ids)
     : [];
 

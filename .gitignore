@@ -8,3 +8,5 @@ data/zones_cache.json
 .DS_Store
 .kombai/
 .refact/
+video/node_modules/
+video/out/

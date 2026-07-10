@@ -63,7 +63,7 @@ export function RegistrationsTable() {
   const itemsByReg = {};
   (data?.items || []).forEach((it) => {
     (itemsByReg[it.registration_id] ||= []).push(
-      `${nfull.format(it.planned_count)} ${typeLabel(it.event_type)}${it.city ? ` (${it.city})` : ""}`
+      `${nfull.format(it.planned_count)} ${typeLabel(it.event_type)}${it.minister_name ? ` — ${it.minister_name}` : ""}${it.city ? ` (${it.city})` : ""}`
     );
   });
 
