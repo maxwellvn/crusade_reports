@@ -1,5 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import Database from "better-sqlite3";
 import { confirmationSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
@@ -136,6 +141,29 @@ test("dashboard layout storage accepts the live registrations scope", () => {
     assert.equal(db.prepare("SELECT layout FROM dashboard_layout WHERE id = 2").get().layout, "[]");
   } finally {
     db.exec("ROLLBACK");
+  }
+});
+
+test("legacy databases add registration_item_id before cell backfill", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "crusade-db-migration-"));
+  const path = join(dir, "legacy.sqlite");
+  try {
+    await db.backup(path);
+    const legacy = new Database(path);
+    legacy.exec("DROP INDEX IF EXISTS idx_crusades_registration_item");
+    legacy.exec("ALTER TABLE crusades DROP COLUMN registration_item_id");
+    legacy.close();
+
+    const script = `await import(${JSON.stringify(new URL("./db.js", import.meta.url).href)})`;
+    const migrated = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+      env: { ...process.env, CRUSADE_DB_PATH: path }, encoding: "utf8",
+    });
+    assert.equal(migrated.status, 0, migrated.stderr);
+    const checked = new Database(path, { readonly: true });
+    assert.equal(checked.prepare("PRAGMA table_info(crusades)").all().some((column) => column.name === "registration_item_id"), true);
+    checked.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

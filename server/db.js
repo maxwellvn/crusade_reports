@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = join(__dirname, "..", "data", "reports.sqlite");
+const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
 
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL"); // crash-safe; survives power loss mid-write
@@ -230,15 +230,6 @@ if (!db.prepare("PRAGMA table_info(registrations)").all().some((c) => c.name ===
     ALTER TABLE registration_items ADD COLUMN minister_name TEXT;
   `);
 }
-db.exec(`
-  UPDATE crusades SET cell_name = (
-    SELECT cell_name FROM registration_items WHERE registration_items.id = crusades.registration_item_id
-  ) WHERE registration_item_id IS NOT NULL AND cell_name IS NULL;
-  UPDATE reports SET cell_name = (
-    SELECT cell_name FROM crusades WHERE crusades.report_id = reports.id AND crusades.cell_name IS NOT NULL LIMIT 1
-  ) WHERE cell_name IS NULL;
-`);
-
 // Reporter/registrant contact details. Nullable columns preserve older submissions;
 // validation requires them for every new one.
 const CONTACT_COLS = ["contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username", "contact_address"];
@@ -302,6 +293,16 @@ if (!crusadeCols.includes("registration_item_id")) {
   db.exec("ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
+// This backfill must run after the registration_item_id migration above so
+// production databases from before private-dashboard reporting can boot.
+db.exec(`
+  UPDATE crusades SET cell_name = (
+    SELECT cell_name FROM registration_items WHERE registration_items.id = crusades.registration_item_id
+  ) WHERE registration_item_id IS NOT NULL AND cell_name IS NULL;
+  UPDATE reports SET cell_name = (
+    SELECT cell_name FROM crusades WHERE crusades.report_id = reports.id AND crusades.cell_name IS NOT NULL LIMIT 1
+  ) WHERE cell_name IS NULL;
+`);
 
 // Full-text search over every human-readable crusade field (FTS5, external
 // content). Triggers keep it in sync; the boot-time rebuild covers rows that
