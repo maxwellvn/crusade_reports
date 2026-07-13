@@ -1,9 +1,21 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
-import { wrap } from "../logger.js";
-import { requireAdmin } from "../auth.js";
+import { wrap, ApiError } from "../logger.js";
+import { requireAdmin, requireSuperAdmin } from "../auth.js";
 
 export const crusades = Router();
+
+export function deleteCrusadeReport(id) {
+  const row = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(id);
+  if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found.");
+
+  return db.transaction(() => {
+    db.prepare("DELETE FROM crusades WHERE id = ?").run(row.id);
+    const reportDeleted = !db.prepare("SELECT 1 FROM crusades WHERE report_id = ?").get(row.report_id);
+    if (reportDeleted) db.prepare("DELETE FROM reports WHERE id = ?").run(row.report_id);
+    return { id: row.id, report_id: row.report_id, report_deleted: reportDeleted };
+  })();
+}
 
 // Exact-match filters (dropdown-driven); "city" is substring since it's free text.
 const FILTER_COLS = ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "event_type", "format"];
@@ -58,4 +70,8 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
 
   res.json({ rows, total, page, page_size: pageSize });
+}));
+
+crusades.delete("/:id", requireSuperAdmin, wrap((req, res) => {
+  res.json(deleteCrusadeReport(req.params.id));
 }));

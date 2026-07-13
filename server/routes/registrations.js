@@ -2,13 +2,38 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { registrationCrusadeEditSchema, registrationSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAdmin } from "../auth.js";
+import { requireAdmin, requireSuperAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 
 export const registrations = Router();
+
+export function deleteRegistrationCrusade(id) {
+  const item = db.prepare(`
+    SELECT i.id, i.registration_id,
+           EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+    FROM registration_items i WHERE i.id = ?
+  `).get(id);
+  if (!item) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
+  if (item.report_submitted) {
+    throw new ApiError(409, "REPORT_EXISTS", "Delete this crusade's report before deleting its registration.");
+  }
+
+  return db.transaction(() => {
+    db.prepare("DELETE FROM registration_items WHERE id = ?").run(item.id);
+    const registrationDeleted = !db.prepare("SELECT 1 FROM registration_items WHERE registration_id = ?").get(item.registration_id);
+    if (registrationDeleted) {
+      db.prepare("DELETE FROM registrations WHERE id = ?").run(item.registration_id);
+    } else {
+      db.prepare(`UPDATE registrations SET plan_date =
+        (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ?) WHERE id = ?`
+      ).run(item.registration_id, item.registration_id);
+    }
+    return { id: item.id, registration_id: item.registration_id, registration_deleted: registrationDeleted };
+  })();
+}
 
 const insertRegStmt = db.prepare(`
   INSERT INTO registrations (organization_type, zone, group_name, church_name, cell_name, network_name, country, plan_date,
@@ -90,6 +115,10 @@ registrations.put("/:id", requireAdmin, wrap((req, res) => {
   const updated = updateRegistrationCrusade(req.params.id, parsed.data);
   if (!updated) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
   res.json(updated);
+}));
+
+registrations.delete("/:id", requireSuperAdmin, wrap((req, res) => {
+  res.json(deleteRegistrationCrusade(req.params.id));
 }));
 
 registrations.post("/:id/report", requireAdmin, wrap((req, res) => {
@@ -234,7 +263,8 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
             r.created_at AS registered_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name,
             r.network_name, r.country, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
             r.kingschat_username, ${ORG_LABEL} AS org,
-            EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+            EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted,
+            (SELECT c.id FROM crusades c WHERE c.registration_item_id = i.id LIMIT 1) AS report_crusade_id
      FROM registration_items i JOIN registrations r ON r.id = i.registration_id
      ${clause} ORDER BY ${sortCol} ${dir}, i.id DESC LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });

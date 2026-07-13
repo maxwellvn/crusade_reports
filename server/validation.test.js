@@ -9,6 +9,8 @@ import { confirmationSchema, portalCrusadeReportSchema, registrationCrusadeEditS
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
+import { deleteCrusadeReport } from "./routes/crusades.js";
+import { deleteRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 
@@ -100,6 +102,37 @@ test("account management middleware rejects every approved user except maxwellvn
     assert.equal(await run("super-token"), undefined);
   } finally {
     global.fetch = originalFetch;
+    db.exec("ROLLBACK");
+  }
+});
+
+test("super-admin deletions preserve linked data until the report is removed", () => {
+  const marker = `Delete flow ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    const registrationId = db.prepare(
+      `INSERT INTO registrations (organization_type, zone, country, plan_date, kingschat_username)
+       VALUES ('zone', ?, 'Nigeria', '2026-08-01', 'owner.user')`
+    ).run(marker).lastInsertRowid;
+    const itemId = db.prepare(
+      `INSERT INTO registration_items
+       (registration_id, organization_type, zone, country, plan_date, event_type, planned_count, event_name, event_date, venue, expected_attendance, city)
+       VALUES (?, 'zone', ?, 'Nigeria', '2026-08-01', 'mega', 1, ?, '2026-08-01', 'Test venue', 1000, 'Lagos')`
+    ).run(registrationId, marker, marker).lastInsertRowid;
+    const reportId = db.prepare(
+      `INSERT INTO reports (organization_type, zone, country, kingschat_username) VALUES ('zone', ?, 'Nigeria', 'owner.user')`
+    ).run(marker).lastInsertRowid;
+    const crusadeId = db.prepare(
+      `INSERT INTO crusades (report_id, organization_type, zone, country, event_type, city, event_date, registration_item_id)
+       VALUES (?, 'zone', ?, 'Nigeria', 'mega', 'Lagos', '2026-08-01', ?)`
+    ).run(reportId, marker, itemId).lastInsertRowid;
+
+    assert.throws(() => deleteRegistrationCrusade(itemId), (error) => error.code === "REPORT_EXISTS");
+    assert.equal(deleteCrusadeReport(crusadeId).report_deleted, true);
+    assert.equal(db.prepare("SELECT 1 FROM reports WHERE id = ?").get(reportId), undefined);
+    assert.equal(deleteRegistrationCrusade(itemId).registration_deleted, true);
+    assert.equal(db.prepare("SELECT 1 FROM registrations WHERE id = ?").get(registrationId), undefined);
+  } finally {
     db.exec("ROLLBACK");
   }
 });

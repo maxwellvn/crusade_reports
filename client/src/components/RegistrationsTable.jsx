@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Eye, Pencil, X, Search } from "lucide-react";
+import { Eye, Pencil, Trash2, X, Search } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { getJSON } from "@/lib/api";
+import { deleteJSON, getJSON } from "@/lib/api";
+import { useAdmin } from "@/components/AdminGate";
 import { CRUSADE_TYPES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
 import { CrusadeEditor, CrusadeReportDialog } from "@/components/ZonePortal";
@@ -47,11 +48,13 @@ const FILTERS = [
 const PAGE_SIZE = 50;
 
 export function RegistrationsTable() {
+  const admin = useAdmin();
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
   const [selected, setSelected] = React.useState(null);
   const [editing, setEditing] = React.useState(null);
   const [reporting, setReporting] = React.useState(null);
+  const [deleting, setDeleting] = React.useState(null);
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 
   const [q, setQ] = React.useState(params.get("q") || "");
@@ -77,6 +80,34 @@ export function RegistrationsTable() {
     const next = new URLSearchParams(params);
     next.set("page", p);
     setParams(next);
+  }
+  async function deleteReport(row) {
+    if (!window.confirm(`Permanently delete the submitted report for “${row.event_name || typeLabel(row.event_type)}”?`)) return;
+    setDeleting(`report-${row.id}`);
+    try {
+      await deleteJSON(`/crusades/${row.report_crusade_id}`);
+      setData((current) => ({ ...current, rows: current.rows.map((item) => item.id === row.id
+        ? { ...item, report_submitted: 0, report_crusade_id: null } : item) }));
+      toast.success("Report deleted. The registration is still available.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setDeleting(null);
+    }
+  }
+  async function deleteRegistration(row) {
+    if (!window.confirm(`Permanently delete the registration for “${row.event_name || typeLabel(row.event_type)}”?`)) return;
+    setDeleting(`registration-${row.id}`);
+    try {
+      await deleteJSON(`/registrations/${row.id}`);
+      setData((current) => ({ ...current, total: Math.max(current.total - 1, 0), rows: current.rows.filter((item) => item.id !== row.id) }));
+      setSelected((current) => current?.id === row.id ? null : current);
+      toast.success("Registration deleted.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setDeleting(null);
+    }
   }
   const { Th } = useTableSort(params, setParams, "created_at");
 
@@ -175,14 +206,26 @@ export function RegistrationsTable() {
                     <td className="max-w-48 py-2 pr-3">
                       <div className="truncate font-medium">{r.contact_name || "—"}</div>
                       <div className="truncate text-xs text-muted-foreground">{r.contact_email || "—"}</div>
+                      <div className="truncate text-xs text-muted-foreground">{r.kingschat_username ? `@${r.kingschat_username.replace(/^@/, "")}` : "No KingsChat username"}</div>
                     </td>
-                    <td className="flex gap-2 py-2">
+                    <td className="flex flex-wrap gap-2 py-2">
                       <Button type="button" variant="outline" size="sm" onClick={() => setSelected(r)}>
                         <Eye /> View details
                       </Button>
                       <Button type="button" size="sm" onClick={() => setEditing(r)}>
                         <Pencil /> Edit
                       </Button>
+                      {admin?.is_super_admin && r.report_submitted && (
+                        <Button type="button" variant="destructive" size="sm" disabled={deleting === `report-${r.id}`} onClick={() => deleteReport(r)}>
+                          <Trash2 /> {deleting === `report-${r.id}` ? "Deleting…" : "Delete report"}
+                        </Button>
+                      )}
+                      {admin?.is_super_admin && (
+                        <Button type="button" variant="destructive" size="sm" disabled={r.report_submitted || deleting === `registration-${r.id}`}
+                          title={r.report_submitted ? "Delete the submitted report first" : undefined} onClick={() => deleteRegistration(r)}>
+                          <Trash2 /> {deleting === `registration-${r.id}` ? "Deleting…" : "Delete registration"}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

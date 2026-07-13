@@ -1,15 +1,17 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { X, Search } from "lucide-react";
+import { Trash2, X, Search } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { getJSON } from "@/lib/api";
+import { deleteJSON, getJSON } from "@/lib/api";
+import { useAdmin } from "@/components/AdminGate";
 import { CRUSADE_TYPES, FORMATS, CORE_OUTCOMES, EXTENDED_OUTCOMES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy, WIDGETS, DRILL_MAP } from "@/lib/dashboardWidgets";
 
@@ -40,8 +42,10 @@ const PAGE_SIZE = 50;
 // All crusades, one row each, filterable by every attribution + format field.
 // Reached directly (nav link) or by clicking a breakdown row on the dashboard.
 export function CrusadesTable() {
+  const admin = useAdmin();
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
+  const [deleting, setDeleting] = React.useState(null);
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 
   // Search box: local state debounced into the `q` URL param (FTS5 on the server).
@@ -68,6 +72,19 @@ export function CrusadesTable() {
     const next = new URLSearchParams(params);
     next.set("page", p);
     setParams(next);
+  }
+  async function deleteReport(row) {
+    if (!window.confirm(`Permanently delete the report for “${row.event_name || typeLabel(row.event_type)}”?`)) return;
+    setDeleting(row.id);
+    try {
+      await deleteJSON(`/crusades/${row.id}`);
+      setData((current) => ({ ...current, total: Math.max(current.total - 1, 0), rows: current.rows.filter((item) => item.id !== row.id) }));
+      toast.success("Report deleted.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setDeleting(null);
+    }
   }
   const { Th } = useTableSort(params, setParams, "event_date");
 
@@ -149,6 +166,7 @@ export function CrusadesTable() {
                   ))}
                   <Th col="minister_name" label="Minister" />
                   <Th col="venue" label="Venue" />
+                  {admin?.is_super_admin && <th className="py-2 font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -163,7 +181,7 @@ export function CrusadesTable() {
                     <td className="min-w-56 py-2 pr-3">
                       <div className="font-medium">{r.contact_name || "—"}</div>
                       <div className="text-xs text-muted-foreground">{r.contact_email || "—"}</div>
-                      <div className="text-xs text-muted-foreground">{[r.phone_country_code, r.phone_number].filter(Boolean).join(" ") || "—"} · {r.kingschat_username || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{[r.phone_country_code, r.phone_number].filter(Boolean).join(" ") || "—"} · {r.kingschat_username ? `@${r.kingschat_username.replace(/^@/, "")}` : "—"}</div>
                     </td>
                     <td className="py-2 pr-3 text-right">{n0(r.attendance)}</td>
                     {METRIC_COLS.map(([k]) => (
@@ -171,6 +189,13 @@ export function CrusadesTable() {
                     ))}
                     <td className="max-w-32 truncate py-2 pr-3">{r.minister_name}</td>
                     <td className="max-w-32 truncate py-2">{r.venue}</td>
+                    {admin?.is_super_admin && (
+                      <td className="py-2 pl-3">
+                        <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
+                          <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
