@@ -3,7 +3,11 @@ import { randomBytes } from "node:crypto";
 import { db } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAdmin } from "../auth.js";
+import { registrationCrusadeEditSchema } from "../validation.js";
+import { updateRegistrationCrusade } from "./registrations.js";
+import { submitRegisteredCrusadeReport } from "./reports.js";
 import { loadZones } from "./zones.js";
+import { ensureReportingOpen, isReportingOpen } from "../appSettings.js";
 
 export const zonePortal = Router();
 
@@ -64,13 +68,26 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   `).all(name);
 
   const items = db.prepare(`
-    SELECT registration_id, event_type, planned_count, city
-    FROM registration_items WHERE ${col} = ? ORDER BY planned_count DESC
+    SELECT registration_items.id, registration_items.registration_id, registration_items.event_type,
+           registration_items.planned_count, registration_items.event_name,
+           COALESCE(registration_items.event_date, registration_items.plan_date) AS event_date,
+           registration_items.venue, registration_items.expected_attendance, registration_items.minister_name,
+           registration_items.organization_type, registration_items.zone, registration_items.group_name,
+           registration_items.church_name, registration_items.cell_name, registration_items.network_name,
+           registration_items.city, registration_items.country, registration_items.city_place_id,
+           registration_items.readiness_status, registration_items.readiness_notes, registration_items.readiness_updated_at,
+           crusades.id AS report_crusade_id, crusades.report_id, crusades.created_at AS reported_at,
+           crusades.attendance AS reported_attendance, crusades.online_participation AS reported_online_participation,
+           crusades.salvation AS reported_salvation
+    FROM registration_items LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
+    WHERE registration_items.${col} = ?
+    ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
   `).all(name);
 
   const crusades = db.prepare(`
-    SELECT id, event_date, event_type, other_event_type, event_name, format, city, country,
-           group_name, church_name, attendance, online_participation, salvation, minister_name, venue
+    SELECT id, registration_item_id, event_date, event_type, other_event_type, event_name, format, city, country,
+           organization_type, zone, group_name, church_name, cell_name, network_name,
+           attendance, online_participation, salvation, minister_name, venue
     FROM crusades WHERE ${col} = ? ORDER BY event_date DESC, id DESC LIMIT 500
   `).all(name);
 
@@ -81,5 +98,38 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${col} = ?`).get(name).n,
   };
 
-  res.json({ zone: name, kind, totals, registrations, items, crusades });
+  res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, registrations, items, crusades });
+}));
+
+// The capability token may update only individual crusades belonging to its zone/network.
+zonePortal.put("/zone-portal/:token/crusades/:id/readiness", wrap((req, res) => {
+  const token = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(req.params.token);
+  if (!token) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
+
+  const parsed = registrationCrusadeEditSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid crusade details.");
+  const d = parsed.data;
+
+  const col = token.kind === "network" ? "network_name" : "zone";
+  const crusade = db.prepare(`SELECT id, registration_id, readiness_status FROM registration_items WHERE id = ? AND ${col} = ?`).get(req.params.id, token.name);
+  if (!crusade) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");
+
+  res.json(updateRegistrationCrusade(crusade.id, d));
+}));
+
+// Submit outcomes for one registered crusade. Organization and reporter details
+// come from its registration, so a capability link cannot report as another org.
+zonePortal.post("/zone-portal/:token/crusades/:id/report", wrap((req, res) => {
+  ensureReportingOpen();
+  const token = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(req.params.token);
+  if (!token) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
+
+  const col = token.kind === "network" ? "network_name" : "zone";
+  const item = db.prepare(`
+    SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
+    FROM registration_items i JOIN registrations r ON r.id = i.registration_id
+    WHERE i.id = ? AND i.${col} = ?
+  `).get(req.params.id, token.name);
+  if (!item) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");
+  res.status(201).json(submitRegisteredCrusadeReport(item, req.body));
 }));

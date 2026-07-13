@@ -10,3 +10,5 @@ data/zones_cache.json
 .refact/
 video/node_modules/
 video/out/
+kingschat/
+logs/kc_token_storage.json

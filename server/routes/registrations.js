@@ -1,22 +1,29 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { registrationSchema } from "../validation.js";
+import { registrationCrusadeEditSchema, registrationSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
+import { applyPortalScope } from "../portalScope.js";
+import { ensureReportingOpen } from "../appSettings.js";
+import { submitRegisteredCrusadeReport } from "./reports.js";
 
 export const registrations = Router();
 
 const insertRegStmt = db.prepare(`
-  INSERT INTO registrations (organization_type, zone, group_name, church_name, cell_name, network_name, country, plan_date)
-  VALUES (@organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @country, @plan_date)
+  INSERT INTO registrations (organization_type, zone, group_name, church_name, cell_name, network_name, country, plan_date,
+    contact_name, contact_email, phone_country_code, phone_number, kingschat_username)
+  VALUES (@organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @country, @plan_date,
+    @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username)
 `);
-const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date", "event_type", "planned_count", "minister_name", "city", "city_place_id"];
+const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date",
+  "event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id"];
 const insertItemStmt = db.prepare(
   `INSERT INTO registration_items (${ITEM_COLS.join(", ")}) VALUES (${ITEM_COLS.map((c) => "@" + c).join(", ")})`
 );
 
 const insertRegistration = db.transaction((d) => {
+  const planDate = d.items.map((item) => item.event_date).sort()[0];
   const base = {
     organization_type: d.organization_type,
     zone: d.zone || null,
@@ -25,7 +32,12 @@ const insertRegistration = db.transaction((d) => {
     cell_name: d.cell_name || null,
     network_name: d.network_name || null,
     country: d.country,
-    plan_date: d.plan_date,
+    plan_date: planDate,
+    contact_name: d.contact_name,
+    contact_email: d.contact_email,
+    phone_country_code: d.phone_country_code,
+    phone_number: d.phone_number,
+    kingschat_username: d.kingschat_username,
   };
   const regId = insertRegStmt.run(base).lastInsertRowid;
   for (const it of d.items) {
@@ -33,7 +45,11 @@ const insertRegistration = db.transaction((d) => {
       ...base,
       registration_id: regId,
       event_type: it.event_type,
-      planned_count: it.planned_count,
+      planned_count: 1,
+      event_name: it.event_name,
+      event_date: it.event_date,
+      venue: it.venue,
+      expected_attendance: it.expected_attendance,
       minister_name: it.minister_name || null,
       city: it.city || null,
       city_place_id: it.city_place_id || null,
@@ -43,11 +59,48 @@ const insertRegistration = db.transaction((d) => {
 });
 
 registrations.post("/", wrap((req, res) => {
-  const parsed = registrationSchema.safeParse(req.body);
+  const payload = applyPortalScope(req.body, String(req.body?.portal_token || ""));
+  const parsed = registrationSchema.safeParse(payload);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
   const id = insertRegistration(parsed.data);
   backfillCityCoords().catch(() => {});
   res.status(201).json({ id });
+}));
+
+export function updateRegistrationCrusade(id, d) {
+  const crusade = db.prepare("SELECT id, registration_id FROM registration_items WHERE id = ?").get(id);
+  if (!crusade) return null;
+  db.transaction(() => {
+    db.prepare(`UPDATE registration_items SET event_type = ?, event_name = ?, event_date = ?, venue = ?,
+      expected_attendance = ?, minister_name = ?, city = ?, city_place_id = ?,
+      readiness_status = ?, readiness_notes = ?, readiness_updated_at = datetime('now') WHERE id = ?`
+    ).run(d.event_type, d.event_name, d.event_date, d.venue, d.expected_attendance, d.minister_name || null,
+      d.city, d.city_place_id || null, d.status, d.feedback || null, crusade.id);
+    db.prepare(`UPDATE registrations SET plan_date = (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ?)
+      WHERE id = ?`).run(crusade.registration_id, crusade.registration_id);
+  })();
+  backfillCityCoords().catch(() => {});
+  return db.prepare(`SELECT id, event_type, event_name, event_date, venue, expected_attendance, minister_name, city, city_place_id,
+    readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ?`).get(crusade.id);
+}
+
+registrations.put("/:id", requireAdmin, wrap((req, res) => {
+  const parsed = registrationCrusadeEditSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid crusade details.");
+  const updated = updateRegistrationCrusade(req.params.id, parsed.data);
+  if (!updated) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
+  res.json(updated);
+}));
+
+registrations.post("/:id/report", requireAdmin, wrap((req, res) => {
+  ensureReportingOpen();
+  const item = db.prepare(`
+    SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
+    FROM registration_items i JOIN registrations r ON r.id = i.registration_id
+    WHERE i.id = ?
+  `).get(req.params.id);
+  if (!item) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
+  res.status(201).json(submitRegisteredCrusadeReport(item, req.body));
 }));
 
 // The org display name, dashboard-style: most specific level first.
@@ -58,8 +111,14 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
+           COUNT(*)                             AS items,
            COUNT(DISTINCT country)              AS countries,
-           COUNT(DISTINCT event_type)           AS types
+           COUNT(DISTINCT event_type)           AS types,
+           COALESCE(SUM(expected_attendance), 0) AS expected_attendance,
+           SUM(CASE WHEN readiness_status = 'ready' THEN 1 ELSE 0 END) AS ready,
+           SUM(CASE WHEN readiness_status = 'not_holding' THEN 1 ELSE 0 END) AS not_holding,
+           (SELECT COUNT(*) FROM crusades WHERE registration_item_id IS NOT NULL) AS reported,
+           COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades WHERE registration_item_id IS NOT NULL) AS awaiting
     FROM registration_items
   `).get();
 
@@ -73,6 +132,38 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
       `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items GROUP BY country ORDER BY planned DESC`
     ).all(),
+    by_zone: db.prepare(
+      `SELECT zone AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items WHERE zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
+    ).all(),
+    by_network: db.prepare(
+      `SELECT network_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items WHERE network_name IS NOT NULL GROUP BY network_name ORDER BY planned DESC`
+    ).all(),
+    by_group: db.prepare(
+      `SELECT group_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items WHERE group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC`
+    ).all(),
+    by_church: db.prepare(
+      `SELECT church_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items WHERE church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC`
+    ).all(),
+    by_cell: db.prepare(
+      `SELECT cell_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items WHERE cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC`
+    ).all(),
+    by_city: db.prepare(
+      `SELECT city AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items WHERE city IS NOT NULL GROUP BY city ORDER BY planned DESC`
+    ).all(),
+    by_org_type: db.prepare(
+      `SELECT organization_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items GROUP BY organization_type ORDER BY planned DESC`
+    ).all(),
+    by_readiness: db.prepare(
+      `SELECT readiness_status AS key, COUNT(*) AS planned, COUNT(DISTINCT registration_id) AS registrations
+       FROM registration_items GROUP BY readiness_status ORDER BY planned DESC`
+    ).all(),
     // Real city points (geocoded) for the coverage map.
     geo: db.prepare(
       `SELECT city AS key, country, MAX(city_lat) AS lat, MAX(city_lng) AS lng, SUM(planned_count) AS planned
@@ -80,7 +171,7 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
     ).all(),
     // The live feed: latest registrations with their own totals.
     recent: db.prepare(
-      `SELECT r.id, r.created_at, r.organization_type, r.country, r.plan_date,
+      `SELECT r.id, r.created_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name, r.network_name, r.country, r.plan_date,
               ${ORG_LABEL} AS org,
               COALESCE(SUM(i.planned_count), 0) AS planned, COUNT(i.id) AS types
        FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
@@ -94,15 +185,22 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
   const where = [];
   const params = {};
 
-  for (const col of ["organization_type", "zone", "country"]) {
+  for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "country", "network_name"]) {
     if (req.query[col]) { where.push(`r.${col} = @${col}`); params[col] = String(req.query[col]); }
   }
+  if (req.query.city) { where.push("i.city = @city"); params.city = String(req.query.city); }
+  if (req.query.readiness_status) {
+    where.push("i.readiness_status = @readiness_status");
+    params.readiness_status = String(req.query.readiness_status);
+  }
+  if (req.query.report_status === "reported") where.push("EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
+  if (req.query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
   if (req.query.event_type) {
-    where.push("EXISTS (SELECT 1 FROM registration_items x WHERE x.registration_id = r.id AND x.event_type = @event_type)");
+    where.push("i.event_type = @event_type");
     params.event_type = String(req.query.event_type);
   }
-  if (req.query.date_from) { where.push("r.plan_date >= @date_from"); params.date_from = String(req.query.date_from); }
-  if (req.query.date_to) { where.push("r.plan_date <= @date_to"); params.date_to = String(req.query.date_to); }
+  if (req.query.date_from) { where.push("i.event_date >= @date_from"); params.date_from = String(req.query.date_from); }
+  if (req.query.date_to) { where.push("i.event_date <= @date_to"); params.date_to = String(req.query.date_to); }
 
   // Free-text search: every word must match some field of the registration or
   // its items. ponytail: LIKE, not FTS — org/city names at this volume don't
@@ -110,7 +208,10 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
   String(req.query.q || "").trim().split(/\s+/).filter(Boolean).slice(0, 8).forEach((tok, n) => {
     const p = `q${n}`;
     where.push(`(r.zone LIKE @${p} OR r.group_name LIKE @${p} OR r.church_name LIKE @${p} OR r.network_name LIKE @${p} OR r.country LIKE @${p}
-      OR EXISTS (SELECT 1 FROM registration_items x WHERE x.registration_id = r.id AND (x.city LIKE @${p} OR x.event_type LIKE @${p})))`);
+      OR r.contact_name LIKE @${p} OR r.contact_email LIKE @${p} OR r.phone_country_code || r.phone_number LIKE @${p}
+      OR r.kingschat_username LIKE @${p}
+      OR i.city LIKE @${p} OR i.event_type LIKE @${p} OR i.event_name LIKE @${p} OR i.venue LIKE @${p}
+      OR i.readiness_status LIKE @${p} OR i.readiness_notes LIKE @${p})`);
     params[p] = `%${tok}%`;
   });
 
@@ -118,23 +219,25 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
-  const SORT = { created_at: "r.created_at", plan_date: "r.plan_date", zone: "r.zone COLLATE NOCASE", country: "r.country COLLATE NOCASE", org: "org COLLATE NOCASE", planned: "planned" };
+  const SORT = {
+    created_at: "r.created_at", event_date: "i.event_date", event_name: "i.event_name COLLATE NOCASE",
+    event_type: "i.event_type COLLATE NOCASE", expected_attendance: "i.expected_attendance",
+    zone: "r.zone COLLATE NOCASE", country: "r.country COLLATE NOCASE", org: "org COLLATE NOCASE",
+  };
   const sortCol = SORT[req.query.sort] || "r.created_at";
   const dir = req.query.dir === "asc" ? "ASC" : "DESC";
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM registrations r ${clause}`).get(params).n;
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM registration_items i JOIN registrations r ON r.id = i.registration_id ${clause}`).get(params).n;
   const rows = db.prepare(
-    `SELECT r.*, ${ORG_LABEL} AS org, COALESCE(SUM(i.planned_count), 0) AS planned
-     FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
-     ${clause} GROUP BY r.id ORDER BY ${sortCol} ${dir}, r.id DESC LIMIT @limit OFFSET @offset`
+    `SELECT i.id, i.registration_id, i.event_type, i.planned_count, i.event_name, i.event_date, i.venue,
+            i.expected_attendance, i.minister_name, i.city, i.city_place_id, i.readiness_status, i.readiness_notes, i.readiness_updated_at,
+            r.created_at AS registered_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name,
+            r.network_name, r.country, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
+            r.kingschat_username, ${ORG_LABEL} AS org,
+            EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+     FROM registration_items i JOIN registrations r ON r.id = i.registration_id
+     ${clause} ORDER BY ${sortCol} ${dir}, i.id DESC LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
 
-  // Item breakdowns for just this page's registrations.
-  const ids = rows.map((r) => r.id);
-  const items = ids.length
-    ? db.prepare(`SELECT registration_id, event_type, planned_count, minister_name, city FROM registration_items
-                  WHERE registration_id IN (${ids.map(() => "?").join(",")}) ORDER BY planned_count DESC`).all(...ids)
-    : [];
-
-  res.json({ rows, items, total, page, page_size: pageSize });
+  res.json({ rows, total, page, page_size: pageSize });
 }));

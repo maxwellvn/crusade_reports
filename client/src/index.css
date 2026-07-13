@@ -6,29 +6,26 @@
 
 @layer base {
   :root {
-    /* Runwai system (see DESIGN.md): monochrome neutral ladder, black-only
-       actions, no signal colours. Validation is carried by copy and borders,
-       so --destructive intentionally resolves to ink. */
-    --background: 0 0% 100%;        /* canvas */
-    --foreground: 0 0% 7%;          /* ink */
+    --background: 216 33% 97%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 7%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 7%;
-    --primary: 0 0% 4%;             /* black pill */
-    --primary-foreground: 0 0% 98%; /* paper white */
-    --secondary: 0 0% 96%;          /* hairline infill (featured surface) */
-    --secondary-foreground: 0 0% 15%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 220 4% 42%; /* slate — the only tinted neutral */
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 7%;
-    --destructive: 0 0% 7%;         /* ponytail: spec forbids red — errors read via copy */
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 18%;
+    --muted: 214 32% 94%;
+    --muted-foreground: 215 16% 43%;
+    --accent: 214 95% 93%;
+    --accent-foreground: 221 83% 38%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 92%;             /* hairline-soft */
-    --input: 0 0% 85%;              /* field bottom rule */
-    --ring: 0 0% 7%;
-    --radius: 0.5rem;               /* rounded.md = 8px */
+    --border: 214 32% 88%;
+    --input: 214 25% 78%;
+    --ring: 221 83% 53%;
+    --radius: 0.5rem;
   }
 }
 
@@ -39,7 +36,13 @@
     font-family: "abcNormal", "Inter", system-ui, sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    background-image: linear-gradient(180deg, hsl(214 100% 99%) 0, hsl(var(--background)) 22rem);
+    min-height: 100vh;
   }
   /* Runwai display voice: regular weight, tight negative tracking. */
   h1, h2, h3 { font-weight: 400; letter-spacing: -0.025em; }
+  ::selection { @apply bg-blue-200 text-blue-950; }
+  table thead { @apply bg-slate-50/90; }
+  table thead th { @apply text-slate-600; }
+  table tbody tr { @apply transition-colors hover:bg-blue-50/55; }
 }

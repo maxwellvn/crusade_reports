@@ -1,16 +1,11 @@
-export const ADMIN_KEY_LS = "crusades-admin-key";
-
 // Single fetch funnel. Throws Error(message) with .code on API errors so callers
-// can toast a user-safe message; full server-side detail lives in server logs.
-// The stored admin key rides along on every call — public endpoints ignore it,
-// admin endpoints require it.
+// can toast a user-safe message; the HTTP-only KingsChat cookie is sent by the
+// browser automatically and never exposed to client JavaScript.
 export async function api(path, options = {}) {
-  const adminKey = localStorage.getItem(ADMIN_KEY_LS);
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(adminKey ? { "x-admin-key": adminKey } : {}),
       ...options.headers,
     },
   });
@@ -31,6 +26,7 @@ export async function api(path, options = {}) {
 export const getJSON = (path) => api(path);
 export const postJSON = (path, data) => api(path, { method: "POST", body: JSON.stringify(data) });
 export const putJSON = (path, data) => api(path, { method: "PUT", body: JSON.stringify(data) });
+export const deleteJSON = (path) => api(path, { method: "DELETE" });
 
 // Debounce a promise-returning fn, cancelling stale calls (for typeaheads).
 export function debounce(fn, ms = 250) {

@@ -9,6 +9,17 @@ import { getJSON, putJSON } from "@/lib/api";
 import { WIDGETS, KPI_IDS, DEFAULT_LAYOUT, DRILL_MAP, Empty } from "@/lib/dashboardWidgets";
 
 const LS_KEY = "crusades-dash-v1"; // first-paint cache only; the server row is the source of truth
+const KPI_TONES = {
+  salvations: "bg-emerald-50/80 [&_.stat-value]:!text-emerald-700",
+  holy_spirit_filled: "bg-violet-50/80 [&_.stat-value]:!text-violet-700",
+  water_baptisms: "bg-cyan-50/80 [&_.stat-value]:!text-cyan-700",
+  registered_reported: "bg-green-50/80 [&_.stat-value]:!text-green-700",
+  awaiting_reports: "bg-amber-50/90 [&_.stat-value]:!text-amber-700",
+  registered: "bg-blue-50/80 [&_.stat-value]:!text-blue-700",
+  registered_expected_attendance: "bg-indigo-50/80 [&_.stat-value]:!text-indigo-700",
+  onsite_attendance: "bg-sky-50/80 [&_.stat-value]:!text-sky-700",
+  online_attendance: "bg-cyan-50/80 [&_.stat-value]:!text-cyan-700",
+};
 
 // ---- Dashboard shell: add / remove / drag-reorder / expand ------------------
 // Layout (which widgets show, in what order) is saved to the server, not just
@@ -60,6 +71,10 @@ export function Dashboard() {
     navigate(`/crusades?${field}=${encodeURIComponent(row.key ?? row.label)}`);
   }
 
+  function goToRegistrations(filters = {}) {
+    navigate(`/registrations?${new URLSearchParams(filters).toString()}`);
+  }
+
   if (error) return <Empty text="Stats are unavailable right now — try again shortly." />;
   if (!stats)
     return (
@@ -76,8 +91,11 @@ export function Dashboard() {
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">Dashboard</h2>
+        <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Crusade dashboard</h2><p className="text-sm text-muted-foreground">Registration progress, reports and ministry outcomes at a glance.</p></div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={() => navigate("/crusade-registration/register")}>
+            <Plus /> Register crusades
+          </Button>
           {/* Global search: lands on /crusades backed by FTS5 across every field */}
           <form className="relative hidden sm:block"
             onSubmit={(e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) navigate(`/crusades?q=${encodeURIComponent(v)}`); }}>
@@ -111,9 +129,15 @@ export function Dashboard() {
       {layout.some((w) => KPI_IDS.has(w.id)) && (
         <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4">
           {layout.filter((w) => KPI_IDS.has(w.id)).map(({ id }) => (
-            <div key={id} className="group relative bg-card p-4"
+            <div key={id} className={`group relative bg-card p-4 ${KPI_TONES[id] || "bg-slate-50/50"}`}
               onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(id)}>
-              {WIDGETS[id].render(stats)}
+              {id === "registered" || id === "registered_expected_attendance" ? (
+                <button type="button" className="w-full text-left" onClick={() => goToRegistrations()}>{WIDGETS[id].render(stats)}</button>
+              ) : id === "registered_reported" ? (
+                <button type="button" className="w-full text-left" onClick={() => goToRegistrations({ report_status: "reported" })}>{WIDGETS[id].render(stats)}</button>
+              ) : id === "awaiting_reports" ? (
+                <button type="button" className="w-full text-left" onClick={() => goToRegistrations({ report_status: "unreported" })}>{WIDGETS[id].render(stats)}</button>
+              ) : WIDGETS[id].render(stats)}
               <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 <span draggable className="cursor-grab p-1 text-muted-foreground/60 hover:text-muted-foreground active:cursor-grabbing"
                   title="Drag to rearrange" onDragStart={() => { dragId.current = id; }}>
@@ -133,6 +157,7 @@ export function Dashboard() {
         {layout.filter((w) => !KPI_IDS.has(w.id)).map(({ id, expanded }) => {
           const w = WIDGETS[id];
           const drill = DRILL_MAP[id];
+          const registrationFilter = w.registrationFilter;
           const wide = expanded || w.size === 2;
           return (
             <Card key={id} className={wide ? "sm:col-span-2" : ""}
@@ -159,7 +184,11 @@ export function Dashboard() {
                   </button>
                 </div>
               </CardHeader>
-              <CardContent>{w.render(stats, expanded, drill ? (row) => goToCrusades(drill.filterField, row) : undefined)}</CardContent>
+              <CardContent>{w.render(stats, expanded,
+                registrationFilter
+                  ? (row) => goToRegistrations({ [registrationFilter]: row.key ?? row.label })
+                  : drill ? (row) => goToCrusades(drill.filterField, row) : undefined
+              )}</CardContent>
             </Card>
           );
         })}

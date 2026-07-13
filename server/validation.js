@@ -2,6 +2,13 @@ import { z } from "zod";
 import { METRIC_FIELDS } from "./db.js";
 
 const nonNegInt = z.coerce.number().int().min(0);
+const contactFields = {
+  contact_name: z.string().trim().min(2, "Full name is required").max(200),
+  contact_email: z.string().trim().email("Enter a valid email address").max(254),
+  phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  kingschat_username: z.string().trim().max(100).optional().default(""),
+};
 
 // Outcome metrics are per-crusade now.
 const perCrusadeMetrics = Object.fromEntries(METRIC_FIELDS.map((f) => [f, nonNegInt.default(0)]));
@@ -25,20 +32,28 @@ const crusade = z
     path: ["other_event_type"],
   });
 
+export const portalCrusadeReportSchema = z.object({
+  crusade,
+  highlights: z.string().trim().max(2000).optional().default(""),
+  media_links: z.string().trim().max(4000).optional().default(""),
+});
+
 export const reportSchema = z
   .object({
-    organization_type: z.enum(["zone", "group", "church", "network"]),
+    organization_type: z.enum(["zone", "group", "church", "cell", "network"]),
 
     // reporting hierarchy: zone ▸ group ▸ church
     zone: z.string().trim().optional().default(""),
     group_name: z.string().trim().optional().default(""),
     church_name: z.string().trim().optional().default(""),
+    cell_name: z.string().trim().optional().default(""),
 
     // network ("" = not a network report; coerce to undefined before the enum check)
     network_name: z.string().trim().optional().default(""),
     network_type: z.preprocess((v) => v || undefined, z.enum(["predefined", "other"]).optional()),
 
     country: z.string().trim().min(1, "Country is required"),
+    ...contactFields,
     crusades: z.array(crusade).min(1, "At least one crusade is required"),
 
     highlights: z.string().trim().max(2000).optional().default(""),
@@ -46,9 +61,10 @@ export const reportSchema = z
   })
   .superRefine((d, ctx) => {
     const t = d.organization_type;
-    if (["zone", "group", "church"].includes(t) && !d.zone) issue(ctx, ["zone"], "Zone is required");
-    if (["group", "church"].includes(t) && !d.group_name) issue(ctx, ["group_name"], "Group is required");
-    if (t === "church" && !d.church_name) issue(ctx, ["church_name"], "Church name is required");
+    if (["zone", "group", "church", "cell"].includes(t) && !d.zone) issue(ctx, ["zone"], "Zone is required");
+    if (["group", "church", "cell"].includes(t) && !d.group_name) issue(ctx, ["group_name"], "Group is required");
+    if (["church", "cell"].includes(t) && !d.church_name) issue(ctx, ["church_name"], "Church name is required");
+    if (t === "cell" && !d.cell_name) issue(ctx, ["cell_name"], "Cell name is required");
     if (t === "network" && !d.network_name) issue(ctx, ["network_name"], "Network is required");
   });
 
@@ -58,12 +74,19 @@ function issue(ctx, path, message) {
 
 // ---- Crusade registration (pre-crusade intent) ------------------------------
 
+const registrationDetails = {
+    event_type: z.string().trim().min(1, "Crusade type is required"),
+    event_name: z.string().trim().min(2, "Crusade name is required").max(300),
+    event_date: z.string().trim().min(1, "Crusade date is required"),
+    venue: z.string().trim().min(2, "Venue is required").max(1000),
+    expected_attendance: z.coerce.number().int().min(1, "Expected attendance is required"),
+    minister_name: z.string().trim().optional().default(""),
+    city: z.string().trim().min(1, "City is required"),
+};
+
 const registrationItem = z
   .object({
-    event_type: z.string().trim().min(1, "Crusade type is required"),
-    planned_count: z.coerce.number().int().min(1, "How many of this type?"),
-    minister_name: z.string().trim().optional().default(""),
-    city: z.string().trim().optional().default(""),
+    ...registrationDetails,
     city_place_id: z.string().trim().optional().default(""),
   })
   .refine((i) => i.event_type !== "mega" || i.minister_name.length > 0, {
@@ -80,8 +103,8 @@ export const registrationSchema = z
     cell_name: z.string().trim().optional().default(""),
     network_name: z.string().trim().optional().default(""),
     country: z.string().trim().min(1, "Country is required"),
-    plan_date: z.string().trim().min(1, "Plan date is required"),
-    items: z.array(registrationItem).min(1, "Add at least one crusade type"),
+    ...contactFields,
+    items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   })
   .superRefine((d, ctx) => {
     const t = d.organization_type;
@@ -90,4 +113,26 @@ export const registrationSchema = z
     if (["church", "cell"].includes(t) && !d.church_name) issue(ctx, ["church_name"], "Church name is required");
     if (t === "cell" && !d.cell_name) issue(ctx, ["cell_name"], "Cell name is required");
     if (t === "network" && !d.network_name) issue(ctx, ["network_name"], "Network is required");
+  });
+
+export const confirmationSchema = z
+  .object({
+    status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
+    feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
+  })
+  .refine((d) => d.status !== "not_holding" || d.feedback.length >= 3, {
+    path: ["feedback"],
+    message: "Tell us why the crusade is not holding, including any challenges.",
+  });
+
+export const registrationCrusadeEditSchema = z
+  .object({
+    ...registrationDetails,
+    city_place_id: z.string().trim().optional().default(""),
+    status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
+    feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
+  })
+  .superRefine((d, ctx) => {
+    if (d.event_type === "mega" && !d.minister_name) issue(ctx, ["minister_name"], "Minister name is required for mega crusades");
+    if (d.status === "not_holding" && d.feedback.length < 3) issue(ctx, ["feedback"], "Tell us why the crusade is not holding, including any challenges.");
   });

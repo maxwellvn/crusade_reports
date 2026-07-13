@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { X, Search } from "lucide-react";
+import { Eye, Pencil, X, Search } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
@@ -11,25 +12,46 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { getJSON } from "@/lib/api";
 import { CRUSADE_TYPES } from "@/lib/constants";
-import { typeLabel, nfull } from "@/lib/dashboardWidgets";
+import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
+import { CrusadeEditor, CrusadeReportDialog } from "@/components/ZonePortal";
 
 // All registrations — same interaction model as the All Crusades table:
 // URL-driven filters + free-text search + server-side sorting + pagination.
 
-const ORG_TYPES = [["zone", "Zone"], ["group", "Group"], ["church", "Church"], ["network", "Network"]];
+const ORG_TYPES = [["zone", "Zone"], ["group", "Group"], ["church", "Church"], ["cell", "Cell"], ["network", "Network"]];
+const STATUSES = [["pending", "Pending confirmation"], ["preparing", "Preparing"], ["ready", "Ready"], ["holding", "Holding as planned"], ["not_holding", "Not holding"]];
+const REPORT_STATUSES = [["reported", "Report submitted"], ["unreported", "Report not submitted"]];
+const STATUS_COLORS = {
+  pending: "border-slate-300 bg-slate-100 text-slate-700",
+  preparing: "border-amber-300 bg-amber-50 text-amber-700",
+  ready: "border-emerald-300 bg-emerald-50 text-emerald-700",
+  holding: "border-blue-300 bg-blue-50 text-blue-700",
+  held: "border-green-300 bg-green-50 text-green-700",
+  not_holding: "border-red-300 bg-red-50 text-red-700",
+};
 const FILTERS = [
   ["organization_type", "Registered as", "select", ORG_TYPES],
+  ["readiness_status", "Readiness", "select", STATUSES],
+  ["report_status", "Report status", "select", REPORT_STATUSES],
   ["zone", "Zone", "text"],
+  ["group_name", "Group", "text"],
+  ["church_name", "Church", "text"],
+  ["cell_name", "Cell", "text"],
+  ["network_name", "Network", "text"],
   ["country", "Country", "text"],
+  ["city", "City", "text"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
-  ["date_from", "Plan date from", "date"],
-  ["date_to", "Plan date to", "date"],
+  ["date_from", "Crusade date from", "date"],
+  ["date_to", "Crusade date to", "date"],
 ];
 const PAGE_SIZE = 50;
 
 export function RegistrationsTable() {
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
+  const [selected, setSelected] = React.useState(null);
+  const [editing, setEditing] = React.useState(null);
+  const [reporting, setReporting] = React.useState(null);
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 
   const [q, setQ] = React.useState(params.get("q") || "");
@@ -60,18 +82,11 @@ export function RegistrationsTable() {
 
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
   const activeFilters = FILTERS.filter(([key]) => params.get(key));
-  const itemsByReg = {};
-  (data?.items || []).forEach((it) => {
-    (itemsByReg[it.registration_id] ||= []).push(
-      `${nfull.format(it.planned_count)} ${typeLabel(it.event_type)}${it.minister_name ? ` — ${it.minister_name}` : ""}${it.city ? ` (${it.city})` : ""}`
-    );
-  });
-
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: "All registrations" }]} />
+      <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: "Registered crusades" }]} />
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">All registrations</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Registered crusades</h2>
         {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
       </div>
 
@@ -80,7 +95,7 @@ export function RegistrationsTable() {
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} className="pl-6"
-              placeholder="Search anything — zone, church, network, country, city, type…" aria-label="Search registrations" />
+              placeholder="Search crusade, venue, organization or contact…" aria-label="Search registered crusades" />
           </div>
         </CardContent>
         <CardContent className="grid gap-3 pt-0 sm:grid-cols-3 lg:grid-cols-6">
@@ -118,32 +133,57 @@ export function RegistrationsTable() {
           {!data ? (
             <LoadingRows rows={8} />
           ) : !data.rows.length ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">No registrations match these filters.</p>
+            <p className="py-16 text-center text-sm text-muted-foreground">No registered crusades match these filters.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
-                  <Th col="created_at" label="Registered" />
-                  <Th col="org" label="By" />
-                  <Th col="zone" label="Zone" />
+                  <Th col="event_date" label="Date" />
+                  <Th col="event_name" label="Crusade" />
+                  <Th col="event_type" label="Type" />
                   <Th col="country" label="Country" />
-                  <Th col="plan_date" label="Plan date" />
-                  <th className="py-2 pr-3 font-medium">Breakdown</th>
-                  <Th col="planned" label="Planned" right />
+                  <th className="py-2 pr-3 font-medium">City / venue</th>
+                  <Th col="expected_attendance" label="Expected" right />
+                  <th className="py-2 pr-3 font-medium">Readiness</th>
+                  <th className="py-2 pr-3 font-medium">Report</th>
+                  <th className="py-2 pr-3 font-medium">Registration type</th>
+                  <th className="py-2 pr-3 font-medium">Contact</th>
+                  <th className="py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
                 {data.rows.map((r) => (
                   <tr key={r.id} className="border-b last:border-0">
-                    <td className="py-2 pr-3 whitespace-nowrap">{r.created_at.slice(0, 10)}</td>
-                    <td className="max-w-44 truncate py-2 pr-3 capitalize">{r.org}</td>
-                    <td className="max-w-40 truncate py-2 pr-3">{r.zone}</td>
-                    <td className="max-w-36 truncate py-2 pr-3">{r.country}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{r.plan_date}</td>
-                    <td className="max-w-72 truncate py-2 pr-3 text-muted-foreground" title={(itemsByReg[r.id] || []).join(" · ")}>
-                      {(itemsByReg[r.id] || []).join(" · ")}
+                    <td className="py-2 pr-3 whitespace-nowrap">{r.event_date || "—"}</td>
+                    <td className="max-w-52 py-2 pr-3">
+                      <div className="font-medium">{r.event_name || typeLabel(r.event_type)}</div>
+                      {r.planned_count > 1 && <div className="text-xs text-muted-foreground">Legacy aggregate: {nfull.format(r.planned_count)}</div>}
                     </td>
-                    <td className="py-2 text-right font-medium">{nfull.format(r.planned)}</td>
+                    <td className="max-w-44 py-2 pr-3">{typeLabel(r.event_type)}</td>
+                    <td className="max-w-40 py-2 pr-3">{r.country || "—"}</td>
+                    <td className="max-w-60 py-2 pr-3 text-muted-foreground">{[r.city, r.venue].filter(Boolean).join(" · ") || "—"}</td>
+                    <td className="py-2 pr-3 text-right font-medium">{nfull.format(r.expected_attendance || 0)}</td>
+                    <td className="py-2 pr-3"><StatusBadge status={r.readiness_status} /></td>
+                    <td className="py-2 pr-3">
+                      {r.report_submitted ? (
+                        <span className="inline-flex whitespace-nowrap border border-green-300 bg-green-50 px-2 py-1 text-xs font-medium text-green-700">Submitted</span>
+                      ) : (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setReporting(r)}>Awaiting report</Button>
+                      )}
+                    </td>
+                    <td className="min-w-64 max-w-80 py-2 pr-3 text-xs">{orgHierarchy(r)}</td>
+                    <td className="max-w-48 py-2 pr-3">
+                      <div className="truncate font-medium">{r.contact_name || "—"}</div>
+                      <div className="truncate text-xs text-muted-foreground">{r.contact_email || "—"}</div>
+                    </td>
+                    <td className="flex gap-2 py-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setSelected(r)}>
+                        <Eye /> View details
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => setEditing(r)}>
+                        <Pencil /> Edit
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -153,6 +193,101 @@ export function RegistrationsTable() {
       </Card>
 
       {data && data.total > PAGE_SIZE && <Pagination page={page} totalPages={totalPages} onPage={setPage} />}
+      {selected && <CrusadeDetails crusade={selected} onClose={() => setSelected(null)} />}
+      {reporting && <CrusadeReportDialog crusade={reporting} savePath={`/registrations/${reporting.id}/report`}
+        onClose={() => setReporting(null)} onSubmitted={() => {
+          setData((current) => ({ ...current, rows: current.rows.map((row) => row.id === reporting.id ? { ...row, report_submitted: 1 } : row) }));
+          setReporting(null);
+        }} />}
+      {editing && <CrusadeEditDialog crusade={editing} onClose={() => setEditing(null)} onSaved={(updated) => {
+        setData((current) => ({ ...current, rows: current.rows.map((row) => row.id === editing.id ? { ...row, ...updated } : row) }));
+        setEditing((current) => ({ ...current, ...updated }));
+      }} />}
     </div>
+  );
+}
+
+function CrusadeEditDialog({ crusade, onClose, onSaved }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+  return (
+    <dialog ref={ref} onClose={onClose} onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
+      className="w-[min(60rem,calc(100%-2rem))] border bg-background p-0 text-foreground backdrop:bg-black/60">
+      <div className="flex items-start justify-between gap-4 border-b p-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Edit registered crusade</p>
+          <h3 className="mt-1 text-xl font-semibold tracking-tight">{crusade.event_name || typeLabel(crusade.event_type)}</h3>
+        </div>
+        <Button type="button" variant="ghost" size="icon" onClick={() => ref.current?.close()} aria-label="Close editor"><X /></Button>
+      </div>
+      <div className="p-5">
+        <CrusadeEditor crusade={crusade} savePath={`/registrations/${crusade.id}`} onSaved={onSaved} />
+      </div>
+    </dialog>
+  );
+}
+
+function StatusBadge({ status = "pending" }) {
+  return <span className={`inline-flex whitespace-nowrap border px-2 py-1 text-xs font-medium ${STATUS_COLORS[status] || STATUS_COLORS.pending}`}>
+    {status === "held" ? "Legacy held status" : STATUSES.find(([value]) => value === status)?.[1] || "Pending confirmation"}
+  </span>;
+}
+
+function CrusadeDetails({ crusade, onClose }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+
+  const details = [
+    ["Crusade type", typeLabel(crusade.event_type)],
+    ["Date", crusade.event_date],
+    ["Expected attendance", nfull.format(crusade.expected_attendance || 0)],
+    ["City", crusade.city],
+    ["Venue / address", crusade.venue],
+    ["Ministers", crusade.minister_name],
+    ["Organization", crusade.org],
+    ["Country", crusade.country],
+    ["Registered", crusade.registered_at?.slice(0, 10)],
+    ["Registered by", crusade.contact_name],
+    ["Report", crusade.report_submitted ? "Submitted" : "Awaiting report"],
+    ["Email", crusade.contact_email],
+    ["Phone", [crusade.phone_country_code, crusade.phone_number].filter(Boolean).join(" ")],
+    ["KingsChat", crusade.kingschat_username],
+  ];
+
+  return (
+    <dialog ref={ref} onClose={onClose} onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
+      className="w-[min(42rem,calc(100%-2rem))] border bg-background p-0 text-foreground backdrop:bg-black/60">
+      <div className="flex items-start justify-between gap-4 border-b p-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Crusade details</p>
+          <h3 className="mt-1 text-xl font-semibold tracking-tight">{crusade.event_name || typeLabel(crusade.event_type)}</h3>
+        </div>
+        <Button type="button" variant="ghost" size="icon" onClick={() => ref.current?.close()} aria-label="Close details">
+          <X />
+        </Button>
+      </div>
+      <div className="space-y-5 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={crusade.readiness_status} />
+          {crusade.planned_count > 1 && <span className="text-xs text-muted-foreground">Legacy aggregate: {nfull.format(crusade.planned_count)} crusades</span>}
+        </div>
+        <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          {details.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+              <dd className="mt-1 break-words text-sm">{value || "—"}</dd>
+            </div>
+          ))}
+        </dl>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Readiness details / challenges</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm">{crusade.readiness_notes || "No readiness feedback yet."}</p>
+        </div>
+      </div>
+    </dialog>
   );
 }

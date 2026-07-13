@@ -10,8 +10,9 @@ import { ZoneLinks } from "@/components/ZoneLinks";
 import { ZonePortal } from "@/components/ZonePortal";
 import { Landing } from "@/components/Landing";
 import { NotFound } from "@/components/NotFound";
-import { AdminGate } from "@/components/AdminGate";
+import { AdminGate, useAdmin } from "@/components/AdminGate";
 import { RegistrationForm } from "@/components/RegistrationForm";
+import { Settings } from "@/components/Settings";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ const PAGE_TITLES = [
   [/^\/crusade-registration/, "A Night of a Thousand Crusades"],
   [/^\/report/, "Report a crusade"],
   [/^\/dashboard\/zone-links/, "Zone links"],
+  [/^\/dashboard\/settings/, "Settings"],
   [/^\/dashboard\/widget/, "Dashboard"],
   [/^\/dashboard/, "Dashboard"],
   [/^\/crusades/, "All crusades"],
@@ -44,7 +46,7 @@ function TitleManager() {
 const navLink = ({ isActive }) =>
   cn(
     "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-    isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+    isActive ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
   );
 
 // Shared header shell. Surfaces are deliberately separate — the report form,
@@ -52,9 +54,11 @@ const navLink = ({ isActive }) =>
 // audience gets only its own URLs.
 function Shell({ subtitle, links }) {
   const [logoOk, setLogoOk] = useState(true);
+  const admin = useAdmin();
+  const visibleLinks = links.filter(([, , , superAdminOnly]) => !superAdminOnly || admin?.is_super_admin);
   return (
     <div className="min-h-screen">
-      <header className="border-b bg-card">
+      <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4">
           {logoOk && (
             <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
@@ -63,10 +67,10 @@ function Shell({ subtitle, links }) {
             <h1 className="truncate text-base font-semibold tracking-tight">Rhapsody End-Time Teaching Crusades</h1>
             <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>
           </div>
-          {links.length > 0 && (
+          {visibleLinks.length > 0 && (
             // On phones the nav wraps to its own row and scrolls sideways if needed.
             <nav className="flex gap-1 max-sm:w-full max-sm:overflow-x-auto max-sm:whitespace-nowrap sm:ml-auto sm:shrink-0">
-              {links.map(([to, label, end]) => (
+              {visibleLinks.map(([to, label, end]) => (
                 <NavLink key={to} to={to} end={end} className={navLink}>{label}</NavLink>
               ))}
             </nav>
@@ -98,15 +102,16 @@ export default function App() {
           <Route path="/report" element={<ReportForm />} />
         </Route>
 
-        {/* Admin surface — everything inside requires the admin key */}
+        {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/dashboard", "Dashboard", true], ["/crusades", "All crusades"], ["/registrations", "Registrations", true], ["/registrations/live", "Live"], ["/dashboard/zone-links", "Zone links"]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/dashboard", "Dashboard", true], ["/crusades", "All crusades"], ["/registrations", "Registrations", true], ["/registrations/live", "Live"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
           <Route path="/registrations" element={<RegistrationsTable />} />
           <Route path="/registrations/live" element={<RegistrationsLive />} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
+          <Route path="/dashboard/settings" element={<Settings />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

@@ -6,13 +6,13 @@ export function Field({ label, htmlFor, required, error, hint, className, childr
   return (
     <div className={cn("space-y-1.5", className)}>
       {label && (
-        <Label htmlFor={htmlFor}>
+        <Label htmlFor={htmlFor} className="text-slate-700">
           {label} {required && <span className="text-destructive">*</span>}
         </Label>
       )}
       {children}
       {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
-      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+      {error && <p className="flex items-center gap-1 text-xs font-medium text-destructive"><span aria-hidden="true">●</span>{error}</p>}
     </div>
   );
 }

@@ -39,13 +39,24 @@ npm start                 # http://localhost:4000
 | GET  | `/api/places/autocomplete?input=&country=` | Places city proxy |
 | GET  | `/api/import/template` | download the `.xlsx` import template |
 | POST | `/api/import` (`?commit=1`) | preview (validate) / commit a filled template |
+| GET  | `/api/auth/kingschat/login` | start KingsChat dashboard sign-in |
+| GET  | `/api/auth/accounts` | list approved dashboard usernames |
+| GET · PUT | `/api/campaign-settings` | public reporting status · super-admin reporting toggle |
 
 Report fields and structure: see `report_schema.json`.
+
+Dashboard access is KingsChat-based. Only `@maxwellvn` can list, verify, add,
+or remove approved dashboard accounts. Tokens and API keys belong only in the
+ignored `.env` or ignored runtime token storage, never in source files.
+
+The reporting toggle also gates server submissions. When reporting is closed,
+private zone/network dashboards hide their Reports tab and the standalone
+report form shows a closed notice. Private dashboard links scope registrations
+and unregistered-crusade reports to the correct zone or network.
 
 ## Notes / deferred
 
 - No file uploads — media captured as links (`media_links`). Add `multer` + storage when binary upload is needed.
-- No admin/dashboard UI yet — data is queryable via `GET /api/reports` or the SQLite file directly.
 - Errors: full stack + context logged server-side (pino); the client only ever sees a safe message.
 
 ## Deploy (Coolify)
@@ -53,6 +64,6 @@ Report fields and structure: see `report_schema.json`.
 Dockerfile-based. In Coolify:
 
 1. New resource → this git repo → build pack **Dockerfile** (port 4000).
-2. Env vars: `GOOGLE_PLACES_API_KEY`, `ZONES_URL`, `ADMIN_KEY` (see `.env.example`).
+2. Env vars: `GOOGLE_PLACES_API_KEY`, `ZONES_URL`, `KINGSCHAT_CLIENT_ID`, and `KINGSCHAT_REDIRECT_URI` (see `.env.example`).
 3. **Persistent storage**: mount a volume at `/app/data` — the SQLite database lives there; without it, data resets on every deploy.
 4. Health check: `GET /api/health` (already declared in the Dockerfile).

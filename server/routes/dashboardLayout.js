@@ -7,19 +7,21 @@ export const dashboardLayout = Router();
 
 // One shared layout row (id=1) — the "admin" surface is just this dashboard,
 // editable in place. GET returns null if nobody has customized it yet.
-const getStmt = db.prepare("SELECT layout FROM dashboard_layout WHERE id = 1");
+const getStmt = db.prepare("SELECT layout FROM dashboard_layout WHERE id = ?");
 const setStmt = db.prepare(
-  "INSERT INTO dashboard_layout (id, layout) VALUES (1, @layout) ON CONFLICT(id) DO UPDATE SET layout = @layout"
+  "INSERT INTO dashboard_layout (id, layout) VALUES (@id, @layout) ON CONFLICT(id) DO UPDATE SET layout = @layout"
 );
 
-dashboardLayout.get("/", requireAdmin, wrap((_req, res) => {
-  const row = getStmt.get();
+const layoutId = (req) => req.query.scope === "registrations" ? 2 : 1;
+
+dashboardLayout.get("/", requireAdmin, wrap((req, res) => {
+  const row = getStmt.get(layoutId(req));
   res.json({ layout: row ? JSON.parse(row.layout) : null });
 }));
 
 dashboardLayout.put("/", requireAdmin, wrap((req, res) => {
   const layout = req.body?.layout;
   if (!Array.isArray(layout)) throw new ApiError(422, "VALIDATION", "layout must be an array");
-  setStmt.run({ layout: JSON.stringify(layout) });
+  setStmt.run({ id: layoutId(req), layout: JSON.stringify(layout) });
   res.json({ ok: true });
 }));

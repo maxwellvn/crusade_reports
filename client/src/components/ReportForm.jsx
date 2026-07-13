@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -14,14 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
 import { ImportPanel } from "@/components/ImportPanel";
-import { postJSON } from "@/lib/api";
+import { getJSON, postJSON } from "@/lib/api";
 import { reportSchema, defaultValues } from "@/lib/schema";
-import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES, emptyCrusade } from "@/lib/constants";
+import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES, PHONE_CODES, emptyCrusade } from "@/lib/constants";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 
 const STEPS = ["Reporting", "Crusades", "Review"];
 const STEP_FIELDS = [
-  ["organization_type", "zone", "group_name", "church_name", "network_name", "country"],
+  ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country",
+    "contact_name", "contact_email", "phone_country_code", "phone_number"],
   ["crusades"],
   [],
 ];
@@ -33,19 +34,44 @@ export function ReportForm() {
   const { register, handleSubmit, control, watch, setValue, getValues, reset, trigger, formState: { errors, isSubmitting } } = form;
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const portalToken = searchParams.get("portal") || "";
   const [step, setStep] = React.useState(0);
+  const [reportingOpen, setReportingOpen] = React.useState(null);
+  const [portalScope, setPortalScope] = React.useState(null);
+  const [portalError, setPortalError] = React.useState("");
   const orgType = watch("organization_type");
   const zone = watch("zone");
   const country = watch("country");
   const crusades = watch("crusades");
 
-  const needsZone = ["zone", "group", "church"].includes(orgType);
-  const needsGroup = ["group", "church"].includes(orgType);
-  const needsChurch = orgType === "church";
+  const needsZone = ["zone", "group", "church", "cell"].includes(orgType);
+  const needsGroup = ["group", "church", "cell"].includes(orgType);
+  const needsChurch = ["church", "cell"].includes(orgType);
+  const needsCell = orgType === "cell";
 
   const [countryCode, setCountryCode] = React.useState("");
   const { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, setNetworks, clearGroupCache } = useOrgData(zone, countryCode);
   const crusadeArray = useFieldArray({ control, name: "crusades" });
+
+  React.useEffect(() => {
+    getJSON("/campaign-settings")
+      .then((settings) => setReportingOpen(settings.reporting_open))
+      .catch(() => setReportingOpen(false));
+  }, []);
+
+  React.useEffect(() => {
+    if (!portalToken) return;
+    getJSON(`/zone-portal/${encodeURIComponent(portalToken)}`)
+      .then((scope) => {
+        setPortalScope(scope);
+        setValue("organization_type", scope.kind === "network" ? "network" : "zone", { shouldValidate: true });
+        setValue("zone", scope.kind === "zone" ? scope.zone : "", { shouldValidate: true });
+        setValue("network_name", scope.kind === "network" ? scope.zone : "", { shouldValidate: true });
+        setValue("network_type", scope.kind === "network" ? "predefined" : "");
+      })
+      .catch((error) => setPortalError(error.message));
+  }, [portalToken, setValue]);
 
   const totals = (crusades || []).reduce(
     (a, c) => ({ n: a.n + 1, onsite: a.onsite + (+c.attendance || 0), online: a.online + (+c.online_participation || 0) }),
@@ -101,19 +127,27 @@ export function ReportForm() {
   async function onSubmit(data) {
     if (step !== STEPS.length - 1) return; // belt-and-braces: only Review may submit
     try {
-      const { id } = await postJSON("/reports", data);
+      const { id } = await postJSON("/reports", { ...data, portal_token: portalToken || undefined });
       toast.success(`Report #${id} submitted. Thank you!`);
       reset(defaultValues);
       setCountryCode("");
       setStep(0);
-      navigate("/dashboard");
+      if (portalToken) navigate(`/zone/${portalToken}`);
     } catch (e) {
       toast.error(e.message);
     }
   }
 
+  if (reportingOpen === null) return <div className="mx-auto max-w-3xl"><Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Checking reporting access…</CardContent></Card></div>;
+  if (!reportingOpen) return <div className="mx-auto max-w-3xl"><Card><CardHeader><CardTitle>Reporting is closed</CardTitle><CardDescription>Reporting has not opened yet. Please return when your coordinator announces that reporting is open.</CardDescription></CardHeader></Card></div>;
+  if (portalError) return <div className="mx-auto max-w-3xl"><Card><CardHeader><CardTitle>This dashboard link is not valid</CardTitle><CardDescription>{portalError}</CardDescription></CardHeader></Card></div>;
+
   return (
     <form onSubmit={handleSubmit(onSubmit, () => toast.error("Please fix the highlighted fields."))} onKeyDown={onFormKeyDown} className="mx-auto max-w-3xl space-y-6 pb-28">
+      {portalScope && <Card><CardContent className="pt-6">
+        <p className="text-sm font-medium">Reporting an unregistered crusade for {portalScope.zone}</p>
+        <p className="text-xs text-muted-foreground">This report will be assigned to this {portalScope.kind}. Add one complete detail block for every crusade held.</p>
+      </CardContent></Card>}
       <Stepper steps={STEPS} step={step} />
 
       <div key={step} className="animate-step-in space-y-6 motion-reduce:animate-none">
@@ -125,13 +159,14 @@ export function ReportForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="Reporting as" required error={errors.organization_type?.message}
-              hint="Who is this report for? A whole Zone, a Group within a zone, a single Church, or a Network.">
-              <Select {...register("organization_type")} aria-invalid={!!errors.organization_type}
+              hint="Who is this report for? A Zone, Group, Church, Cell, or Network.">
+              <Select {...register("organization_type")} aria-invalid={!!errors.organization_type} disabled={!!portalScope}
                 onChange={(e) => setValue("organization_type", e.target.value, { shouldValidate: true })}>
                 <option value="">Select…</option>
                 <option value="zone">Zone</option>
                 <option value="group">Group</option>
                 <option value="church">Church</option>
+                <option value="cell">Cell</option>
                 <option value="network">Network</option>
               </Select>
             </Field>
@@ -139,10 +174,10 @@ export function ReportForm() {
             {needsZone && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Zone" required error={errors.zone?.message}>
-                  <Controller control={control} name="zone" render={({ field }) => (
+                  {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="zone" render={({ field }) => (
                     <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
                       fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("group_name", ""); clearGroupCache(); }} />
-                  )} />
+                  )} />}
                 </Field>
                 {needsGroup && (
                   <Field label="Group" required error={errors.group_name?.message}>
@@ -154,8 +189,13 @@ export function ReportForm() {
                   </Field>
                 )}
                 {needsChurch && (
-                  <Field label="Church name" required error={errors.church_name?.message} hint="Type the church name" className="sm:col-span-2">
+                  <Field label="Church name" required error={errors.church_name?.message} hint="Type the church name" className={needsCell ? "" : "sm:col-span-2"}>
                     <Input {...register("church_name")} aria-invalid={!!errors.church_name} placeholder="e.g. Christ Embassy Lekki" />
+                  </Field>
+                )}
+                {needsCell && (
+                  <Field label="Cell name" required error={errors.cell_name?.message}>
+                    <Input {...register("cell_name")} aria-invalid={!!errors.cell_name} placeholder="e.g. Victory Cell" />
                   </Field>
                 )}
               </div>
@@ -163,10 +203,10 @@ export function ReportForm() {
 
             {orgType === "network" && (
               <Field label="Network" required error={errors.network_name?.message} hint="Search, or type a new one to add it">
-                <Controller control={control} name="network_name" render={({ field }) => (
+                {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="network_name" render={({ field }) => (
                   <Combobox value={field.value} invalid={!!errors.network_name} caps placeholder="Select or add network" searchPlaceholder="Search networks…"
                     emptyText="No match — type to add" allowCreate fetcher={fetchNetworks} onSelect={onSelectNetwork} />
-                )} />
+                )} />}
               </Field>
             )}
 
@@ -176,6 +216,32 @@ export function ReportForm() {
                   minChars={0} emptyText="No countries found" fetcher={fetchCountries} onSelect={onSelectCountry} />
               )} />
             </Field>
+
+            <div className="border-t pt-4">
+              <p className="mb-3 text-sm font-medium">Your contact details</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Full name" required error={errors.contact_name?.message}>
+                  <Input autoComplete="name" {...register("contact_name")} aria-invalid={!!errors.contact_name} placeholder="Your full name" />
+                </Field>
+                <Field label="Email address" required error={errors.contact_email?.message}>
+                  <Input type="email" autoComplete="email" {...register("contact_email")} aria-invalid={!!errors.contact_email} placeholder="you@example.com" />
+                </Field>
+                <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[120px_1fr]">
+                  <Field label="Code" required error={errors.phone_country_code?.message}>
+                    <Select autoComplete="tel-country-code" {...register("phone_country_code")} aria-invalid={!!errors.phone_country_code}>
+                      <option value="">Code</option>
+                      {PHONE_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Phone number" required error={errors.phone_number?.message}>
+                    <Input type="tel" autoComplete="tel-national" {...register("phone_number")} aria-invalid={!!errors.phone_number} placeholder="801 234 5678" />
+                  </Field>
+                </div>
+                <Field label="KingsChat username (optional)" error={errors.kingschat_username?.message} className="sm:col-span-2">
+                  <Input {...register("kingschat_username")} aria-invalid={!!errors.kingschat_username} placeholder="@username" />
+                </Field>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -187,7 +253,9 @@ export function ReportForm() {
               const v = getValues();
               return {
                 organization_type: v.organization_type, zone: v.zone, group_name: v.group_name,
-                church_name: v.church_name, network_name: v.network_name, country: v.country,
+                church_name: v.church_name, cell_name: v.cell_name, network_name: v.network_name, country: v.country,
+                contact_name: v.contact_name, contact_email: v.contact_email, phone_country_code: v.phone_country_code,
+                phone_number: v.phone_number, kingschat_username: v.kingschat_username,
               };
             }}
             onLoaded={(rows) => crusadeArray.replace(rows.map((r) => ({ ...emptyCrusade(), ...r })))}
@@ -231,7 +299,12 @@ export function ReportForm() {
                 {zone && <Summary label="Zone" value={zone} />}
                 {watch("group_name") && <Summary label="Group" value={watch("group_name")} />}
                 {watch("church_name") && <Summary label="Church" value={watch("church_name")} />}
+                {watch("cell_name") && <Summary label="Cell" value={watch("cell_name")} />}
                 {watch("network_name") && <Summary label="Network" value={watch("network_name")} />}
+                <Summary label="Contact name" value={watch("contact_name") || "—"} />
+                <Summary label="Email" value={watch("contact_email") || "—"} />
+                <Summary label="Phone" value={`${watch("phone_country_code") || ""} ${watch("phone_number") || ""}`.trim() || "—"} />
+                <Summary label="KingsChat" value={watch("kingschat_username") || "—"} />
                 <Summary label="Crusades" value={totals.n} />
                 <Summary label="Total attendance" value={totals.att.toLocaleString()} />
                 <Summary label="Onsite attendance" value={totals.onsite.toLocaleString()} />
@@ -240,7 +313,7 @@ export function ReportForm() {
               <div className="rounded-lg border divide-y">
                 {(crusades || []).map((c, i) => (
                   <div key={i} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <span className="truncate">{typeLabel(c.event_type)}{c.format === "online" ? " (online)" : ""} · {c.city}</span>
+                    <span className="truncate">{typeLabel(c.event_type)}{c.format === "online" ? " (online)" : ""} · {c.city} · {c.venue}</span>
                     <span className="shrink-0 text-muted-foreground">{c.event_date} · {((+c.attendance || 0) + (+c.online_participation || 0)).toLocaleString()} · {(+c.salvation || 0).toLocaleString()} saved</span>
                   </div>
                 ))}
@@ -318,7 +391,7 @@ function CrusadeRow({ index, form, errors, fetchCities, countryReady, onRemove, 
   }
 
   return (
-    <div className="relative animate-step-in rounded-lg border bg-muted/30 p-4 motion-reduce:animate-none">
+    <div className="relative animate-step-in rounded-lg border border-slate-200 border-l-4 border-l-violet-500 bg-white p-4 shadow-sm motion-reduce:animate-none">
       <button type="button" onClick={onRemove} title="Remove this crusade"
         className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
         <Trash2 className="size-4" />

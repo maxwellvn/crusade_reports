@@ -28,9 +28,16 @@ db.exec(`
     zone              TEXT,
     group_name        TEXT,
     church_name       TEXT,
+    cell_name         TEXT,
     network_name      TEXT,
     network_type      TEXT,
     country           TEXT NOT NULL,
+    contact_name      TEXT,
+    contact_email     TEXT,
+    phone_country_code TEXT,
+    phone_number      TEXT,
+    kingschat_username TEXT,
+    contact_address   TEXT,
     highlights        TEXT,
     media_links       TEXT
   );
@@ -45,6 +52,7 @@ db.exec(`
     zone              TEXT,
     group_name        TEXT,
     church_name       TEXT,
+    cell_name         TEXT,
     network_name      TEXT,
     country           TEXT NOT NULL,
 
@@ -71,7 +79,8 @@ db.exec(`
     healing_nations_magazine INTEGER NOT NULL DEFAULT 0,
 
     minister_name     TEXT,
-    venue             TEXT
+    venue             TEXT,
+    registration_item_id INTEGER REFERENCES registration_items(id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_crusades_report  ON crusades(report_id);
@@ -88,17 +97,16 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Single shared row: the dashboard's widget layout, editable from the dashboard
-  -- itself. No user accounts in this app, so "admin" = this one shared config.
+  -- One row per dashboard layout: 1 = reports, 2 = live registrations.
   CREATE TABLE IF NOT EXISTS dashboard_layout (
-    id     INTEGER PRIMARY KEY CHECK (id = 1),
+    id     INTEGER PRIMARY KEY,
     layout TEXT NOT NULL
   );
 
   -- Crusade registration: pre-crusade intent, the twin of reports/crusades.
   -- registrations = one submission ("Zone X plans crusades for <plan_date>");
-  -- registration_items = the fact table, one row per crusade type (+ optional
-  -- city), planned_count each. Total planned is always SUM(planned_count).
+  -- registration_items = the fact table, one row per individual crusade.
+  -- Legacy aggregate rows retain planned_count; new rows always store 1.
   CREATE TABLE IF NOT EXISTS registrations (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -109,7 +117,16 @@ db.exec(`
     cell_name         TEXT,
     network_name      TEXT,
     country           TEXT NOT NULL,
-    plan_date         TEXT NOT NULL
+    plan_date         TEXT NOT NULL,
+    contact_name      TEXT,
+    contact_email     TEXT,
+    phone_country_code TEXT,
+    phone_number      TEXT,
+    kingschat_username TEXT,
+    contact_address   TEXT,
+    confirmation_status TEXT NOT NULL DEFAULT 'pending',
+    confirmation_feedback TEXT,
+    confirmation_updated_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS registration_items (
@@ -129,11 +146,18 @@ db.exec(`
 
     event_type        TEXT NOT NULL,
     planned_count     INTEGER NOT NULL DEFAULT 0,
+    event_name        TEXT,
+    event_date        TEXT,
+    venue             TEXT,
+    expected_attendance INTEGER NOT NULL DEFAULT 0,
     minister_name     TEXT,
     city              TEXT,
     city_place_id     TEXT,
     city_lat          REAL,
-    city_lng          REAL
+    city_lng          REAL,
+    readiness_status  TEXT NOT NULL DEFAULT 'pending',
+    readiness_notes   TEXT,
+    readiness_updated_at TEXT
   );
 
   -- Capability links for per-zone dashboards: an unguessable token maps to one
@@ -144,6 +168,18 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS dashboard_accounts (
+    username   TEXT PRIMARY KEY COLLATE NOCASE,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('reporting_open', '1');
+
   CREATE INDEX IF NOT EXISTS idx_reg_items_reg     ON registration_items(registration_id);
   CREATE INDEX IF NOT EXISTS idx_reg_items_type    ON registration_items(event_type);
   CREATE INDEX IF NOT EXISTS idx_reg_items_zone    ON registration_items(zone);
@@ -151,9 +187,33 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
 `);
 
+// Older databases restricted this table to id=1. Rebuild it once so the Live
+// Registrations dashboard can persist its separate id=2 layout.
+const dashboardLayoutSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'dashboard_layout'").get()?.sql || "";
+if (/CHECK\s*\(\s*id\s*=\s*1\s*\)/i.test(dashboardLayoutSql)) {
+  db.transaction(() => {
+    db.exec(`
+      ALTER TABLE dashboard_layout RENAME TO dashboard_layout_single;
+      CREATE TABLE dashboard_layout (id INTEGER PRIMARY KEY, layout TEXT NOT NULL);
+      INSERT INTO dashboard_layout (id, layout) SELECT id, layout FROM dashboard_layout_single;
+      DROP TABLE dashboard_layout_single;
+    `);
+  })();
+}
+
+// @maxwellvn is the fixed super admin. This identifier is public account data,
+// not a credential; tokens and keys remain runtime-only.
+db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES ('maxwellvn', 'system')").run();
+
 // Migration for DBs created before the format column existed. Runs once; the
 // backfill marks inherently-virtual crusade types as online.
 const crusadeCols = db.prepare("PRAGMA table_info(crusades)").all().map((c) => c.name);
+if (!db.prepare("PRAGMA table_info(reports)").all().some((c) => c.name === "cell_name")) {
+  db.exec("ALTER TABLE reports ADD COLUMN cell_name TEXT");
+}
+if (!crusadeCols.includes("cell_name")) {
+  db.exec("ALTER TABLE crusades ADD COLUMN cell_name TEXT");
+}
 if (!crusadeCols.includes("format")) {
   db.exec(`
     ALTER TABLE crusades ADD COLUMN format TEXT NOT NULL DEFAULT 'physical';
@@ -169,6 +229,44 @@ if (!db.prepare("PRAGMA table_info(registrations)").all().some((c) => c.name ===
     ALTER TABLE registration_items ADD COLUMN cell_name TEXT;
     ALTER TABLE registration_items ADD COLUMN minister_name TEXT;
   `);
+}
+db.exec(`
+  UPDATE crusades SET cell_name = (
+    SELECT cell_name FROM registration_items WHERE registration_items.id = crusades.registration_item_id
+  ) WHERE registration_item_id IS NOT NULL AND cell_name IS NULL;
+  UPDATE reports SET cell_name = (
+    SELECT cell_name FROM crusades WHERE crusades.report_id = reports.id AND crusades.cell_name IS NOT NULL LIMIT 1
+  ) WHERE cell_name IS NULL;
+`);
+
+// Reporter/registrant contact details. Nullable columns preserve older submissions;
+// validation requires them for every new one.
+const CONTACT_COLS = ["contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username", "contact_address"];
+for (const table of ["reports", "registrations"]) {
+  const cols = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+  for (const col of CONTACT_COLS) {
+    if (!cols.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
+  }
+}
+
+const registrationCols = new Set(db.prepare("PRAGMA table_info(registrations)").all().map((c) => c.name));
+if (!registrationCols.has("confirmation_status")) {
+  db.exec(`
+    ALTER TABLE registrations ADD COLUMN confirmation_status TEXT NOT NULL DEFAULT 'pending';
+    ALTER TABLE registrations ADD COLUMN confirmation_feedback TEXT;
+    ALTER TABLE registrations ADD COLUMN confirmation_updated_at TEXT;
+  `);
+}
+
+const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
+for (const col of ["event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
+  if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
+}
+if (!registrationItemCols.has("readiness_status")) {
+  db.exec("ALTER TABLE registration_items ADD COLUMN readiness_status TEXT NOT NULL DEFAULT 'pending'");
+}
+if (!registrationItemCols.has("expected_attendance")) {
+  db.exec("ALTER TABLE registration_items ADD COLUMN expected_attendance INTEGER NOT NULL DEFAULT 0");
 }
 
 // Canonical network list, seeded at every boot (idempotent — name is UNIQUE).
@@ -197,6 +295,13 @@ if (!crusadeCols.includes("city_lat")) {
     ALTER TABLE crusades ADD COLUMN city_lng REAL;
   `);
 }
+
+// Reports submitted from a private zone/network dashboard belong to exactly
+// one registered crusade. Public reports leave this nullable.
+if (!crusadeCols.includes("registration_item_id")) {
+  db.exec("ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
+}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
 
 // Full-text search over every human-readable crusade field (FTS5, external
 // content). Triggers keep it in sync; the boot-time rebuild covers rows that

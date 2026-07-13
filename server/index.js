@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 
 import { logger, errorHandler } from "./logger.js";
-import { requireAdmin } from "./auth.js";
+import { auth, requireAdmin } from "./auth.js";
 import { reports } from "./routes/reports.js";
 import { networks } from "./routes/networks.js";
 import { zones } from "./routes/zones.js";
@@ -17,16 +17,20 @@ import { dashboardLayout } from "./routes/dashboardLayout.js";
 import { crusades } from "./routes/crusades.js";
 import { registrations } from "./routes/registrations.js";
 import { zonePortal } from "./routes/zonePortal.js";
+import { campaignSettings } from "./routes/campaignSettings.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set("trust proxy", 1); // Coolify terminates HTTPS before forwarding to Node.
 const PORT = process.env.PORT || 4000;
 
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
-// Cheap probe the client's admin gate uses to validate the stored key.
-app.get("/api/admin/check", requireAdmin, (_req, res) => res.json({ ok: true }));
+app.use("/api/auth", auth);
+// Cheap probe retained for clients that only need an authenticated check.
+app.get("/api/admin/check", requireAdmin, (req, res) => res.json({ ok: true, user: req.admin }));
 app.use("/api/reports", reports);
 app.use("/api/networks", networks);
 app.use("/api/zones", zones);
@@ -37,6 +41,7 @@ app.use("/api/stats", stats);
 app.use("/api/dashboard-layout", dashboardLayout);
 app.use("/api/crusades", crusades);
 app.use("/api/registrations", registrations);
+app.use("/api/campaign-settings", campaignSettings);
 app.use("/api", zonePortal);
 
 // 404 for unknown API routes (before the SPA catch-all).

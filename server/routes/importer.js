@@ -140,6 +140,11 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
     church_name: String(req.body.church_name || "").trim(),
     network_name: String(req.body.network_name || "").trim(),
     country: String(req.body.country || "").trim(),
+    contact_name: String(req.body.contact_name || "").trim(),
+    contact_email: String(req.body.contact_email || "").trim(),
+    phone_country_code: String(req.body.phone_country_code || "").trim(),
+    phone_number: String(req.body.phone_number || "").trim(),
+    kingschat_username: String(req.body.kingschat_username || "").trim(),
   };
 
   // ---- Parse rows with precise, per-row/per-field errors ----

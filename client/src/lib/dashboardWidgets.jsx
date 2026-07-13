@@ -3,9 +3,7 @@ import simpleheat from "simpleheat";
 import { CRUSADE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES } from "@/lib/constants";
 import { DOTS, CENTROIDS } from "@/lib/worldDots";
 
-// Single-series magnitude charts throughout → one hue, direct labels, no legends.
-// Runwai system: data ink is ink — no accent colour anywhere.
-export const ACCENT = "#1a1a1a";
+export const DATA_COLORS = ["#2563eb", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#db2777"];
 export const nf = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 export const nfull = new Intl.NumberFormat("en");
 export const typeLabel = (v) => CRUSADE_TYPES.find(([c]) => c === v)?.[1] || v;
@@ -18,7 +16,7 @@ export function StatTile({ label, value, sub }) {
   return (
     <div>
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-3xl font-normal tracking-tight tabular-nums">{value ?? "—"}</div>
+      <div className="stat-value mt-1 text-3xl font-semibold tracking-tight tabular-nums text-slate-900">{value ?? "—"}</div>
       {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
@@ -32,7 +30,7 @@ export function BarH({ rows, max: maxRows = 8, expanded, onRowClick }) {
   if (!rows.length) return <Empty />;
   return (
     <div className="space-y-2.5">
-      {shown.map((r) => (
+      {shown.map((r, index) => (
         <div key={r.label} className={onRowClick ? "cursor-pointer" : ""} onClick={() => onRowClick?.(r)}>
           <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
             <span className="truncate">{r.label}</span>
@@ -41,7 +39,7 @@ export function BarH({ rows, max: maxRows = 8, expanded, onRowClick }) {
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-r-[4px]" style={{ width: r.value ? `${Math.max((r.value / top) * 100, 1.5)}%` : 0, background: ACCENT }} />
+            <div className="h-full rounded-r-[4px]" style={{ width: r.value ? `${Math.max((r.value / top) * 100, 1.5)}%` : 0, background: DATA_COLORS[index % DATA_COLORS.length] }} />
           </div>
         </div>
       ))}
@@ -60,10 +58,10 @@ export function Empty({ text = "No data yet — submit a report to see this." })
 export function StatSlab({ stats }) {
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border lg:grid-cols-4">
-      {stats.map(([label, value]) => (
+      {stats.map(([label, value], index) => (
         <div key={label} className="bg-card p-4">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-1 text-3xl font-normal tracking-tight tabular-nums">{nfull.format(value || 0)}</div>
+          <div className="mt-1 text-3xl font-semibold tracking-tight tabular-nums" style={{ color: DATA_COLORS[index % DATA_COLORS.length] }}>{nfull.format(value || 0)}</div>
         </div>
       ))}
     </div>
@@ -176,7 +174,7 @@ export function GeoMap({ rows, cities, onSelect, emptyText }) {
         {(mode === "heat" && cityData.length ? cityData : data).map((r) => (
           <circle key={r.label || r.key} cx={r.pos[0]} cy={r.pos[1] * MAP_Y}
             r={mode === "heat" ? 1.6 : 0.7 + (r.reach / top) * 1.1}
-            className={mode === "heat" ? "cursor-pointer fill-transparent" : "cursor-pointer fill-foreground transition-[r]"}
+            className={mode === "heat" ? "cursor-pointer fill-transparent" : "cursor-pointer fill-blue-600 transition-[r]"}
             stroke={mode === "heat" ? "none" : "hsl(0 0% 100%)"} strokeWidth="0.25"
             onMouseEnter={() => setHover(r)} onMouseLeave={() => setHover(null)} onClick={() => onSelect?.(r)} />
         ))}
@@ -220,6 +218,11 @@ export const asBars = (rows, labelFn = (k) => k) =>
 
 const titleCase = (k) => k && k[0].toUpperCase() + k.slice(1);
 
+export const orgHierarchy = (row) => row.network_name
+  ? `Network: ${row.network_name}`
+  : [["Zone", row.zone], ["Group", row.group_name], ["Church", row.church_name], ["Cell", row.cell_name]]
+    .filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join(" › ") || titleCase(row.organization_type) || "—";
+
 // Breakdown widgets map to a stats array + a /api/crusades filter field, so
 // "Expand" can open a full drill-down page and each row can jump to the
 // matching filtered rows in the table. Single-number tiles and the trend/recent
@@ -228,6 +231,7 @@ export const DRILL_MAP = {
   zones: { statKey: "by_zone", filterField: "zone", labelFn: (k) => k },
   groups: { statKey: "by_group", filterField: "group_name", labelFn: (k) => k },
   churches: { statKey: "by_church", filterField: "church_name", labelFn: (k) => k },
+  cells: { statKey: "by_cell", filterField: "cell_name", labelFn: (k) => k },
   networks: { statKey: "by_network", filterField: "network_name", labelFn: (k) => k },
   org_type: { statKey: "by_org_type", filterField: "organization_type", labelFn: titleCase },
   format: { statKey: "by_format", filterField: "format", labelFn: titleCase },
@@ -266,22 +270,30 @@ const KPI_WIDGETS = {
   registered: {
     title: "Crusades Registered",
     render: (s) => <StatTile label="Crusades Registered" value={nfull.format(s.registered?.total || 0)}
-      sub={`${nfull.format(s.totals.crusades || 0)} held so far`} />,
+      sub={`${nfull.format(s.registered?.reported || 0)} reported as held`} />,
+  },
+  registered_reported: {
+    title: "Registered Crusades Held",
+    render: (s) => <StatTile label="Registered Crusades Held" value={nfull.format(s.registered?.reported || 0)} sub="Reports linked to registrations" />,
+  },
+  awaiting_reports: {
+    title: "Awaiting Reports",
+    render: (s) => <StatTile label="Awaiting Reports" value={nfull.format(s.registered?.awaiting || 0)} sub="Registered crusades without reports" />,
+  },
+  registered_expected_attendance: {
+    title: "Expected Attendance",
+    render: (s) => <StatTile label="Expected Attendance" value={nfull.format(s.registered?.expected_attendance || 0)} sub="Across registered crusades" />,
   },
 };
 
 // Planned (registrations) vs held (reports): a progress bar per key.
-function PlannedVsHeld({ planned, held, labelFn = (k) => k, expanded }) {
-  const heldBy = Object.fromEntries((held || []).map((r) => [r.key, r.crusades]));
-  const rows = (planned || [])
-    .map((r) => ({ key: r.key, planned: r.planned, held: heldBy[r.key] || 0 }))
-    .sort((a, b) => b.planned - a.planned);
+function PlannedVsHeld({ rows = [], labelFn = (k) => k, expanded, onRowClick }) {
   if (!rows.length) return <Empty text="No registrations yet — planned totals appear once organizations register." />;
   const shown = expanded ? rows : rows.slice(0, 8);
   return (
     <div className="space-y-2.5">
       {shown.map((r) => (
-        <div key={r.key}>
+        <div key={r.key} className={onRowClick ? "cursor-pointer" : ""} onClick={() => onRowClick?.(r)}>
           <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
             <span className="truncate capitalize">{labelFn(r.key)}</span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
@@ -289,7 +301,7 @@ function PlannedVsHeld({ planned, held, labelFn = (k) => k, expanded }) {
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-r-[4px] bg-foreground"
+            <div className="h-full rounded-r-[4px] bg-emerald-500"
               style={{ width: `${Math.min((r.held / Math.max(r.planned, 1)) * 100, 100)}%` }} />
           </div>
         </div>
@@ -303,12 +315,16 @@ function PlannedVsHeld({ planned, held, labelFn = (k) => k, expanded }) {
 
 const BREAKDOWN_WIDGETS = {
   map: { title: "Geography", size: 2, render: (s, x, onRowClick) => <GeoMap rows={s.by_country} cities={s.geo} onSelect={onRowClick} /> },
-  planned_vs_held_type: { title: "Planned vs held — by type", render: (s, x) => <PlannedVsHeld planned={s.registered?.by_type} held={s.by_category} labelFn={typeLabel} expanded={x} /> },
-  planned_vs_held_zone: { title: "Planned vs held — by zone", render: (s, x) => <PlannedVsHeld planned={s.registered?.by_zone} held={s.by_zone} expanded={x} /> },
-  planned_vs_held_country: { title: "Planned vs held — by country", render: (s, x) => <PlannedVsHeld planned={s.registered?.by_country} held={s.by_country} expanded={x} /> },
+  planned_vs_held_type: { title: "Planned vs held — by type", registrationFilter: "event_type", render: (s, x, go) => <PlannedVsHeld rows={s.registered?.by_type} labelFn={typeLabel} expanded={x} onRowClick={go} /> },
+  planned_vs_held_zone: { title: "Planned vs held — by zone", registrationFilter: "zone", render: (s, x, go) => <PlannedVsHeld rows={s.registered?.by_zone} expanded={x} onRowClick={go} /> },
+  planned_vs_held_network: { title: "Planned vs held — by network", registrationFilter: "network_name", render: (s, x, go) => <PlannedVsHeld rows={s.registered?.by_network} expanded={x} onRowClick={go} /> },
+  planned_vs_held_org_type: { title: "Planned vs held — by registration level", registrationFilter: "organization_type", render: (s, x, go) => <PlannedVsHeld rows={s.registered?.by_org_type} labelFn={titleCase} expanded={x} onRowClick={go} /> },
+  planned_vs_held_country: { title: "Planned vs held — by country", registrationFilter: "country", render: (s, x, go) => <PlannedVsHeld rows={s.registered?.by_country} expanded={x} onRowClick={go} /> },
+  planned_vs_held_city: { title: "Planned vs held — by city", registrationFilter: "city", render: (s, x, go) => <PlannedVsHeld rows={s.registered?.by_city} expanded={x} onRowClick={go} /> },
   zones: { title: "By zone", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_zone)} expanded={x} onRowClick={onRowClick} /> },
   groups: { title: "By group", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_group)} expanded={x} onRowClick={onRowClick} /> },
   churches: { title: "By church", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_church)} expanded={x} onRowClick={onRowClick} /> },
+  cells: { title: "By cell", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_cell)} expanded={x} onRowClick={onRowClick} /> },
   networks: { title: "By network", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_network)} expanded={x} onRowClick={onRowClick} /> },
   org_type: { title: "By reporting level", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_org_type, titleCase)} expanded={x} onRowClick={onRowClick} /> },
   format: { title: "Physical vs online", render: (s, x, onRowClick) => <BarH rows={asBars(s.by_format, titleCase)} expanded={x} onRowClick={onRowClick} /> },
@@ -338,7 +354,7 @@ const BREAKDOWN_WIDGETS = {
             {s.recent.map((r) => (
               <tr key={r.id} className="border-b last:border-0">
                 <td className="py-2 pr-3 text-muted-foreground">{r.id}</td>
-                <td className="max-w-56 truncate py-2 pr-3">{r.zone || r.network_name || r.church_name || r.group_name || r.organization_type}</td>
+                <td className="max-w-80 py-2 pr-3 text-xs">{orgHierarchy(r)}</td>
                 <td className="py-2 pr-3">{r.country}</td>
                 <td className="py-2 pr-3 text-right">{r.crusades}</td>
                 <td className="py-2 pr-3 text-right">{nfull.format(r.attendance || 0)}</td>

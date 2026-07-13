@@ -11,20 +11,21 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { getJSON } from "@/lib/api";
 import { CRUSADE_TYPES, FORMATS, CORE_OUTCOMES, EXTENDED_OUTCOMES } from "@/lib/constants";
-import { typeLabel, nfull, WIDGETS, DRILL_MAP } from "@/lib/dashboardWidgets";
+import { typeLabel, nfull, orgHierarchy, WIDGETS, DRILL_MAP } from "@/lib/dashboardWidgets";
 
 // Every metric that can be uploaded, in the same order as the form/import —
 // this table shows the full received row, not a trimmed summary.
 const METRIC_COLS = [["online_participation", "Online"], ...CORE_OUTCOMES, ...EXTENDED_OUTCOMES];
 const n0 = (v) => nfull.format(v || 0);
 
-const ORG_TYPES = [["zone", "Zone"], ["group", "Group"], ["church", "Church"], ["network", "Network"]];
+const ORG_TYPES = [["zone", "Zone"], ["group", "Group"], ["church", "Church"], ["cell", "Cell"], ["network", "Network"]];
 // One entry per filter: query-string key, label, and the field kind used to pick a control.
 const FILTERS = [
   ["organization_type", "Reporting as", "select", ORG_TYPES],
   ["zone", "Zone", "text"],
   ["group_name", "Group", "text"],
   ["church_name", "Church", "text"],
+  ["cell_name", "Cell", "text"],
   ["network_name", "Network", "text"],
   ["country", "Country", "text"],
   ["city", "City", "text"],
@@ -92,7 +93,7 @@ export function CrusadesTable() {
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} className="pl-6"
-              placeholder="Search anything — city, minister, event name, venue, zone…" aria-label="Search crusades" />
+              placeholder="Search crusade, venue, reporter, email, phone, KingsChat…" aria-label="Search crusades" />
           </div>
         </CardContent>
         <CardContent className="grid gap-3 pt-0 sm:grid-cols-3 lg:grid-cols-4">
@@ -140,7 +141,8 @@ export function CrusadesTable() {
                   <Th col="event_type" label="Type" />
                   <Th col="format" label="Format" />
                   <Th col="city" label="City / Country" />
-                  <th className="py-2 pr-3 font-medium">Reporting as</th>
+                  <th className="py-2 pr-3 font-medium">Reporting type</th>
+                  <th className="py-2 pr-3 font-medium">Reporter contact</th>
                   <Th col="attendance" label="Onsite" right />
                   {METRIC_COLS.map(([k, label]) => (
                     <Th key={k} col={k} label={label} right />
@@ -157,7 +159,12 @@ export function CrusadesTable() {
                     <td className="py-2 pr-3">{r.event_type === "other" ? r.other_event_type : typeLabel(r.event_type)}</td>
                     <td className="py-2 pr-3 capitalize">{r.format}</td>
                     <td className="max-w-48 truncate py-2 pr-3">{r.city}, {r.country}</td>
-                    <td className="max-w-40 truncate py-2 pr-3">{r.zone || r.network_name || r.church_name || r.group_name || r.organization_type}</td>
+                    <td className="min-w-64 max-w-80 py-2 pr-3 text-xs">{orgHierarchy(r)}</td>
+                    <td className="min-w-56 py-2 pr-3">
+                      <div className="font-medium">{r.contact_name || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{r.contact_email || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{[r.phone_country_code, r.phone_number].filter(Boolean).join(" ") || "—"} · {r.kingschat_username || "—"}</div>
+                    </td>
                     <td className="py-2 pr-3 text-right">{n0(r.attendance)}</td>
                     {METRIC_COLS.map(([k]) => (
                       <td key={k} className="py-2 pr-3 text-right">{n0(r[k])}</td>

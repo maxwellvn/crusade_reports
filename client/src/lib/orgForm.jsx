@@ -61,7 +61,7 @@ export function useOrgData(zone, countryCode) {
 
 export function Stepper({ steps, step }) {
   return (
-    <ol className="flex items-center gap-2">
+    <ol className="flex items-center gap-2 rounded-lg border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60">
       {steps.map((label, i) => {
         const state = i < step ? "done" : i === step ? "current" : "todo";
         return (
@@ -90,9 +90,9 @@ export function Stepper({ steps, step }) {
 
 export function Summary({ label, value }) {
   return (
-    <div>
+    <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="font-medium capitalize">{value}</div>
+      <div className="mt-0.5 font-semibold capitalize text-slate-800">{value}</div>
     </div>
   );
 }
