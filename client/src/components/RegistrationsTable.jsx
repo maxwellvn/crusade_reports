@@ -223,7 +223,10 @@ function CrusadeEditDialog({ crusade, onClose, onSaved }) {
         <Button type="button" variant="ghost" size="icon" onClick={() => ref.current?.close()} aria-label="Close editor"><X /></Button>
       </div>
       <div className="p-5">
-        <CrusadeEditor crusade={crusade} savePath={`/registrations/${crusade.id}`} onSaved={onSaved} />
+        <CrusadeEditor crusade={crusade} savePath={`/registrations/${crusade.id}`} onSaved={(updated) => {
+          onSaved(updated);
+          ref.current?.close();
+        }} />
       </div>
     </dialog>
   );

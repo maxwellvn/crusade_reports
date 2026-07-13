@@ -294,7 +294,10 @@ function ZoneCrusadeEditDialog({ crusade, token, onClose, onSaved }) {
         <Button type="button" variant="ghost" size="icon" onClick={() => ref.current?.close()} aria-label="Close editor"><X /></Button>
       </div>
       <div className="p-5">
-        <CrusadeEditor crusade={crusade} savePath={`/zone-portal/${token}/crusades/${crusade.id}/readiness`} onSaved={onSaved} />
+        <CrusadeEditor crusade={crusade} savePath={`/zone-portal/${token}/crusades/${crusade.id}/readiness`} onSaved={(updated) => {
+          onSaved(updated);
+          ref.current?.close();
+        }} />
       </div>
     </dialog>
   );
