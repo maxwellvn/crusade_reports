@@ -3,7 +3,9 @@ FROM node:22-alpine AS build
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Coolify may inject NODE_ENV=production at build time. Explicitly include dev
+# dependencies because Vite/Tailwind are build tools, then prune them below.
+RUN npm ci --include=dev
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
