@@ -254,7 +254,18 @@
     max-width: 371px;
     margin-top: clamp(16px, 2vw, 24px);
     font-size: clamp(16px, 1.67vw, 24px);
-    line-height: 0.95;
+}
+.landing-page .hero-sub h2 {
+    margin: 0 0 0.4em;
+    font-size: 1em;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.025em;
+}
+.landing-page .hero-sub p {
+    margin: 0;
+    font-size: 0.72em;
+    line-height: 1.25;
 }
 
 /* ===== How to register (white card) ===== */

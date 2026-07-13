@@ -295,10 +295,10 @@ export function Landing() {
 
         <div className="hero-content">
           <h1>Rhapsody End-Time Teaching<br /><em aria-live="polite">{heroWord}<span className="type-caret" aria-hidden="true" /></em></h1>
-          <p className="hero-sub">
-            A Night of a Thousand Crusades.<br />
-            One night. Thousands of crusades, held simultaneously across cities and nations of the world.
-          </p>
+          <div className="hero-sub">
+            <h2>A Night of a Thousand Crusades</h2>
+            <p>One night. Thousands of crusades, held simultaneously across cities and nations of the world.</p>
+          </div>
         </div>
 
         <div className="hero-collage">
