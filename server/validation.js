@@ -80,7 +80,7 @@ const registrationDetails = {
     event_date: z.string().trim().min(1, "Crusade date is required"),
     venue: z.string().trim().min(2, "Venue is required").max(1000),
     expected_attendance: z.coerce.number().int().min(1, "Expected attendance is required"),
-    minister_name: z.string().trim().optional().default(""),
+    minister_name: z.string().trim().min(1, "Minister name is required"),
     city: z.string().trim().min(1, "City is required"),
 };
 
@@ -88,10 +88,6 @@ const registrationItem = z
   .object({
     ...registrationDetails,
     city_place_id: z.string().trim().optional().default(""),
-  })
-  .refine((i) => i.event_type !== "mega" || i.minister_name.length > 0, {
-    message: "Minister name is required for mega crusades",
-    path: ["minister_name"],
   });
 
 export const registrationSchema = z
@@ -133,6 +129,5 @@ export const registrationCrusadeEditSchema = z
     feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
   })
   .superRefine((d, ctx) => {
-    if (d.event_type === "mega" && !d.minister_name) issue(ctx, ["minister_name"], "Minister name is required for mega crusades");
     if (d.status === "not_holding" && d.feedback.length < 3) issue(ctx, ["feedback"], "Tell us why the crusade is not holding, including any challenges.");
   });

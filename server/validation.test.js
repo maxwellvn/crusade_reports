@@ -42,10 +42,12 @@ test("each new registration item requires individual crusade details", () => {
     phone_country_code: "+234", phone_number: "801 234 5678",
   };
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ event_type: "street", city: "Lagos" }] }).success, false);
-  assert.equal(registrationSchema.safeParse({ ...base, items: [{
+  const item = {
     event_type: "street", event_name: "Test Street Crusade", event_date: "2026-07-20",
-    venue: "Test Square", expected_attendance: 500, city: "Lagos",
-  }] }).success, true);
+    venue: "Test Square", expected_attendance: 500, city: "Lagos", minister_name: "Pastor Test",
+  };
+  assert.equal(registrationSchema.safeParse({ ...base, items: [item] }).success, true);
+  assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, minister_name: "" }] }).success, false);
 });
 
 test("private dashboard report validates one complete registered crusade outcome", () => {

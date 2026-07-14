@@ -543,11 +543,9 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
         <Field label="Venue / address" required className="lg:col-span-2">
           <Input value={details.venue} onChange={(event) => setDetails((current) => ({ ...current, venue: event.target.value }))} />
         </Field>
-        {details.event_type === "mega" && (
-          <Field label="Ministers' names" required>
-            <Input value={details.minister_name} onChange={(event) => setDetails((current) => ({ ...current, minister_name: event.target.value }))} />
-          </Field>
-        )}
+        <Field label="Ministers' names" required>
+          <Input value={details.minister_name} onChange={(event) => setDetails((current) => ({ ...current, minister_name: event.target.value }))} />
+        </Field>
       </div>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_1fr_auto] sm:items-end">
         <div className="space-y-2">

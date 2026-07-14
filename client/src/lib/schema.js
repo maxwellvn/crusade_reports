@@ -70,13 +70,9 @@ const registrationItem = z
     event_date: z.string().min(1, "Select the crusade date"),
     venue: z.string().trim().min(2, "Venue is required").max(1000),
     expected_attendance: z.coerce.number({ message: "Expected attendance is required" }).int().min(1, "Expected attendance is required"),
-    minister_name: z.string().optional().default(""),
+    minister_name: z.string().trim().min(1, "Minister name is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
-  })
-  .refine((i) => i.event_type !== "mega" || i.minister_name.trim().length > 0, {
-    message: "Minister name is required for mega crusades",
-    path: ["minister_name"],
   });
 
 export const registrationSchema = z

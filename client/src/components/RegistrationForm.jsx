@@ -19,7 +19,7 @@ import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
 
 // Public crusade registration — the intent-side twin of the report form.
-// A type + confirmed quantity generates one required detail record per crusade.
+// Crusades are added one at a time; each click creates one required detail record.
 // The API still receives individual items, never an unaccounted aggregate.
 
 const STEPS = ["Who you are", "Your crusades", "Review"];
@@ -95,7 +95,6 @@ export function RegistrationForm() {
   const [step, setStep] = React.useState(0);
   const [done, setDone] = React.useState(null);
   const [batchType, setBatchType] = React.useState("");
-  const [batchCount, setBatchCount] = React.useState("");
   const [selectedCrusades, setSelectedCrusades] = React.useState([]);
   const orgType = watch("organization_type");
   const zone = watch("zone");
@@ -127,7 +126,6 @@ export function RegistrationForm() {
         reset({ ...registrationDefaults, ...draft.values, items: Array.isArray(draft.values.items) ? draft.values.items : [] });
         setStep(Math.min(Math.max(Number(draft.step) || 0, 0), STEPS.length - 1));
         setBatchType(draft.batchType || "");
-        setBatchCount(draft.batchCount || "");
         setCountryCode(draft.countryCode || "");
         toast.success("Your saved registration draft has been restored.");
       }
@@ -151,15 +149,15 @@ export function RegistrationForm() {
       try {
         const values = getValues();
         const hasProgress = Object.values(values).some((value) => Array.isArray(value) ? value.length > 0 : String(value || "").trim());
-        if (!hasProgress && !batchType && !batchCount) return clearStoredDraft();
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step, batchType, batchCount, countryCode, savedAt: Date.now() }));
+        if (!hasProgress && !batchType) return clearStoredDraft();
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step, batchType, countryCode, savedAt: Date.now() }));
       } catch { /* storage may be unavailable or full */ }
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(save, 250); };
     schedule();
     const subscription = watch(schedule);
     return () => { clearTimeout(timer); subscription.unsubscribe(); };
-  }, [watch, getValues, step, batchType, batchCount, countryCode, done]);
+  }, [watch, getValues, step, batchType, countryCode, done]);
 
   // ---- Handlers --------------------------------------------------------------
   async function next() {
@@ -176,7 +174,7 @@ export function RegistrationForm() {
     if (e.key !== "Enter" || step === STEPS.length - 1) return;
     if (step === 1 && e.target.closest("[data-crusade-generator]")) {
       e.preventDefault();
-      generateCrusades();
+      addCrusade();
       return;
     }
     e.preventDefault();
@@ -184,16 +182,13 @@ export function RegistrationForm() {
     next();
   }
 
-  function generateCrusades(type = batchType, quantity = batchCount) {
-    const count = Number(quantity);
+  function addCrusade(type = batchType) {
     if (!type) return toast.error("Select the crusade type.");
-    if (!Number.isInteger(count) || count < 1 || count > 500) return toast.error("Enter a confirmed number from 1 to 500.");
-    itemArray.append(Array.from({ length: count }, () => ({
+    if (itemArray.fields.length >= 500) return toast.error("Maximum of 500 crusades per registration.");
+    itemArray.append({
       event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", city: "", city_place_id: "",
-    })));
-    toast.success(`${count} ${typeLabel(type)} detail field${count === 1 ? "" : "s"} created.`);
-    setBatchType("");
-    setBatchCount("");
+    });
+    toast.success(`${typeLabel(type)} detail form added.`);
   }
 
   function removeCrusades(indices) {
@@ -220,7 +215,6 @@ export function RegistrationForm() {
     reset(registrationDefaults);
     setCountryCode("");
     setBatchType("");
-    setBatchCount("");
     setSelectedCrusades([]);
     setStep(0);
     setDone(null);
@@ -232,7 +226,6 @@ export function RegistrationForm() {
     reset(registrationDefaults);
     setCountryCode("");
     setBatchType("");
-    setBatchCount("");
     setSelectedCrusades([]);
     setStep(0);
     applyScope(portalScope);
@@ -396,22 +389,21 @@ export function RegistrationForm() {
                   <CardHeader>
                     <CardTitle>Register each individual crusade</CardTitle>
                     <CardDescription>
-                      Enter only crusades you have confirmed. Select the type and confirmed number first; we will create one required detail form for every crusade. You cannot continue until all are complete.
+                      Enter only crusades you have confirmed. Select the type and add crusades one by one; each adds one required detail form. You cannot continue until all are complete.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {typeof errors.items?.message === "string" && <p className="text-xs font-medium">{errors.items.message}</p>}
-                    <div data-crusade-generator className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50/60 p-4 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+                    <div data-crusade-generator className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50/60 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
                       <Field label="Crusade type" required>
                         <Select value={batchType} onChange={(e) => setBatchType(e.target.value)}>
                           <option value="">Select…</option>
                           {CRUSADE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </Select>
                       </Field>
-                      <Field label="Confirmed number" required hint="Add fields when ready">
-                        <Input type="number" min="1" max="500" value={batchCount} onChange={(e) => setBatchCount(e.target.value)} placeholder="e.g. 10" />
-                      </Field>
-                      <Button type="button" onClick={() => generateCrusades()}><Plus /> Add detail fields</Button>
+                      <Button type="button" onClick={() => addCrusade()}>
+                        <Plus /> {itemArray.fields.length > 0 ? "Add another crusade" : "Add crusade"}
+                      </Button>
                     </div>
 
                     {itemArray.fields.length > 0 && (
@@ -474,16 +466,19 @@ export function RegistrationForm() {
                               <Input placeholder="e.g. City Stadium, 10 Main Road" {...register(`items.${i}.venue`)} aria-invalid={!!rowErr.venue} />
                             </Field>
                           </div>
-                          {items?.[i]?.event_type === "mega" && (
-                            <Field label="Ministers' names" required error={rowErr.minister_name?.message} className="mt-3" hint="Type a name and press comma to add another minister">
-                              <Controller control={control} name={`items.${i}.minister_name`} render={({ field }) => (
-                                <MinisterTags value={field.value} onChange={field.onChange} invalid={!!rowErr.minister_name} />
-                              )} />
-                            </Field>
-                          )}
+                          <Field label="Ministers' names" required error={rowErr.minister_name?.message} className="mt-3" hint="Type a name and press comma to add another minister">
+                            <Controller control={control} name={`items.${i}.minister_name`} render={({ field }) => (
+                              <MinisterTags value={field.value} onChange={field.onChange} invalid={!!rowErr.minister_name} />
+                            )} />
+                          </Field>
                         </div>
                       );
                     })}
+                    {itemArray.fields.length > 0 && (
+                      <Button type="button" variant="outline" className="w-full" onClick={() => addCrusade(batchType || items?.[items.length - 1]?.event_type)}>
+                        <Plus /> Add another crusade
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               )}
