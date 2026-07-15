@@ -595,11 +595,14 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Estimated crusade budget</p>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Estimated crusade budget (Espees)</p>
               {planningEditable ? (
-                <Input value={details.estimated_budget} onChange={setField("estimated_budget")} placeholder="e.g. 2,000,000" />
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-sm font-medium text-muted-foreground">Espees</span>
+                  <Input value={details.estimated_budget} onChange={setField("estimated_budget")} placeholder="e.g. 2,000,000" />
+                </div>
               ) : (
-                <p className="text-sm">{details.estimated_budget || "—"}</p>
+                <p className="text-sm">{details.estimated_budget ? `Espees ${details.estimated_budget}` : "—"}</p>
               )}
             </div>
             <div>

@@ -296,7 +296,7 @@ function CrusadeDetails({ crusade, onClose }) {
     ["Ministers", crusade.minister_name],
     ...(crusade.crusade_collaborators ? [["Crusade collaborators", crusade.crusade_collaborators]] : []),
     ...(crusade.zone_contribution ? [["Zone’s contribution", crusade.zone_contribution]] : []),
-    ...(crusade.estimated_budget ? [["Estimated budget", crusade.estimated_budget]] : []),
+    ...(crusade.estimated_budget ? [["Estimated budget", `Espees ${crusade.estimated_budget}`]] : []),
     ...(crusade.rhapsody_copies_confirmed ? [["Rhapsody copies confirmed", crusade.rhapsody_copies_confirmed]] : []),
     ...(crusade.permits_obtained ? [["Permits obtained", crusade.permits_obtained]] : []),
     ...(crusade.media_coverage_plan ? [["Media coverage plan", crusade.media_coverage_plan]] : []),

@@ -505,8 +505,11 @@ export function RegistrationForm() {
                                 </Field>
                               </div>
                               <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Estimated crusade budget">
-                                  <Input placeholder="e.g. 2,000,000" {...register(`items.${i}.estimated_budget`)} />
+                                <Field label="Estimated crusade budget" hint="Amount in Espees">
+                                  <div className="flex items-center gap-2">
+                                    <span className="shrink-0 text-sm font-medium text-muted-foreground">Espees</span>
+                                    <Input placeholder="e.g. 2,000,000" {...register(`items.${i}.estimated_budget`)} />
+                                  </div>
                                 </Field>
                                 <Field label="Number of Rhapsody copies confirmed">
                                   <Input type="number" min="0" placeholder="e.g. 5,000" {...register(`items.${i}.rhapsody_copies_confirmed`)} />
@@ -569,7 +572,7 @@ export function RegistrationForm() {
                           {it.zone_contribution?.length > 0 && (
                             <div className="mt-0.5 text-xs text-muted-foreground">Contribution: {it.zone_contribution.join(", ")}</div>
                           )}
-                          {it.estimated_budget && <div className="mt-0.5 text-xs text-muted-foreground">Budget: {it.estimated_budget}</div>}
+                          {it.estimated_budget && <div className="mt-0.5 text-xs text-muted-foreground">Budget: Espees {it.estimated_budget}</div>}
                           {it.rhapsody_copies_confirmed && <div className="mt-0.5 text-xs text-muted-foreground">Rhapsody copies: {it.rhapsody_copies_confirmed}</div>}
                           {it.permits_obtained && <div className="mt-0.5 text-xs text-muted-foreground">Permits obtained: {it.permits_obtained}</div>}
                           {it.media_coverage_plan && <div className="mt-0.5 text-xs text-muted-foreground">Media plan: {it.media_coverage_plan}</div>}
