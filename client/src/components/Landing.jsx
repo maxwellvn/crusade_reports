@@ -336,7 +336,7 @@ export function Landing() {
         <div className="footer-cta">
           <span className="eyebrow">One night. Thousands of crusades.</span>
           <h2 className="footer-tagline">Reaching the whole world in one night.</h2>
-          <p className="footer-cta-sub">Register your crusade and join the global tally — appear on the live map across cities and nations of the world.</p>
+          <p className="footer-cta-sub">Register your crusade and join the global tally — appear on the live map across nations and continents of the world.</p>
           <RegisterButton className="btn-lg">Register your crusades</RegisterButton>
         </div>
 
@@ -347,7 +347,7 @@ export function Landing() {
                 <img src="/logo.png" alt="" className="footer-logo" />
                 <span className="footer-brand-name">Rhapsody End-Time<br />Teaching Crusades</span>
               </div>
-              <p className="footer-desc">Thousands of crusades held simultaneously across cities and nations of the world — reaching the whole world in one night.</p>
+              <p className="footer-desc">Thousands of crusades held simultaneously across nations and continents of the world — reaching the whole world in one night.</p>
               <div className="footer-social">
                 <a href="https://kingschat.online/user/rorcrusades1" target="_blank" rel="noreferrer"
                   className="footer-kingschat" aria-label="KingsChat">
