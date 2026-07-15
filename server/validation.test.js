@@ -10,7 +10,7 @@ import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, 
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
-import { deleteRegistrationCrusade } from "./routes/registrations.js";
+import { deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 
@@ -48,6 +48,38 @@ test("each new registration item requires individual crusade details", () => {
   };
   assert.equal(registrationSchema.safeParse({ ...base, items: [item] }).success, true);
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, minister_name: "" }] }).success, false);
+});
+
+test("crusade collaboration edits lock once the crusade date has passed", () => {
+  db.exec("BEGIN");
+  try {
+    const reg = db.prepare(
+      `INSERT INTO registrations (organization_type, network_name, country, plan_date) VALUES ('network', 'REON', 'Nigeria', '2020-01-01')`
+    ).run().lastInsertRowid;
+    const makeItem = (date) => db.prepare(
+      `INSERT INTO registration_items
+       (registration_id, organization_type, network_name, country, plan_date, event_type, planned_count, event_name, event_date, venue, expected_attendance, city, crusade_collaborators, zone_contribution)
+       VALUES (?, 'network', 'REON', 'Nigeria', ?, 'street', 1, 'Original', ?, 'Original Venue', 100, 'Lagos', 'REON', 'Sending Pastors')`
+    ).run(reg, date, date).lastInsertRowid;
+    const edit = (date) => registrationCrusadeEditSchema.parse({
+      event_type: "street", event_name: "Edited Name", event_date: date, venue: "Edited Venue",
+      expected_attendance: 100, minister_name: "Pastor", city: "Lagos",
+      crusade_collaborators: ["REON", "Lagos Zone 1"], zone_contribution: ["Sending Partners"], status: "pending",
+    });
+
+    // A future crusade accepts the new collaborators and contribution.
+    const future = updateRegistrationCrusade(makeItem("2099-01-01"), edit("2099-01-01"));
+    assert.equal(future.crusade_collaborators, "REON, Lagos Zone 1");
+    assert.equal(future.zone_contribution, "Sending Partners");
+
+    // A past crusade keeps its original collaboration, but still edits everything else.
+    const past = updateRegistrationCrusade(makeItem("2020-01-01"), edit("2020-01-01"));
+    assert.equal(past.crusade_collaborators, "REON");
+    assert.equal(past.zone_contribution, "Sending Pastors");
+    assert.equal(past.event_name, "Edited Name");
+  } finally {
+    db.exec("ROLLBACK");
+  }
 });
 
 test("private dashboard report validates one complete registered crusade outcome", () => {

@@ -10,9 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/Combobox";
+import { CollaboratorPicker, ContributionChecklist, splitCollaboration } from "@/components/CollaborationFields";
 import { getJSON, postJSON, putJSON } from "@/lib/api";
+import { useOrgData } from "@/lib/orgForm";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES } from "@/lib/constants";
+
+// UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
+// edit lock. Purely a display cue — the server is the authority on the cutoff.
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 // Zone dashboard, opened via a capability link (/zone/<token>). The server
 // scopes every read and readiness update to the token's zone/network.
@@ -490,12 +496,19 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
     event_type: crusade.event_type || "", event_name: crusade.event_name || "", event_date: crusade.event_date || "",
     venue: crusade.venue || "", expected_attendance: crusade.expected_attendance || "", minister_name: crusade.minister_name || "",
     city: crusade.city || "", city_place_id: crusade.city_place_id || "",
+    crusade_collaborators: splitCollaboration(crusade.crusade_collaborators),
+    zone_contribution: splitCollaboration(crusade.zone_contribution),
   });
   const [status, setStatus] = React.useState(crusade.readiness_status || "pending");
   const [feedback, setFeedback] = React.useState(crusade.readiness_notes || "");
   const [saving, setSaving] = React.useState(false);
 
   const fetchCities = useCityFetcher(crusade.country);
+  const { fetchCollaborators } = useOrgData("", "");
+
+  // Collaboration is network-only, and locks once the crusade date has passed.
+  const isNetwork = crusade.organization_type === "network";
+  const collaborationEditable = !details.event_date || details.event_date >= todayISO();
 
   async function save() {
     if (status === "not_holding" && feedback.trim().length < 3) {
@@ -504,7 +517,13 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
     setSaving(true);
     try {
       const updated = await putJSON(savePath, { ...details, status, feedback });
-      setDetails((current) => ({ ...current, ...updated }));
+      // The server returns collaboration as comma-joined strings; keep our editing
+      // copy as arrays so a second save in the same dialog still works.
+      setDetails((current) => ({
+        ...current, ...updated,
+        crusade_collaborators: splitCollaboration(updated.crusade_collaborators),
+        zone_contribution: splitCollaboration(updated.zone_contribution),
+      }));
       setFeedback(updated.readiness_notes || "");
       onSaved(updated);
       toast.success("Crusade readiness updated.");
@@ -547,19 +566,30 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
           <Input value={details.minister_name} onChange={(event) => setDetails((current) => ({ ...current, minister_name: event.target.value }))} />
         </Field>
       </div>
-      {(crusade.crusade_collaborators || crusade.zone_contribution) && (
-        <div className="grid gap-3 border-t border-dashed pt-4 sm:grid-cols-2">
-          {crusade.crusade_collaborators && (
+      {isNetwork && (
+        <div className="space-y-3 border-t border-dashed pt-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Crusade collaborators</p>
-              <p className="mt-1 text-sm">{crusade.crusade_collaborators}</p>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Who are the crusade collaborators?</p>
+              {collaborationEditable ? (
+                <CollaboratorPicker value={details.crusade_collaborators} fetcher={fetchCollaborators}
+                  onChange={(value) => setDetails((current) => ({ ...current, crusade_collaborators: value }))} />
+              ) : (
+                <p className="text-sm">{details.crusade_collaborators.join(", ") || "—"}</p>
+              )}
             </div>
-          )}
-          {crusade.zone_contribution && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Zone’s contribution to crusade</p>
-              <p className="mt-1 text-sm">{crusade.zone_contribution}</p>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Zone’s contribution to crusade</p>
+              {collaborationEditable ? (
+                <ContributionChecklist value={details.zone_contribution}
+                  onChange={(value) => setDetails((current) => ({ ...current, zone_contribution: value }))} />
+              ) : (
+                <p className="text-sm">{details.zone_contribution.join(", ") || "—"}</p>
+              )}
             </div>
+          </div>
+          {!collaborationEditable && (
+            <p className="text-xs text-muted-foreground">Collaborators and contribution are locked because the crusade date has passed.</p>
           )}
         </div>
       )}

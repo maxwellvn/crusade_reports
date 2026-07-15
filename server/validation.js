@@ -133,6 +133,7 @@ export const registrationCrusadeEditSchema = z
   .object({
     ...registrationDetails,
     city_place_id: z.string().trim().optional().default(""),
+    ...collaborationFields,
     status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
     feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
   })

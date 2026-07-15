@@ -99,21 +99,41 @@ registrations.post("/", wrap((req, res) => {
   res.status(201).json({ id });
 }));
 
+// A crusade's collaborators and contribution may only change up to its date — once
+// the crusade date has passed they lock, so the record of who took part can't be
+// rewritten after the fact. The rest of the crusade stays editable regardless.
+export function collaborationEditable(eventDate) {
+  if (!eventDate) return true;
+  return eventDate >= db.prepare("SELECT date('now') AS today").get().today;
+}
+
 export function updateRegistrationCrusade(id, d) {
-  const crusade = db.prepare("SELECT id, registration_id FROM registration_items WHERE id = ?").get(id);
+  const crusade = db.prepare("SELECT id, registration_id, event_date FROM registration_items WHERE id = ?").get(id);
   if (!crusade) return null;
+  const canEditCollaboration = collaborationEditable(crusade.event_date);
   db.transaction(() => {
-    db.prepare(`UPDATE registration_items SET event_type = ?, event_name = ?, event_date = ?, venue = ?,
-      expected_attendance = ?, minister_name = ?, city = ?, city_place_id = ?,
-      readiness_status = ?, readiness_notes = ?, readiness_updated_at = datetime('now') WHERE id = ?`
-    ).run(d.event_type, d.event_name, d.event_date, d.venue, d.expected_attendance, d.minister_name || null,
-      d.city, d.city_place_id || null, d.status, d.feedback || null, crusade.id);
+    const assignments = [
+      "event_type = @event_type", "event_name = @event_name", "event_date = @event_date", "venue = @venue",
+      "expected_attendance = @expected_attendance", "minister_name = @minister_name", "city = @city", "city_place_id = @city_place_id",
+      "readiness_status = @status", "readiness_notes = @feedback", "readiness_updated_at = datetime('now')",
+    ];
+    const params = {
+      id: crusade.id, event_type: d.event_type, event_name: d.event_name, event_date: d.event_date, venue: d.venue,
+      expected_attendance: d.expected_attendance, minister_name: d.minister_name || null, city: d.city,
+      city_place_id: d.city_place_id || null, status: d.status, feedback: d.feedback || null,
+    };
+    if (canEditCollaboration) {
+      assignments.push("crusade_collaborators = @crusade_collaborators", "zone_contribution = @zone_contribution");
+      params.crusade_collaborators = joinList(d.crusade_collaborators);
+      params.zone_contribution = joinList(d.zone_contribution);
+    }
+    db.prepare(`UPDATE registration_items SET ${assignments.join(", ")} WHERE id = @id`).run(params);
     db.prepare(`UPDATE registrations SET plan_date = (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ?)
       WHERE id = ?`).run(crusade.registration_id, crusade.registration_id);
   })();
   backfillCityCoords().catch(() => {});
   return db.prepare(`SELECT id, event_type, event_name, event_date, venue, expected_attendance, minister_name, city, city_place_id,
-    readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ?`).get(crusade.id);
+    crusade_collaborators, zone_contribution, readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ?`).get(crusade.id);
 }
 
 registrations.put("/:id", requireAdmin, wrap((req, res) => {

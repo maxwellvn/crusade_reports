@@ -11,9 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
+import { CollaboratorPicker, ContributionChecklist } from "@/components/CollaborationFields";
 import { getJSON, postJSON } from "@/lib/api";
 import { registrationSchema, registrationDefaults } from "@/lib/schema";
-import { CRUSADE_TYPES, PHONE_CODES, ZONE_CONTRIBUTIONS } from "@/lib/constants";
+import { CRUSADE_TYPES, PHONE_CODES } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
@@ -79,50 +80,6 @@ function MinisterTags({ value = "", onChange, invalid }) {
         }}
         aria-invalid={invalid} placeholder={tags.length ? "Add another minister" : "e.g. Pastor John Doe"}
         className="min-w-36 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground" />
-    </div>
-  );
-}
-
-// Network-only, per crusade: pick any number of collaborating zones/networks.
-// Selected collaborators render as removable chips above the searchable picker.
-function CollaboratorPicker({ value = [], onChange, fetcher, invalid }) {
-  const list = Array.isArray(value) ? value : [];
-  const add = (name) => { if (name && !list.includes(name)) onChange([...list, name]); };
-  const remove = (name) => onChange(list.filter((item) => item !== name));
-  return (
-    <div className="space-y-2">
-      {list.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {list.map((name) => (
-            <span key={name} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
-              {name}
-              <button type="button" onClick={() => remove(name)} className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`Remove ${name}`}>
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <Combobox value="" fetcher={fetcher} invalid={invalid} minChars={0}
-        placeholder={list.length ? "Add another collaborator" : "Select zones or networks"}
-        searchPlaceholder="Search zones and networks…" emptyText="No zones or networks found"
-        onSelect={(option) => add(option.label)} />
-    </div>
-  );
-}
-
-// Network-only, per crusade: multi-select of contribution types (checkboxes).
-function ContributionChecklist({ value = [], onChange }) {
-  const list = Array.isArray(value) ? value : [];
-  const toggle = (option) => onChange(list.includes(option) ? list.filter((item) => item !== option) : [...list, option]);
-  return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {ZONE_CONTRIBUTIONS.map((option) => (
-        <label key={option} className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={list.includes(option)} onChange={() => toggle(option)} className="size-4 shrink-0 accent-primary" />
-          <span>{option}</span>
-        </label>
-      ))}
     </div>
   );
 }
