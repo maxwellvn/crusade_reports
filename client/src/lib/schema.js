@@ -73,6 +73,9 @@ const registrationItem = z
     minister_name: z.string().trim().min(1, "Minister name is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
+    // Network-only collaboration (gated in the UI); optional for every org type.
+    crusade_collaborators: z.array(z.string()).optional().default([]),
+    zone_contribution: z.array(z.string()).optional().default([]),
   });
 
 export const registrationSchema = z

@@ -42,7 +42,12 @@ const insertRegStmt = db.prepare(`
     @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username)
 `);
 const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date",
-  "event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id"];
+  "event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id",
+  "crusade_collaborators", "zone_contribution"];
+
+// Multi-select network fields arrive as arrays; store one comma-joined string per
+// crusade (null when empty) so dashboards can render and search them directly.
+const joinList = (value) => Array.isArray(value) && value.length ? value.map((v) => String(v).trim()).filter(Boolean).join(", ") || null : null;
 const insertItemStmt = db.prepare(
   `INSERT INTO registration_items (${ITEM_COLS.join(", ")}) VALUES (${ITEM_COLS.map((c) => "@" + c).join(", ")})`
 );
@@ -78,6 +83,8 @@ const insertRegistration = db.transaction((d) => {
       minister_name: it.minister_name || null,
       city: it.city || null,
       city_place_id: it.city_place_id || null,
+      crusade_collaborators: joinList(it.crusade_collaborators),
+      zone_contribution: joinList(it.zone_contribution),
     });
   }
   return regId;
@@ -260,6 +267,7 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
   const rows = db.prepare(
     `SELECT i.id, i.registration_id, i.event_type, i.planned_count, i.event_name, i.event_date, i.venue,
             i.expected_attendance, i.minister_name, i.city, i.city_place_id, i.readiness_status, i.readiness_notes, i.readiness_updated_at,
+            i.crusade_collaborators, i.zone_contribution,
             r.created_at AS registered_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name,
             r.network_name, r.country, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
             r.kingschat_username, ${ORG_LABEL} AS org,

@@ -157,7 +157,11 @@ db.exec(`
     city_lng          REAL,
     readiness_status  TEXT NOT NULL DEFAULT 'pending',
     readiness_notes   TEXT,
-    readiness_updated_at TEXT
+    readiness_updated_at TEXT,
+
+    -- network-only, per crusade: comma-joined lists (see migration below)
+    crusade_collaborators TEXT,
+    zone_contribution     TEXT
   );
 
   -- Capability links for per-zone dashboards: an unguessable token maps to one
@@ -251,6 +255,13 @@ if (!registrationCols.has("confirmation_status")) {
 
 const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
 for (const col of ["event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
+  if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
+}
+// Network-only crusade collaboration fields (per individual crusade). Each holds a
+// comma-joined list: collaborators are zones/networks partnering on the crusade;
+// zone_contribution is what they bring (sending pastors, sponsorships, …). Nullable
+// so non-network registrations and older rows simply leave them empty.
+for (const col of ["crusade_collaborators", "zone_contribution"]) {
   if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
 }
 if (!registrationItemCols.has("readiness_status")) {

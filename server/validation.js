@@ -84,10 +84,18 @@ const registrationDetails = {
     city: z.string().trim().min(1, "City is required"),
 };
 
+// Network-only per-crusade collaboration. Gated in the UI to network registrants;
+// harmless (and empty) for every other org type, so the server just accepts them.
+const collaborationFields = {
+  crusade_collaborators: z.array(z.string().trim().min(1)).max(200).optional().default([]),
+  zone_contribution: z.array(z.string().trim().min(1)).max(20).optional().default([]),
+};
+
 const registrationItem = z
   .object({
     ...registrationDetails,
     city_place_id: z.string().trim().optional().default(""),
+    ...collaborationFields,
   });
 
 export const registrationSchema = z

@@ -547,6 +547,22 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
           <Input value={details.minister_name} onChange={(event) => setDetails((current) => ({ ...current, minister_name: event.target.value }))} />
         </Field>
       </div>
+      {(crusade.crusade_collaborators || crusade.zone_contribution) && (
+        <div className="grid gap-3 border-t border-dashed pt-4 sm:grid-cols-2">
+          {crusade.crusade_collaborators && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Crusade collaborators</p>
+              <p className="mt-1 text-sm">{crusade.crusade_collaborators}</p>
+            </div>
+          )}
+          {crusade.zone_contribution && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Zone’s contribution to crusade</p>
+              <p className="mt-1 text-sm">{crusade.zone_contribution}</p>
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_1fr_auto] sm:items-end">
         <div className="space-y-2">
           <StatusBadge status={status} />

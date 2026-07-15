@@ -34,6 +34,16 @@ export const CRUSADE_TYPES = [
   ["other", "Other"],
 ];
 
+// Network-only: how a collaborating zone/network contributes to a crusade.
+// Multi-select; the stored value is the label itself, joined with commas.
+export const ZONE_CONTRIBUTIONS = [
+  "Sending Pastors",
+  "Sending Partners",
+  "Sponsorship of Rhapsody of Realities",
+  "Sponsorship of Books",
+  "Sponsorship of Crusade Logistics",
+];
+
 // Unique international calling codes. The compact selector sits beside the
 // national phone number; shared codes (for example +1) appear once.
 export const PHONE_CODES = (

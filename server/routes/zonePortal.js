@@ -75,6 +75,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
            registration_items.organization_type, registration_items.zone, registration_items.group_name,
            registration_items.church_name, registration_items.cell_name, registration_items.network_name,
            registration_items.city, registration_items.country, registration_items.city_place_id,
+           registration_items.crusade_collaborators, registration_items.zone_contribution,
            registration_items.readiness_status, registration_items.readiness_notes, registration_items.readiness_updated_at,
            crusades.id AS report_crusade_id, crusades.report_id, crusades.created_at AS reported_at,
            crusades.attendance AS reported_attendance, crusades.online_participation AS reported_online_participation,

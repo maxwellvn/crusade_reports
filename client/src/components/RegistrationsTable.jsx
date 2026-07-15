@@ -294,6 +294,8 @@ function CrusadeDetails({ crusade, onClose }) {
     ["City", crusade.city],
     ["Venue / address", crusade.venue],
     ["Ministers", crusade.minister_name],
+    ...(crusade.crusade_collaborators ? [["Crusade collaborators", crusade.crusade_collaborators]] : []),
+    ...(crusade.zone_contribution ? [["Zone’s contribution", crusade.zone_contribution]] : []),
     ["Organization", crusade.org],
     ["Country", crusade.country],
     ["Registered", crusade.registered_at?.slice(0, 10)],

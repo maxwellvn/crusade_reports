@@ -13,7 +13,7 @@ import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
 import { getJSON, postJSON } from "@/lib/api";
 import { registrationSchema, registrationDefaults } from "@/lib/schema";
-import { CRUSADE_TYPES, PHONE_CODES } from "@/lib/constants";
+import { CRUSADE_TYPES, PHONE_CODES, ZONE_CONTRIBUTIONS } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
@@ -83,6 +83,50 @@ function MinisterTags({ value = "", onChange, invalid }) {
   );
 }
 
+// Network-only, per crusade: pick any number of collaborating zones/networks.
+// Selected collaborators render as removable chips above the searchable picker.
+function CollaboratorPicker({ value = [], onChange, fetcher, invalid }) {
+  const list = Array.isArray(value) ? value : [];
+  const add = (name) => { if (name && !list.includes(name)) onChange([...list, name]); };
+  const remove = (name) => onChange(list.filter((item) => item !== name));
+  return (
+    <div className="space-y-2">
+      {list.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {list.map((name) => (
+            <span key={name} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground">
+              {name}
+              <button type="button" onClick={() => remove(name)} className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`Remove ${name}`}>
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Combobox value="" fetcher={fetcher} invalid={invalid} minChars={0}
+        placeholder={list.length ? "Add another collaborator" : "Select zones or networks"}
+        searchPlaceholder="Search zones and networks…" emptyText="No zones or networks found"
+        onSelect={(option) => add(option.label)} />
+    </div>
+  );
+}
+
+// Network-only, per crusade: multi-select of contribution types (checkboxes).
+function ContributionChecklist({ value = [], onChange }) {
+  const list = Array.isArray(value) ? value : [];
+  const toggle = (option) => onChange(list.includes(option) ? list.filter((item) => item !== option) : [...list, option]);
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {ZONE_CONTRIBUTIONS.map((option) => (
+        <label key={option} className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={list.includes(option)} onChange={() => toggle(option)} className="size-4 shrink-0 accent-primary" />
+          <span>{option}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function RegistrationForm() {
   const form = useForm({ resolver: zodResolver(registrationSchema), defaultValues: registrationDefaults, mode: "onBlur" });
   const { register, handleSubmit, control, watch, getValues, setValue, reset, trigger, formState: { errors, isSubmitting } } = form;
@@ -107,7 +151,7 @@ export function RegistrationForm() {
   const needsCell = orgType === "cell";
 
   const [countryCode, setCountryCode] = React.useState("");
-  const { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, clearGroupCache } = useOrgData(zone, countryCode);
+  const { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, clearGroupCache } = useOrgData(zone, countryCode);
   const itemArray = useFieldArray({ control, name: "items" });
 
   const totalPlanned = (items || []).length;
@@ -187,6 +231,7 @@ export function RegistrationForm() {
     if (itemArray.fields.length >= 500) return toast.error("Maximum of 500 crusades per registration.");
     itemArray.append({
       event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", city: "", city_place_id: "",
+      crusade_collaborators: [], zone_contribution: [],
     });
     toast.success(`${typeLabel(type)} detail form added.`);
   }
@@ -471,6 +516,20 @@ export function RegistrationForm() {
                               <MinisterTags value={field.value} onChange={field.onChange} invalid={!!rowErr.minister_name} />
                             )} />
                           </Field>
+                          {orgType === "network" && (
+                            <div className="mt-4 grid gap-4 border-t border-dashed pt-4 sm:grid-cols-2">
+                              <Field label="Who are the crusade collaborators?" hint="Zones or networks partnering on this crusade">
+                                <Controller control={control} name={`items.${i}.crusade_collaborators`} render={({ field }) => (
+                                  <CollaboratorPicker value={field.value} onChange={field.onChange} fetcher={fetchCollaborators} />
+                                )} />
+                              </Field>
+                              <Field label="Zone’s contribution to crusade" hint="Select all that apply">
+                                <Controller control={control} name={`items.${i}.zone_contribution`} render={({ field }) => (
+                                  <ContributionChecklist value={field.value} onChange={field.onChange} />
+                                )} />
+                              </Field>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -506,9 +565,17 @@ export function RegistrationForm() {
                     </div>
                     <div className="divide-y rounded-lg border">
                       {(items || []).map((it, i) => (
-                        <div key={i} className="flex items-center justify-between gap-2 px-3 py-2">
-                          <span className="truncate">{it.event_name || typeLabel(it.event_type)} · {it.city} · {it.venue} · {nfull.format(+it.expected_attendance || 0)} expected</span>
-                          <span className="shrink-0 tabular-nums text-muted-foreground">{it.event_date}</span>
+                        <div key={i} className="px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate">{it.event_name || typeLabel(it.event_type)} · {it.city} · {it.venue} · {nfull.format(+it.expected_attendance || 0)} expected</span>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">{it.event_date}</span>
+                          </div>
+                          {it.crusade_collaborators?.length > 0 && (
+                            <div className="mt-1 text-xs text-muted-foreground">Collaborators: {it.crusade_collaborators.join(", ")}</div>
+                          )}
+                          {it.zone_contribution?.length > 0 && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">Contribution: {it.zone_contribution.join(", ")}</div>
+                          )}
                         </div>
                       ))}
                     </div>

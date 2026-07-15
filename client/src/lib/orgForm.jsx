@@ -53,10 +53,21 @@ export function useOrgData(zone, countryCode) {
     async (q) => networks.filter((n) => n.name.toLowerCase().includes(q.toLowerCase())).map((n) => ({ value: n.name, label: n.name })),
     [networks]
   );
+  // Crusade collaborators: every zone AND every network, in one searchable list.
+  // Value is prefixed so a zone and a network sharing a name stay distinct keys;
+  // the stored collaborator is the plain name (option label).
+  const fetchCollaborators = React.useCallback(async (q) => {
+    const s = q.trim().toLowerCase();
+    const match = (name) => !s || name.toLowerCase().includes(s);
+    return [
+      ...zones.filter((z) => match(z.zone)).map((z) => ({ value: `zone:${z.zone}`, label: z.zone, sublabel: "Zone" })),
+      ...networks.filter((n) => match(n.name)).map((n) => ({ value: `network:${n.name}`, label: n.name, sublabel: "Network" })),
+    ];
+  }, [zones, networks]);
 
   const clearGroupCache = React.useCallback(() => { groupCache.current = {}; }, []);
 
-  return { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, networks, setNetworks, clearGroupCache };
+  return { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, networks, setNetworks, clearGroupCache };
 }
 
 export function Stepper({ steps, step }) {
