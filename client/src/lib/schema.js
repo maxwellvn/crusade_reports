@@ -73,9 +73,13 @@ const registrationItem = z
     minister_name: z.string().trim().min(1, "Minister name is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
-    // Network-only collaboration (gated in the UI); optional for every org type.
+    // Network-only planning (gated in the UI); optional for every org type.
     crusade_collaborators: z.array(z.string()).optional().default([]),
     zone_contribution: z.array(z.string()).optional().default([]),
+    estimated_budget: z.string().optional().default(""),
+    rhapsody_copies_confirmed: z.string().optional().default(""),
+    permits_obtained: z.string().optional().default(""),
+    media_coverage_plan: z.string().optional().default(""),
   });
 
 export const registrationSchema = z

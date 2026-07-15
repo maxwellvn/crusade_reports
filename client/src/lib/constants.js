@@ -44,6 +44,9 @@ export const ZONE_CONTRIBUTIONS = [
   "Sponsorship of Crusade Logistics",
 ];
 
+// Network-only: whether the crusade's required permits have been obtained.
+export const PERMIT_OPTIONS = ["Yes", "No", "Not applicable"];
+
 // Unique international calling codes. The compact selector sits beside the
 // national phone number; shared codes (for example +1) appear once.
 export const PHONE_CODES = (

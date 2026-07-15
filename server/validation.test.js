@@ -50,7 +50,7 @@ test("each new registration item requires individual crusade details", () => {
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, minister_name: "" }] }).success, false);
 });
 
-test("crusade collaboration edits lock once the crusade date has passed", () => {
+test("network planning edits lock once the crusade date has passed", () => {
   db.exec("BEGIN");
   try {
     const reg = db.prepare(
@@ -58,24 +58,30 @@ test("crusade collaboration edits lock once the crusade date has passed", () => 
     ).run().lastInsertRowid;
     const makeItem = (date) => db.prepare(
       `INSERT INTO registration_items
-       (registration_id, organization_type, network_name, country, plan_date, event_type, planned_count, event_name, event_date, venue, expected_attendance, city, crusade_collaborators, zone_contribution)
-       VALUES (?, 'network', 'REON', 'Nigeria', ?, 'street', 1, 'Original', ?, 'Original Venue', 100, 'Lagos', 'REON', 'Sending Pastors')`
+       (registration_id, organization_type, network_name, country, plan_date, event_type, planned_count, event_name, event_date, venue, expected_attendance, city,
+        crusade_collaborators, zone_contribution, estimated_budget, permits_obtained)
+       VALUES (?, 'network', 'REON', 'Nigeria', ?, 'street', 1, 'Original', ?, 'Original Venue', 100, 'Lagos', 'REON', 'Sending Pastors', '1000', 'No')`
     ).run(reg, date, date).lastInsertRowid;
     const edit = (date) => registrationCrusadeEditSchema.parse({
       event_type: "street", event_name: "Edited Name", event_date: date, venue: "Edited Venue",
       expected_attendance: 100, minister_name: "Pastor", city: "Lagos",
-      crusade_collaborators: ["REON", "Lagos Zone 1"], zone_contribution: ["Sending Partners"], status: "pending",
+      crusade_collaborators: ["REON", "Lagos Zone 1"], zone_contribution: ["Sending Partners"],
+      estimated_budget: "5000", permits_obtained: "Yes", status: "pending",
     });
 
-    // A future crusade accepts the new collaborators and contribution.
+    // A future crusade accepts the new planning details.
     const future = updateRegistrationCrusade(makeItem("2099-01-01"), edit("2099-01-01"));
     assert.equal(future.crusade_collaborators, "REON, Lagos Zone 1");
     assert.equal(future.zone_contribution, "Sending Partners");
+    assert.equal(future.estimated_budget, "5000");
+    assert.equal(future.permits_obtained, "Yes");
 
-    // A past crusade keeps its original collaboration, but still edits everything else.
+    // A past crusade keeps its original planning details, but still edits everything else.
     const past = updateRegistrationCrusade(makeItem("2020-01-01"), edit("2020-01-01"));
     assert.equal(past.crusade_collaborators, "REON");
     assert.equal(past.zone_contribution, "Sending Pastors");
+    assert.equal(past.estimated_budget, "1000");
+    assert.equal(past.permits_obtained, "No");
     assert.equal(past.event_name, "Edited Name");
   } finally {
     db.exec("ROLLBACK");

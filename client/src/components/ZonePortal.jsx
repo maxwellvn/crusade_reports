@@ -14,7 +14,7 @@ import { CollaboratorPicker, ContributionChecklist, splitCollaboration } from "@
 import { getJSON, postJSON, putJSON } from "@/lib/api";
 import { useOrgData } from "@/lib/orgForm";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
-import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES } from "@/lib/constants";
+import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
@@ -498,6 +498,10 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
     city: crusade.city || "", city_place_id: crusade.city_place_id || "",
     crusade_collaborators: splitCollaboration(crusade.crusade_collaborators),
     zone_contribution: splitCollaboration(crusade.zone_contribution),
+    estimated_budget: crusade.estimated_budget || "",
+    rhapsody_copies_confirmed: crusade.rhapsody_copies_confirmed || "",
+    permits_obtained: crusade.permits_obtained || "",
+    media_coverage_plan: crusade.media_coverage_plan || "",
   });
   const [status, setStatus] = React.useState(crusade.readiness_status || "pending");
   const [feedback, setFeedback] = React.useState(crusade.readiness_notes || "");
@@ -506,9 +510,10 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
   const fetchCities = useCityFetcher(crusade.country);
   const { fetchCollaborators } = useOrgData("", "");
 
-  // Collaboration is network-only, and locks once the crusade date has passed.
+  // The network-only planning fields lock once the crusade date has passed.
   const isNetwork = crusade.organization_type === "network";
-  const collaborationEditable = !details.event_date || details.event_date >= todayISO();
+  const planningEditable = !details.event_date || details.event_date >= todayISO();
+  const setField = (field) => (event) => setDetails((current) => ({ ...current, [field]: event.target.value }));
 
   async function save() {
     if (status === "not_holding" && feedback.trim().length < 3) {
@@ -567,11 +572,11 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
         </Field>
       </div>
       {isNetwork && (
-        <div className="space-y-3 border-t border-dashed pt-4">
+        <div className="space-y-4 border-t border-dashed pt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">Who are the crusade collaborators?</p>
-              {collaborationEditable ? (
+              {planningEditable ? (
                 <CollaboratorPicker value={details.crusade_collaborators} fetcher={fetchCollaborators}
                   onChange={(value) => setDetails((current) => ({ ...current, crusade_collaborators: value }))} />
               ) : (
@@ -580,7 +585,7 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
             </div>
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">Zone’s contribution to crusade</p>
-              {collaborationEditable ? (
+              {planningEditable ? (
                 <ContributionChecklist value={details.zone_contribution}
                   onChange={(value) => setDetails((current) => ({ ...current, zone_contribution: value }))} />
               ) : (
@@ -588,8 +593,45 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
               )}
             </div>
           </div>
-          {!collaborationEditable && (
-            <p className="text-xs text-muted-foreground">Collaborators and contribution are locked because the crusade date has passed.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Estimated crusade budget</p>
+              {planningEditable ? (
+                <Input value={details.estimated_budget} onChange={setField("estimated_budget")} placeholder="e.g. 2,000,000" />
+              ) : (
+                <p className="text-sm">{details.estimated_budget || "—"}</p>
+              )}
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Number of Rhapsody copies confirmed</p>
+              {planningEditable ? (
+                <Input type="number" min="0" value={details.rhapsody_copies_confirmed} onChange={setField("rhapsody_copies_confirmed")} placeholder="e.g. 5,000" />
+              ) : (
+                <p className="text-sm">{details.rhapsody_copies_confirmed || "—"}</p>
+              )}
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Required permits obtained? (where applicable)</p>
+              {planningEditable ? (
+                <Select value={details.permits_obtained} onChange={setField("permits_obtained")}>
+                  <option value="">Select…</option>
+                  {PERMIT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                </Select>
+              ) : (
+                <p className="text-sm">{details.permits_obtained || "—"}</p>
+              )}
+            </div>
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Media coverage plan</p>
+              {planningEditable ? (
+                <Textarea rows={3} maxLength={2000} value={details.media_coverage_plan} onChange={setField("media_coverage_plan")} placeholder="TV, radio, social media, press…" />
+              ) : (
+                <p className="whitespace-pre-wrap text-sm">{details.media_coverage_plan || "—"}</p>
+              )}
+            </div>
+          </div>
+          {!planningEditable && (
+            <p className="text-xs text-muted-foreground">These planning details are locked because the crusade date has passed.</p>
           )}
         </div>
       )}

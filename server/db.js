@@ -159,9 +159,14 @@ db.exec(`
     readiness_notes   TEXT,
     readiness_updated_at TEXT,
 
-    -- network-only, per crusade: comma-joined lists (see migration below)
+    -- network-only, per crusade (see migration below). Collaboration are
+    -- comma-joined lists; the planning fields are free text / a count / a choice.
     crusade_collaborators TEXT,
-    zone_contribution     TEXT
+    zone_contribution     TEXT,
+    estimated_budget          TEXT,
+    rhapsody_copies_confirmed TEXT,
+    permits_obtained          TEXT,
+    media_coverage_plan       TEXT
   );
 
   -- Capability links for per-zone dashboards: an unguessable token maps to one
@@ -257,11 +262,12 @@ const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_
 for (const col of ["event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
   if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
 }
-// Network-only crusade collaboration fields (per individual crusade). Each holds a
-// comma-joined list: collaborators are zones/networks partnering on the crusade;
-// zone_contribution is what they bring (sending pastors, sponsorships, …). Nullable
-// so non-network registrations and older rows simply leave them empty.
-for (const col of ["crusade_collaborators", "zone_contribution"]) {
+// Network-only, per individual crusade. Collaboration fields hold comma-joined
+// lists (collaborating zones/networks and what they contribute); the planning
+// fields capture budget, confirmed Rhapsody copies, whether permits are obtained,
+// and the media coverage plan. All nullable so non-network and older rows stay empty.
+for (const col of ["crusade_collaborators", "zone_contribution",
+  "estimated_budget", "rhapsody_copies_confirmed", "permits_obtained", "media_coverage_plan"]) {
   if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
 }
 if (!registrationItemCols.has("readiness_status")) {

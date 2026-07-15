@@ -9,12 +9,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
 import { CollaboratorPicker, ContributionChecklist } from "@/components/CollaborationFields";
 import { getJSON, postJSON } from "@/lib/api";
 import { registrationSchema, registrationDefaults } from "@/lib/schema";
-import { CRUSADE_TYPES, PHONE_CODES } from "@/lib/constants";
+import { CRUSADE_TYPES, PERMIT_OPTIONS, PHONE_CODES } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
@@ -189,6 +190,7 @@ export function RegistrationForm() {
     itemArray.append({
       event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", city: "", city_place_id: "",
       crusade_collaborators: [], zone_contribution: [],
+      estimated_budget: "", rhapsody_copies_confirmed: "", permits_obtained: "", media_coverage_plan: "",
     });
     toast.success(`${typeLabel(type)} detail form added.`);
   }
@@ -474,17 +476,36 @@ export function RegistrationForm() {
                             )} />
                           </Field>
                           {orgType === "network" && (
-                            <div className="mt-4 grid gap-4 border-t border-dashed pt-4 sm:grid-cols-2">
-                              <Field label="Who are the crusade collaborators?" hint="Zones or networks partnering on this crusade">
-                                <Controller control={control} name={`items.${i}.crusade_collaborators`} render={({ field }) => (
-                                  <CollaboratorPicker value={field.value} onChange={field.onChange} fetcher={fetchCollaborators} />
-                                )} />
-                              </Field>
-                              <Field label="Zone’s contribution to crusade" hint="Select all that apply">
-                                <Controller control={control} name={`items.${i}.zone_contribution`} render={({ field }) => (
-                                  <ContributionChecklist value={field.value} onChange={field.onChange} />
-                                )} />
-                              </Field>
+                            <div className="mt-4 space-y-4 border-t border-dashed pt-4">
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <Field label="Who are the crusade collaborators?" hint="Zones or networks partnering on this crusade">
+                                  <Controller control={control} name={`items.${i}.crusade_collaborators`} render={({ field }) => (
+                                    <CollaboratorPicker value={field.value} onChange={field.onChange} fetcher={fetchCollaborators} />
+                                  )} />
+                                </Field>
+                                <Field label="Zone’s contribution to crusade" hint="Select all that apply">
+                                  <Controller control={control} name={`items.${i}.zone_contribution`} render={({ field }) => (
+                                    <ContributionChecklist value={field.value} onChange={field.onChange} />
+                                  )} />
+                                </Field>
+                              </div>
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <Field label="Estimated crusade budget">
+                                  <Input placeholder="e.g. 2,000,000" {...register(`items.${i}.estimated_budget`)} />
+                                </Field>
+                                <Field label="Number of Rhapsody copies confirmed">
+                                  <Input type="number" min="0" placeholder="e.g. 5,000" {...register(`items.${i}.rhapsody_copies_confirmed`)} />
+                                </Field>
+                                <Field label="Have the required permits been obtained? (where applicable)">
+                                  <Select {...register(`items.${i}.permits_obtained`)}>
+                                    <option value="">Select…</option>
+                                    {PERMIT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                                  </Select>
+                                </Field>
+                                <Field label="Specify your media coverage plan" className="sm:col-span-2">
+                                  <Textarea rows={3} maxLength={2000} placeholder="TV, radio, social media, press…" {...register(`items.${i}.media_coverage_plan`)} />
+                                </Field>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -533,6 +554,10 @@ export function RegistrationForm() {
                           {it.zone_contribution?.length > 0 && (
                             <div className="mt-0.5 text-xs text-muted-foreground">Contribution: {it.zone_contribution.join(", ")}</div>
                           )}
+                          {it.estimated_budget && <div className="mt-0.5 text-xs text-muted-foreground">Budget: {it.estimated_budget}</div>}
+                          {it.rhapsody_copies_confirmed && <div className="mt-0.5 text-xs text-muted-foreground">Rhapsody copies: {it.rhapsody_copies_confirmed}</div>}
+                          {it.permits_obtained && <div className="mt-0.5 text-xs text-muted-foreground">Permits obtained: {it.permits_obtained}</div>}
+                          {it.media_coverage_plan && <div className="mt-0.5 text-xs text-muted-foreground">Media plan: {it.media_coverage_plan}</div>}
                         </div>
                       ))}
                     </div>
