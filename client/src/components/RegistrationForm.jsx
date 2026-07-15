@@ -34,6 +34,12 @@ const STEP_FIELDS = [
   [],
 ];
 
+// A crusade is "untouched" when none of its own detail fields have been filled.
+// Used to stop a distracted user from stacking blank duplicate forms by clicking
+// "Add another crusade" repeatedly — the previous one must be started first.
+const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "expected_attendance", "city", "minister_name"];
+const isCrusadeUntouched = (item) => !!item && CRUSADE_DETAIL_FIELDS.every((key) => !String(item[key] ?? "").trim());
+
 function MinisterTags({ value = "", onChange, invalid }) {
   const split = (names) => names.split(",").map((name) => name.trim()).filter(Boolean);
   const [tags, setTags] = React.useState(() => split(value));
@@ -187,6 +193,15 @@ export function RegistrationForm() {
   function addCrusade(type = batchType) {
     if (!type) return toast.error("Select the crusade type.");
     if (itemArray.fields.length >= 500) return toast.error("Maximum of 500 crusades per registration.");
+    // Each crusade is a distinct event, not a copy. Refuse to add another while the
+    // last one is still blank, so repeated clicks don't quietly pile up duplicates.
+    const current = getValues("items") || [];
+    const lastIndex = current.length - 1;
+    if (lastIndex >= 0 && isCrusadeUntouched(current[lastIndex])) {
+      toast.error("Fill in the crusade you just added before adding another.");
+      document.getElementById(`crusade-card-${lastIndex}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     itemArray.append({
       event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", city: "", city_place_id: "",
       crusade_collaborators: [], zone_contribution: [],
@@ -433,7 +448,7 @@ export function RegistrationForm() {
                     {itemArray.fields.map((f, i) => {
                       const rowErr = errors.items?.[i] || {};
                       return (
-                        <div key={f.id} className="animate-step-in rounded-lg border border-slate-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm motion-reduce:animate-none">
+                        <div key={f.id} id={`crusade-card-${i}`} className="animate-step-in rounded-lg border border-slate-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm motion-reduce:animate-none">
                           <div className="mb-3 flex items-center justify-between gap-3">
                             <label className="flex items-center gap-2 font-medium">
                               <input type="checkbox" checked={selectedCrusades.includes(f.id)} onChange={(event) => setSelectedCrusades((current) =>
