@@ -37,16 +37,18 @@ test("dashboard edits require full crusade details and expected attendance", () 
 
 test("each new registration item requires individual crusade details", () => {
   const base = {
-    organization_type: "zone", zone: "Test Zone", country: "Nigeria",
+    organization_type: "zone", zone: "Test Zone",
     contact_name: "Test Coordinator", contact_email: "test@example.com",
     phone_country_code: "+234", phone_number: "801 234 5678",
   };
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ event_type: "street", city: "Lagos" }] }).success, false);
   const item = {
     event_type: "street", event_name: "Test Street Crusade", event_date: "2026-07-20",
-    venue: "Test Square", expected_attendance: 500, city: "Lagos", minister_name: "Pastor Test",
+    venue: "Test Square", expected_attendance: 500, country: "Nigeria", city: "Lagos", minister_name: "Pastor Test",
   };
   assert.equal(registrationSchema.safeParse({ ...base, items: [item] }).success, true);
+  // country is per crusade now — a missing country fails validation
+  assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, country: "" }] }).success, false);
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, minister_name: "" }] }).success, false);
 });
 

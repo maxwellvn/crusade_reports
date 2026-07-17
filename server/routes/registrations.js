@@ -88,7 +88,9 @@ const insertRegistration = db.transaction((d) => {
     church_name: d.church_name || null,
     cell_name: d.cell_name || null,
     network_name: d.network_name || null,
-    country: d.country,
+    // Country is per crusade now; the registration row keeps the first crusade's
+    // country as its primary (the column is NOT NULL and drives registration-level grouping).
+    country: d.items[0].country,
     plan_date: planDate,
     contact_name: d.contact_name,
     contact_email: d.contact_email,
@@ -101,6 +103,7 @@ const insertRegistration = db.transaction((d) => {
     insertItemStmt.run({
       ...base,
       registration_id: regId,
+      country: it.country,
       event_type: it.event_type,
       planned_count: 1,
       event_name: it.event_name,
@@ -292,9 +295,11 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
   const where = [];
   const params = {};
 
-  for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "country", "network_name"]) {
+  for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name"]) {
     if (req.query[col]) { where.push(`r.${col} = @${col}`); params[col] = String(req.query[col]); }
   }
+  // Country is per crusade now, so match the crusade's own country (i), not the registration's primary.
+  if (req.query.country) { where.push("i.country = @country"); params.country = String(req.query.country); }
   if (req.query.city) { where.push("i.city = @city"); params.city = String(req.query.city); }
   if (req.query.readiness_status) {
     where.push("i.readiness_status = @readiness_status");
@@ -317,7 +322,7 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
     where.push(`(r.zone LIKE @${p} OR r.group_name LIKE @${p} OR r.church_name LIKE @${p} OR r.network_name LIKE @${p} OR r.country LIKE @${p}
       OR r.contact_name LIKE @${p} OR r.contact_email LIKE @${p} OR r.phone_country_code || r.phone_number LIKE @${p}
       OR r.kingschat_username LIKE @${p}
-      OR i.city LIKE @${p} OR i.event_type LIKE @${p} OR i.event_name LIKE @${p} OR i.venue LIKE @${p}
+      OR i.country LIKE @${p} OR i.city LIKE @${p} OR i.event_type LIKE @${p} OR i.event_name LIKE @${p} OR i.venue LIKE @${p}
       OR i.readiness_status LIKE @${p} OR i.readiness_notes LIKE @${p})`);
     params[p] = `%${tok}%`;
   });

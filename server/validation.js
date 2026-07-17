@@ -99,6 +99,7 @@ const collaborationFields = {
 const registrationItem = z
   .object({
     ...registrationDetails,
+    country: z.string().trim().min(1, "Country is required"),
     city_place_id: z.string().trim().optional().default(""),
     ...collaborationFields,
   });
@@ -111,7 +112,7 @@ export const registrationSchema = z
     church_name: z.string().trim().optional().default(""),
     cell_name: z.string().trim().optional().default(""),
     network_name: z.string().trim().optional().default(""),
-    country: z.string().trim().min(1, "Country is required"),
+    // country is per crusade now (registrationItem), so a registration can span countries
     ...contactFields,
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   })

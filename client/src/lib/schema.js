@@ -71,6 +71,7 @@ const registrationItem = z
     venue: z.string().trim().min(2, "Venue is required").max(1000),
     expected_attendance: z.coerce.number({ message: "Expected attendance is required" }).int().min(1, "Expected attendance is required"),
     minister_name: z.string().trim().min(1, "Minister name is required"),
+    country: z.string().min(1, "Country is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
     // Network-only planning (gated in the UI); optional for every org type.
@@ -90,7 +91,7 @@ export const registrationSchema = z
     church_name: z.string().optional().default(""),
     cell_name: z.string().optional().default(""),
     network_name: z.string().optional().default(""),
-    country: z.string().min(1, "Country is required"),
+    // country is now per crusade (see registrationItem), so a registration can span countries
     ...contactFields,
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   })
@@ -111,7 +112,6 @@ export const registrationDefaults = {
   church_name: "",
   cell_name: "",
   network_name: "",
-  country: "",
   contact_name: "",
   contact_email: "",
   phone_country_code: "",

@@ -28,7 +28,7 @@ const STEPS = ["Who you are", "Your crusades", "Review"];
 const DRAFT_KEY = "crusade-registration-draft-v1";
 const clearStoredDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ } };
 const STEP_FIELDS = [
-  ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country",
+  ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
     "contact_name", "contact_email", "phone_country_code", "phone_number"],
   ["items"],
   [],
@@ -37,7 +37,7 @@ const STEP_FIELDS = [
 // A crusade is "untouched" when none of its own detail fields have been filled.
 // Used to stop a distracted user from stacking blank duplicate forms by clicking
 // "Add another crusade" repeatedly — the previous one must be started first.
-const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "expected_attendance", "city", "minister_name"];
+const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "expected_attendance", "country", "city", "minister_name"];
 const isCrusadeUntouched = (item) => !!item && CRUSADE_DETAIL_FIELDS.every((key) => !String(item[key] ?? "").trim());
 
 function MinisterTags({ value = "", onChange, invalid }) {
@@ -106,7 +106,6 @@ export function RegistrationForm() {
   const [selectedCrusades, setSelectedCrusades] = React.useState([]);
   const orgType = watch("organization_type");
   const zone = watch("zone");
-  const country = watch("country");
   const items = watch("items");
 
   const needsZone = ["zone", "group", "church", "cell"].includes(orgType);
@@ -114,8 +113,15 @@ export function RegistrationForm() {
   const needsChurch = ["church", "cell"].includes(orgType);
   const needsCell = orgType === "cell";
 
-  const [countryCode, setCountryCode] = React.useState("");
-  const { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, clearGroupCache } = useOrgData(zone, countryCode);
+  const { fetchCountries, countryCodeOf, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, clearGroupCache } = useOrgData(zone);
+  // Each crusade carries its own country, so its city search is scoped to that country.
+  const cityFetcherFor = React.useCallback((countryName) => {
+    const code = countryCodeOf(countryName);
+    return async (query) => {
+      const results = await getJSON(`/places/autocomplete?input=${encodeURIComponent(query)}${code ? `&country=${code}` : ""}`);
+      return results.map((place) => ({ value: place.place_id, label: place.main, sublabel: place.secondary }));
+    };
+  }, [countryCodeOf]);
   const itemArray = useFieldArray({ control, name: "items" });
 
   const totalPlanned = (items || []).length;
@@ -134,7 +140,6 @@ export function RegistrationForm() {
         reset({ ...registrationDefaults, ...draft.values, items: Array.isArray(draft.values.items) ? draft.values.items : [] });
         setStep(Math.min(Math.max(Number(draft.step) || 0, 0), STEPS.length - 1));
         setBatchType(draft.batchType || "");
-        setCountryCode(draft.countryCode || "");
         toast.success("Your saved registration draft has been restored.");
       }
     } catch {
@@ -158,14 +163,14 @@ export function RegistrationForm() {
         const values = getValues();
         const hasProgress = Object.values(values).some((value) => Array.isArray(value) ? value.length > 0 : String(value || "").trim());
         if (!hasProgress && !batchType) return clearStoredDraft();
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step, batchType, countryCode, savedAt: Date.now() }));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step, batchType, savedAt: Date.now() }));
       } catch { /* storage may be unavailable or full */ }
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(save, 250); };
     schedule();
     const subscription = watch(schedule);
     return () => { clearTimeout(timer); subscription.unsubscribe(); };
-  }, [watch, getValues, step, batchType, countryCode, done]);
+  }, [watch, getValues, step, batchType, done]);
 
   // ---- Handlers --------------------------------------------------------------
   async function next() {
@@ -203,7 +208,7 @@ export function RegistrationForm() {
       return;
     }
     itemArray.append({
-      event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", city: "", city_place_id: "",
+      event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", country: "", city: "", city_place_id: "",
       crusade_collaborators: [], zone_contribution: [],
       estimated_budget: "", rhapsody_copies_confirmed: "", permits_obtained: "", media_coverage_plan: "",
     });
@@ -232,7 +237,6 @@ export function RegistrationForm() {
   function registerAnother() {
     clearStoredDraft();
     reset(registrationDefaults);
-    setCountryCode("");
     setBatchType("");
     setSelectedCrusades([]);
     setStep(0);
@@ -243,7 +247,6 @@ export function RegistrationForm() {
   function discardDraft() {
     clearStoredDraft();
     reset(registrationDefaults);
-    setCountryCode("");
     setBatchType("");
     setSelectedCrusades([]);
     setStep(0);
@@ -364,16 +367,6 @@ export function RegistrationForm() {
                       </Field>
                     )}
 
-                    <div>
-                      <Field label="Country" required error={errors.country?.message} hint="Where these crusades will hold">
-                        <Controller control={control} name="country" render={({ field }) => (
-                          <Combobox value={field.value} invalid={!!errors.country} placeholder="Select or search country" searchPlaceholder="Scroll or type a country…"
-                            minChars={0} emptyText="No countries found" fetcher={fetchCountries}
-                            onSelect={(o) => { setValue("country", o.label, { shouldValidate: true }); setCountryCode(o.value); }} />
-                        )} />
-                      </Field>
-                    </div>
-
                     <div className="border-t pt-4">
                       <p className="mb-3 text-sm font-medium">Your contact details</p>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -447,6 +440,7 @@ export function RegistrationForm() {
                     )}
                     {itemArray.fields.map((f, i) => {
                       const rowErr = errors.items?.[i] || {};
+                      const rowCountry = items?.[i]?.country || "";
                       return (
                         <div key={f.id} id={`crusade-card-${i}`} className="animate-step-in rounded-lg border border-slate-200 border-l-4 border-l-blue-500 bg-white p-4 shadow-sm motion-reduce:animate-none">
                           <div className="mb-3 flex items-center justify-between gap-3">
@@ -474,11 +468,18 @@ export function RegistrationForm() {
                             <Field label="Expected attendance" required error={rowErr.expected_attendance?.message}>
                               <Input type="number" min="1" placeholder="e.g. 500" {...register(`items.${i}.expected_attendance`)} aria-invalid={!!rowErr.expected_attendance} />
                             </Field>
+                            <Field label="Country" required error={rowErr.country?.message} hint="Where this crusade will hold">
+                              <Controller control={control} name={`items.${i}.country`} render={({ field }) => (
+                                <Combobox value={field.value} invalid={!!rowErr.country} placeholder="Select or search country" searchPlaceholder="Scroll or type a country…"
+                                  minChars={0} emptyText="No countries found" fetcher={fetchCountries}
+                                  onSelect={(o) => { field.onChange(o.label); setValue(`items.${i}.city`, ""); setValue(`items.${i}.city_place_id`, ""); }} />
+                              )} />
+                            </Field>
                             <Field label="City" required error={rowErr.city?.message}>
                               <Controller control={control} name={`items.${i}.city`} render={({ field }) => (
-                                <Combobox value={field.value} disabled={!country}
-                                  placeholder={country ? "Search city" : "Pick a country first"} searchPlaceholder="Type a city…" minChars={1} emptyText="No cities found"
-                                  fetcher={fetchCities} onSelect={(o) => { field.onChange(o.label); setValue(`items.${i}.city_place_id`, o.value); }} />
+                                <Combobox value={field.value} disabled={!rowCountry}
+                                  placeholder={rowCountry ? "Search city" : "Pick a country first"} searchPlaceholder="Type a city…" minChars={1} emptyText="No cities found"
+                                  fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { field.onChange(o.label); setValue(`items.${i}.city_place_id`, o.value); }} />
                               )} />
                             </Field>
                             <Field label="Venue / address" required error={rowErr.venue?.message} className="sm:col-span-2">
@@ -547,7 +548,6 @@ export function RegistrationForm() {
                   <CardContent className="space-y-5 text-sm">
                     <div className="grid grid-cols-2 gap-3">
                       <Summary label="Registering as" value={orgType || "—"} />
-                      <Summary label="Country" value={country || "—"} />
                       {zone && <Summary label="Zone" value={zone} />}
                       {watch("group_name") && <Summary label="Group" value={watch("group_name")} />}
                       {watch("church_name") && <Summary label="Church" value={watch("church_name")} />}
@@ -563,7 +563,7 @@ export function RegistrationForm() {
                       {(items || []).map((it, i) => (
                         <div key={i} className="px-3 py-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="truncate">{it.event_name || typeLabel(it.event_type)} · {it.city} · {it.venue} · {nfull.format(+it.expected_attendance || 0)} expected</span>
+                            <span className="truncate">{it.event_name || typeLabel(it.event_type)} · {[it.city, it.country].filter(Boolean).join(", ")} · {it.venue} · {nfull.format(+it.expected_attendance || 0)} expected</span>
                             <span className="shrink-0 tabular-nums text-muted-foreground">{it.event_date}</span>
                           </div>
                           {it.crusade_collaborators?.length > 0 && (

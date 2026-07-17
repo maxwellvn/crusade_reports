@@ -35,6 +35,13 @@ export function useOrgData(zone, countryCode) {
       .map((c) => ({ value: c.code, label: c.name }));
   }, [allCountries]);
 
+  // Resolve a country name back to its ISO code — lets a per-crusade city search be
+  // scoped to that crusade's own country without threading the code through state.
+  const countryCodeOf = React.useCallback(
+    (name) => allCountries.find((c) => c.name === name)?.code || "",
+    [allCountries]
+  );
+
   const fetchCities = React.useCallback(async (q) => {
     const r = await getJSON(`/places/autocomplete?input=${encodeURIComponent(q)}${countryCode ? `&country=${countryCode}` : ""}`);
     return r.map((p) => ({ value: p.place_id, label: p.main, sublabel: p.secondary }));
@@ -67,7 +74,7 @@ export function useOrgData(zone, countryCode) {
 
   const clearGroupCache = React.useCallback(() => { groupCache.current = {}; }, []);
 
-  return { fetchCountries, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, networks, setNetworks, clearGroupCache };
+  return { fetchCountries, countryCodeOf, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, networks, setNetworks, clearGroupCache };
 }
 
 export function Stepper({ steps, step }) {
