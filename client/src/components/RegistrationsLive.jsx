@@ -20,7 +20,7 @@ const KPI_TONES = {
   awaiting_reports: "bg-amber-50/90 [&_.stat-value]:!text-amber-700",
 };
 const READINESS_LABELS = {
-  pending: "Pending confirmation", preparing: "Preparing", ready: "Ready",
+  confirmed: "Confirmed", pending: "Pending confirmation", preparing: "Preparing", ready: "Ready",
   holding: "Holding as planned", held: "Held", not_holding: "Not holding",
 };
 const titleCase = (value) => value ? value[0].toUpperCase() + value.slice(1) : "—";
@@ -38,7 +38,7 @@ function timeAgo(sqliteUtc) {
 
 const LIVE_WIDGETS = {
   planned: { title: "Crusades planned", kpi: true, filter: {}, render: (d) => <StatTile label="Crusades planned" value={nfull.format(d.totals.planned)} /> },
-  organizations: { title: "Organizations registered", kpi: true, filter: {}, render: (d) => <StatTile label="Organizations registered" value={nfull.format(d.totals.registrations)} /> },
+  organizations: { title: "Registrations", kpi: true, filter: {}, render: (d) => <StatTile label="Registrations" value={nfull.format(d.totals.registrations)} /> },
   expected_attendance: { title: "Expected attendance", kpi: true, filter: {}, render: (d) => <StatTile label="Expected attendance" value={nfull.format(d.totals.expected_attendance)} /> },
   countries_count: { title: "Countries", kpi: true, filter: {}, render: (d) => <StatTile label="Countries" value={nfull.format(d.totals.countries)} /> },
   ready: { title: "Ready crusades", kpi: true, filter: { readiness_status: "ready" }, render: (d) => <StatTile label="Ready crusades" value={nfull.format(d.totals.ready)} /> },

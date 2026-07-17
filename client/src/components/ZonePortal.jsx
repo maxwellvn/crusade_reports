@@ -103,6 +103,7 @@ export function ZonePortal() {
                 </Select>
                 <Select value={readinessFilter} onChange={(event) => setReadinessFilter(event.target.value)} aria-label="Filter by readiness">
                   <option value="">All readiness statuses</option>
+                  <option value="confirmed">Confirmed</option>
                   <option value="pending">Pending confirmation</option>
                   <option value="preparing">Preparing</option>
                   <option value="ready">Ready</option>
@@ -468,6 +469,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
 }
 
 const STATUS_OPTIONS = [
+  ["confirmed", "Confirmed"],
   ["pending", "Pending confirmation"],
   ["preparing", "Preparing"],
   ["ready", "Ready"],
@@ -477,6 +479,7 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_COLORS = {
+  confirmed: "border-teal-300 bg-teal-50 text-teal-700",
   pending: "border-slate-300 bg-slate-100 text-slate-700",
   preparing: "border-amber-300 bg-amber-50 text-amber-700",
   ready: "border-emerald-300 bg-emerald-50 text-emerald-700",

@@ -43,7 +43,8 @@ const insertRegStmt = db.prepare(`
 `);
 const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date",
   "event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id",
-  "crusade_collaborators", "zone_contribution", "estimated_budget", "rhapsody_copies_confirmed", "permits_obtained", "media_coverage_plan"];
+  "crusade_collaborators", "zone_contribution", "estimated_budget", "rhapsody_copies_confirmed", "permits_obtained", "media_coverage_plan",
+  "readiness_status"];
 
 // Multi-select network fields arrive as arrays; store one comma-joined string per
 // crusade (null when empty) so dashboards can render and search them directly.
@@ -90,6 +91,9 @@ const insertRegistration = db.transaction((d) => {
       rhapsody_copies_confirmed: orNull(it.rhapsody_copies_confirmed),
       permits_obtained: orNull(it.permits_obtained),
       media_coverage_plan: orNull(it.media_coverage_plan),
+      // Logging a crusade confirms it by default; the coordinator can still edit
+      // the readiness afterwards (preparing, ready, not holding, …).
+      readiness_status: "confirmed",
     });
   }
   return regId;

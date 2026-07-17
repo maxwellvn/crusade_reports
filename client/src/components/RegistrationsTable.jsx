@@ -20,9 +20,10 @@ import { CrusadeEditor, CrusadeReportDialog } from "@/components/ZonePortal";
 // URL-driven filters + free-text search + server-side sorting + pagination.
 
 const ORG_TYPES = [["zone", "Zone"], ["group", "Group"], ["church", "Church"], ["cell", "Cell"], ["network", "Network"]];
-const STATUSES = [["pending", "Pending confirmation"], ["preparing", "Preparing"], ["ready", "Ready"], ["holding", "Holding as planned"], ["not_holding", "Not holding"]];
+const STATUSES = [["confirmed", "Confirmed"], ["pending", "Pending confirmation"], ["preparing", "Preparing"], ["ready", "Ready"], ["holding", "Holding as planned"], ["not_holding", "Not holding"]];
 const REPORT_STATUSES = [["reported", "Report submitted"], ["unreported", "Report not submitted"]];
 const STATUS_COLORS = {
+  confirmed: "border-teal-300 bg-teal-50 text-teal-700",
   pending: "border-slate-300 bg-slate-100 text-slate-700",
   preparing: "border-amber-300 bg-amber-50 text-amber-700",
   ready: "border-emerald-300 bg-emerald-50 text-emerald-700",

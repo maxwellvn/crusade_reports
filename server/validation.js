@@ -126,7 +126,7 @@ export const registrationSchema = z
 
 export const confirmationSchema = z
   .object({
-    status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
+    status: z.enum(["confirmed", "pending", "preparing", "ready", "holding", "not_holding"]),
     feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
   })
   .refine((d) => d.status !== "not_holding" || d.feedback.length >= 3, {
@@ -139,7 +139,7 @@ export const registrationCrusadeEditSchema = z
     ...registrationDetails,
     city_place_id: z.string().trim().optional().default(""),
     ...collaborationFields,
-    status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
+    status: z.enum(["confirmed", "pending", "preparing", "ready", "holding", "not_holding"]),
     feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
   })
   .superRefine((d, ctx) => {
