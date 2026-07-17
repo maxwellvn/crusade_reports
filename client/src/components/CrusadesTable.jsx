@@ -95,13 +95,13 @@ export function CrusadesTable() {
   const fromWidgetId = Object.keys(DRILL_MAP).find((id) => params.get(DRILL_MAP[id].filterField));
   const crumbs = [{ label: "Dashboard", to: "/dashboard" }];
   if (fromWidgetId) crumbs.push({ label: WIDGETS[fromWidgetId].title, to: `/dashboard/widget/${fromWidgetId}` });
-  crumbs.push({ label: "All crusades" });
+  crumbs.push({ label: "Reports" });
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <Breadcrumbs items={crumbs} />
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">All crusades</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Reports</h2>
         {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
       </div>
 

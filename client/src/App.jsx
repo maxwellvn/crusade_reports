@@ -28,7 +28,7 @@ const PAGE_TITLES = [
   [/^\/dashboard\/settings/, "Settings"],
   [/^\/dashboard\/widget/, "Dashboard"],
   [/^\/dashboard/, "Dashboard"],
-  [/^\/crusades/, "All crusades"],
+  [/^\/crusades/, "Reports"],
   [/^\/registrations\/live/, "Live registrations"],
   [/^\/registrations/, "Registrations"],
   [/^\/zone\//, "Zone portal"],
@@ -104,7 +104,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/dashboard", "Dashboard", true], ["/crusades", "All crusades"], ["/registrations", "Registrations", true], ["/registrations/live", "Live"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/dashboard", "Dashboard", true], ["/registrations", "Registrations", true], ["/registrations/live", "Live"], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
