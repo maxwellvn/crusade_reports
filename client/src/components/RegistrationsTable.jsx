@@ -116,7 +116,7 @@ export function RegistrationsTable() {
   const activeFilters = FILTERS.filter(([key]) => params.get(key));
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: "Registered crusades" }]} />
+      <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Registered crusades" }]} />
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight">Registered crusades</h2>
         {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}

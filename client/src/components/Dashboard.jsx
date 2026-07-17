@@ -91,7 +91,7 @@ export function Dashboard() {
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Crusade dashboard</h2><p className="text-sm text-muted-foreground">Registration progress, reports and ministry outcomes at a glance.</p></div>
+        <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Reports dashboard</h2><p className="text-sm text-muted-foreground">Registration progress, reports and ministry outcomes at a glance.</p></div>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" onClick={() => navigate("/crusade-registration/register")}>
             <Plus /> Register crusades

@@ -102,7 +102,7 @@ export function Settings() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: "Settings" }]} />
+      <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Settings" }]} />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Settings</h2>

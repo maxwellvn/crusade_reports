@@ -25,7 +25,7 @@ export function WidgetDetail() {
   if (!drill || !widget) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
-        <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: "Not available" }]} />
+        <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Not available" }]} />
         <p className="text-sm text-muted-foreground">This widget has no full-page breakdown.</p>
       </div>
     );
@@ -35,7 +35,7 @@ export function WidgetDetail() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: widget.title }]} />
+      <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: widget.title }]} />
       <Card>
         <CardHeader>
           <CardTitle>{widget.title}</CardTitle>

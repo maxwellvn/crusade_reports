@@ -93,7 +93,7 @@ export function CrusadesTable() {
 
   // If we arrived by clicking a dashboard breakdown row, show that widget in the trail.
   const fromWidgetId = Object.keys(DRILL_MAP).find((id) => params.get(DRILL_MAP[id].filterField));
-  const crumbs = [{ label: "Dashboard", to: "/dashboard" }];
+  const crumbs = [{ label: "Reports dashboard", to: "/dashboard" }];
   if (fromWidgetId) crumbs.push({ label: WIDGETS[fromWidgetId].title, to: `/dashboard/widget/${fromWidgetId}` });
   crumbs.push({ label: "Reports" });
 
