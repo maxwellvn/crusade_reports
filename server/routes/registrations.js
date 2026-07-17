@@ -196,7 +196,7 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
            COUNT(DISTINCT city)                 AS cities,
            COUNT(DISTINCT event_type)           AS types,
            COALESCE(SUM(expected_attendance), 0) AS expected_attendance,
-           SUM(CASE WHEN readiness_status = 'ready' THEN 1 ELSE 0 END) AS ready,
+           SUM(CASE WHEN readiness_status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
            SUM(CASE WHEN readiness_status = 'not_holding' THEN 1 ELSE 0 END) AS not_holding,
            (SELECT COUNT(*) FROM crusades WHERE registration_item_id IS NOT NULL) AS reported,
            COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades WHERE registration_item_id IS NOT NULL) AS awaiting
