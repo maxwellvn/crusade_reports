@@ -175,7 +175,7 @@ function Countdown() {
     <section className="countdown" aria-label="Countdown to A Night of a Thousand Crusades">
       <div className="countdown-glow" aria-hidden="true" />
       <span className="eyebrow">Save the date · 29 August</span>
-      <h2 className="countdown-title">The night is coming</h2>
+      <h2 className="countdown-title">A Night of a Thousand Crusades</h2>
       <div className="countdown-grid" ref={gridRef}>
         {units.map(([label, value]) => (
           <div className="cd-box" key={label}>
