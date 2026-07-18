@@ -10,6 +10,8 @@ import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
+import { sendExport } from "./exporter.js";
+import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 
 export const registrations = Router();
 
@@ -290,34 +292,24 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
   });
 }));
 
-// GET /api/registrations — paginated, filtered, sorted table for the admin view.
-registrations.get("/", requireAdmin, wrap((req, res) => {
+// Shared WHERE clause for the registrations table and its export.
+function registrationFilters(query) {
   const where = [];
   const params = {};
-
   for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name"]) {
-    if (req.query[col]) { where.push(`r.${col} = @${col}`); params[col] = String(req.query[col]); }
+    if (query[col]) { where.push(`r.${col} = @${col}`); params[col] = String(query[col]); }
   }
   // Country is per crusade now, so match the crusade's own country (i), not the registration's primary.
-  if (req.query.country) { where.push("i.country = @country"); params.country = String(req.query.country); }
-  if (req.query.city) { where.push("i.city = @city"); params.city = String(req.query.city); }
-  if (req.query.readiness_status) {
-    where.push("i.readiness_status = @readiness_status");
-    params.readiness_status = String(req.query.readiness_status);
-  }
-  if (req.query.report_status === "reported") where.push("EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
-  if (req.query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
-  if (req.query.event_type) {
-    where.push("i.event_type = @event_type");
-    params.event_type = String(req.query.event_type);
-  }
-  if (req.query.date_from) { where.push("i.event_date >= @date_from"); params.date_from = String(req.query.date_from); }
-  if (req.query.date_to) { where.push("i.event_date <= @date_to"); params.date_to = String(req.query.date_to); }
-
-  // Free-text search: every word must match some field of the registration or
-  // its items. ponytail: LIKE, not FTS — org/city names at this volume don't
-  // need an index; clone the crusades_fts pattern if registrations ever do.
-  String(req.query.q || "").trim().split(/\s+/).filter(Boolean).slice(0, 8).forEach((tok, n) => {
+  if (query.country) { where.push("i.country = @country"); params.country = String(query.country); }
+  if (query.city) { where.push("i.city = @city"); params.city = String(query.city); }
+  if (query.readiness_status) { where.push("i.readiness_status = @readiness_status"); params.readiness_status = String(query.readiness_status); }
+  if (query.report_status === "reported") where.push("EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
+  if (query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
+  if (query.event_type) { where.push("i.event_type = @event_type"); params.event_type = String(query.event_type); }
+  if (query.date_from) { where.push("i.event_date >= @date_from"); params.date_from = String(query.date_from); }
+  if (query.date_to) { where.push("i.event_date <= @date_to"); params.date_to = String(query.date_to); }
+  // Free-text search: every word must match some field of the registration or its items.
+  String(query.q || "").trim().split(/\s+/).filter(Boolean).slice(0, 8).forEach((tok, n) => {
     const p = `q${n}`;
     where.push(`(r.zone LIKE @${p} OR r.group_name LIKE @${p} OR r.church_name LIKE @${p} OR r.network_name LIKE @${p} OR r.country LIKE @${p}
       OR r.contact_name LIKE @${p} OR r.contact_email LIKE @${p} OR r.phone_country_code || r.phone_number LIKE @${p}
@@ -326,8 +318,60 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
       OR i.readiness_status LIKE @${p} OR i.readiness_notes LIKE @${p})`);
     params[p] = `%${tok}%`;
   });
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
 
-  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+const REGISTRATION_EXPORT_SELECT =
+  `SELECT i.event_type, i.event_name, i.event_date, i.venue, i.expected_attendance, i.minister_name, i.country, i.city,
+          i.readiness_status, i.readiness_notes,
+          i.crusade_collaborators, i.zone_contribution, i.estimated_budget, i.rhapsody_copies_confirmed, i.permits_obtained, i.media_coverage_plan,
+          r.created_at AS registered_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name, r.network_name,
+          r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username,
+          EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+   FROM registration_items i JOIN registrations r ON r.id = i.registration_id`;
+
+const REGISTRATION_EXPORT_COLUMNS = [
+  { header: "Registered on", value: (row) => (row.registered_at || "").slice(0, 10) },
+  { header: "Crusade date", value: (row) => row.event_date },
+  { header: "Crusade name", value: (row) => row.event_name },
+  { header: "Type", value: (row) => typeLabel(row.event_type) },
+  { header: "Country", value: (row) => row.country },
+  { header: "City", value: (row) => row.city },
+  { header: "Venue / address", value: (row) => row.venue },
+  { header: "Expected attendance", value: (row) => row.expected_attendance },
+  { header: "Ministers", value: (row) => row.minister_name },
+  { header: "Readiness", value: (row) => READINESS_LABELS[row.readiness_status] || row.readiness_status },
+  { header: "Readiness notes", value: (row) => row.readiness_notes },
+  { header: "Report submitted", value: (row) => yesNo(row.report_submitted) },
+  { header: "Registered as", value: (row) => ORG_TYPE_LABELS[row.organization_type] || row.organization_type },
+  { header: "Zone", value: (row) => row.zone },
+  { header: "Group", value: (row) => row.group_name },
+  { header: "Church", value: (row) => row.church_name },
+  { header: "Cell", value: (row) => row.cell_name },
+  { header: "Network", value: (row) => row.network_name },
+  { header: "Contact name", value: (row) => row.contact_name },
+  { header: "Contact email", value: (row) => row.contact_email },
+  { header: "Contact phone", value: (row) => phone(row.phone_country_code, row.phone_number) },
+  { header: "KingsChat", value: (row) => row.kingschat_username },
+  // Network-only planning fields (blank for other org types)
+  { header: "Crusade collaborators", value: (row) => row.crusade_collaborators },
+  { header: "Zone's contribution", value: (row) => row.zone_contribution },
+  { header: "Estimated budget (Espees)", value: (row) => row.estimated_budget },
+  { header: "Rhapsody copies confirmed", value: (row) => row.rhapsody_copies_confirmed },
+  { header: "Permits obtained", value: (row) => row.permits_obtained },
+  { header: "Media coverage plan", value: (row) => row.media_coverage_plan },
+];
+
+// GET /api/registrations/export?format=csv|xlsx — all rows matching the current filters.
+registrations.get("/export", requireAdmin, wrap(async (req, res) => {
+  const { clause, params } = registrationFilters(req.query);
+  const rows = db.prepare(`${REGISTRATION_EXPORT_SELECT} ${clause} ORDER BY r.created_at DESC, i.id DESC`).all(params);
+  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "registered-crusades", REGISTRATION_EXPORT_COLUMNS, rows);
+}));
+
+// GET /api/registrations — paginated, filtered, sorted table for the admin view.
+registrations.get("/", requireAdmin, wrap((req, res) => {
+  const { clause, params } = registrationFilters(req.query);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 

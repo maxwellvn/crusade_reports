@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Eye, Pencil, Trash2, X, Search } from "lucide-react";
+import { Eye, Pencil, Trash2, X, Search, Download, FileSpreadsheet } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -112,14 +112,34 @@ export function RegistrationsTable() {
   }
   const { Th } = useTableSort(params, setParams, "created_at");
 
+  // Download every row matching the current filters (not just this page). The
+  // session cookie authenticates the direct request; the server sets the filename.
+  function exportRows(format) {
+    const qs = new URLSearchParams(params);
+    qs.set("format", format);
+    qs.delete("page");
+    const link = Object.assign(document.createElement("a"), { href: `/api/registrations/export?${qs.toString()}` });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
   const activeFilters = FILTERS.filter(([key]) => params.get(key));
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Registered crusades" }]} />
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight">Registered crusades</h2>
-        {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
+        <div className="flex items-center gap-2">
+          {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total} title="Export matching rows as CSV">
+            <Download /> CSV
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!data?.total} title="Export matching rows as Excel">
+            <FileSpreadsheet /> Excel
+          </Button>
+        </div>
       </div>
 
       <Card>
