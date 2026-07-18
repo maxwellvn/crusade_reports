@@ -344,6 +344,69 @@
     margin-bottom: 16px;
 }
 
+/* ===== Countdown (after hero) ===== */
+.landing-page .countdown {
+    position: relative;
+    overflow: hidden;
+    margin-top: clamp(14px, 2vw, 29px);
+    padding: clamp(36px, 4.2vw, 66px) clamp(20px, 3vw, 45px);
+    border-radius: clamp(28px, 3.47vw, 50px);
+    background: radial-gradient(120% 140% at 50% 0%, #4247cc 0%, #23266f 45%, #14163f 100%);
+    color: #fff;
+    text-align: center;
+    font-family: "Instrument Sans", sans-serif;
+}
+.landing-page .countdown-glow {
+    position: absolute;
+    inset: -40% 20% auto 20%;
+    height: 60%;
+    background: radial-gradient(60% 60% at 50% 0%, rgba(176, 108, 255, 0.45), transparent 70%);
+    pointer-events: none;
+}
+.landing-page .countdown .eyebrow { color: #efe89a; margin-bottom: 10px; position: relative; }
+.landing-page .countdown-title {
+    position: relative;
+    font-weight: 700;
+    font-size: clamp(26px, 2.8vw, 44px);
+    line-height: 0.95;
+}
+.landing-page .countdown-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(8px, 1.4vw, 20px);
+    width: min(760px, 100%);
+    margin: clamp(24px, 3vw, 40px) auto 0;
+}
+.landing-page .cd-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: clamp(16px, 1.9vw, 28px) clamp(6px, 1vw, 14px);
+    border-radius: clamp(14px, 1.6vw, 22px);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.landing-page .cd-num {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(32px, 5vw, 68px);
+    line-height: 1;
+    background: linear-gradient(180deg, #ffffff 0%, #cdd0ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    will-change: transform;
+}
+.landing-page .cd-label {
+    font-weight: 600;
+    font-size: clamp(10px, 1vw, 14px);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+}
+
 /* ===== Footer ===== */
 .landing-page .site-footer { padding: clamp(20px, 3vw, 40px) 0 0; }
 

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import anime from "animejs/lib/anime.es.js";
 import "../landing.css";
 
 // Public campaign page — A Night of a Thousand Crusades.
@@ -120,6 +121,70 @@ function CookiePrompt() {
         <button type="button" className="cookie-accept" onClick={() => decide("accepted")}>Accept</button>
       </div>
     </div>
+  );
+}
+
+// Countdown to A Night of a Thousand Crusades — 29 August (the next one; rolls to
+// next year once this year's has passed). anime.js staggers the boxes in and
+// pulses the seconds each tick. Static under reduced-motion.
+function nextAug29() {
+  const now = new Date();
+  const thisYear = new Date(now.getFullYear(), 7, 29, 0, 0, 0); // month 7 = August
+  return thisYear.getTime() > now.getTime() ? thisYear : new Date(now.getFullYear() + 1, 7, 29, 0, 0, 0);
+}
+
+function timeLeft(target) {
+  const ms = Math.max(0, target - Date.now());
+  return {
+    days: Math.floor(ms / 86400000),
+    hours: Math.floor((ms % 86400000) / 3600000),
+    minutes: Math.floor((ms % 3600000) / 60000),
+    seconds: Math.floor((ms % 60000) / 1000),
+  };
+}
+
+function Countdown() {
+  const target = React.useRef(nextAug29()).current;
+  const [t, setT] = React.useState(() => timeLeft(target));
+  const gridRef = React.useRef(null);
+  const secondsRef = React.useRef(null);
+  const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  React.useEffect(() => {
+    const id = setInterval(() => setT(timeLeft(target)), 1000);
+    return () => clearInterval(id);
+  }, [target]);
+
+  React.useEffect(() => {
+    if (!gridRef.current || reduced()) return;
+    anime({
+      targets: gridRef.current.querySelectorAll(".cd-box"),
+      translateY: [28, 0], opacity: [0, 1], scale: [0.92, 1],
+      delay: anime.stagger(110), duration: 750, easing: "easeOutExpo",
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!secondsRef.current || reduced()) return;
+    anime({ targets: secondsRef.current, scale: [1.16, 1], duration: 450, easing: "easeOutElastic(1, .6)" });
+  }, [t.seconds]);
+
+  const units = [["Days", t.days], ["Hours", t.hours], ["Minutes", t.minutes], ["Seconds", t.seconds]];
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    <section className="countdown" aria-label="Countdown to A Night of a Thousand Crusades">
+      <div className="countdown-glow" aria-hidden="true" />
+      <span className="eyebrow">Save the date · 29 August</span>
+      <h2 className="countdown-title">The night is coming</h2>
+      <div className="countdown-grid" ref={gridRef}>
+        {units.map(([label, value]) => (
+          <div className="cd-box" key={label}>
+            <span className="cd-num" ref={label === "Seconds" ? secondsRef : undefined}>{pad(value)}</span>
+            <span className="cd-label">{label}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -309,6 +374,9 @@ export function Landing() {
         </div>
       </section>
 
+      {/* ===== Countdown (right after the hero) ===== */}
+      <Countdown />
+
       {/* ===== How to Register ===== */}
       <section id="register" className="how-to">
         <h2>How to register</h2>
@@ -316,7 +384,7 @@ export function Landing() {
 
         <ol className="steps">
           {[
-            ["Tell us who you are", "Register as a zone, group, church or network, and pick your country and plan date."],
+            ["Tell us who you are", "Register as a zone, group, church or network."],
             ["Break it down by type", "Mega crusades, street crusades, medical outreaches… state how many of each — and the cities, if you know them."],
             ["Submit and be counted", "Your crusades join the global tally instantly and appear on the live map."],
           ].map(([title, body], i) => (
