@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
+import { FileDown, GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -148,14 +148,15 @@ export function RegistrationsLive() {
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Live registrations</h2><span className="flex items-center gap-1.5 text-xs text-emerald-700"><Radio className="size-3.5 animate-pulse" /> Live · updates every 10s</span></div>
-        <div className="flex items-center gap-2">
+        <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Live registrations</h2><span className="flex items-center gap-1.5 text-xs text-emerald-700 print:hidden"><Radio className="size-3.5 animate-pulse" /> Live · updates every 10s</span></div>
+        <div className="flex items-center gap-2 print:hidden">
           {hidden.length > 0 && <details className="relative">
             <summary className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent [&::-webkit-details-marker]:hidden"><Plus /> Add widget</summary>
             <div className="absolute right-0 z-20 mt-1 max-h-80 w-64 overflow-y-auto border bg-popover p-1">
               {hidden.map((id) => <button key={id} type="button" className="w-full px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={(event) => { setLayout((current) => [...current, { id, expanded: false }]); event.target.closest("details").open = false; }}>{LIVE_WIDGETS[id].title}</button>)}
             </div>
           </details>}
+          <Button type="button" variant="outline" size="sm" onClick={() => window.print()} title="Export this dashboard as a PDF"><FileDown /> Export PDF</Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => setLayout(DEFAULT_LAYOUT)}><RotateCcw /> Reset</Button>
         </div>
       </div>
@@ -163,7 +164,7 @@ export function RegistrationsLive() {
       {layout.some((widget) => KPI_IDS.has(widget.id)) && <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4">
         {layout.filter((widget) => KPI_IDS.has(widget.id)).map(({ id }) => <div key={id} className={`group relative bg-card ${KPI_TONES[id] || ""}`} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
           <button type="button" className="w-full p-4 text-left" onClick={() => goFilters(LIVE_WIDGETS[id].filter)}>{LIVE_WIDGETS[id].render(data)}</button>
-          <div className="absolute right-1.5 top-1.5 flex opacity-0 group-hover:opacity-100"><span draggable title="Drag to rearrange" className="cursor-grab p-1 text-muted-foreground" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><button type="button" title="Remove widget" aria-label={`Remove ${LIVE_WIDGETS[id].title}`} className="p-1 text-muted-foreground hover:text-destructive" onClick={() => setLayout((current) => current.filter((widget) => widget.id !== id))}><X /></button></div>
+          <div className="absolute right-1.5 top-1.5 flex opacity-0 group-hover:opacity-100 print:hidden"><span draggable title="Drag to rearrange" className="cursor-grab p-1 text-muted-foreground" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><button type="button" title="Remove widget" aria-label={`Remove ${LIVE_WIDGETS[id].title}`} className="p-1 text-muted-foreground hover:text-destructive" onClick={() => setLayout((current) => current.filter((widget) => widget.id !== id))}><X /></button></div>
         </div>)}
       </Card>}
 
@@ -172,8 +173,8 @@ export function RegistrationsLive() {
           const widget = LIVE_WIDGETS[id];
           return <Card key={id} className={expanded || widget.size === 2 ? "sm:col-span-2" : ""} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
             <CardHeader className="flex-row items-center justify-between space-y-0 py-4">
-              <div className="flex min-w-0 items-center gap-1.5"><span draggable title="Drag to rearrange" className="cursor-grab text-muted-foreground" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><div><CardTitle className="text-sm">{widget.title}</CardTitle>{id === "coverage" && <CardDescription>Click a location to open matching registrations.</CardDescription>}</div></div>
-              <div className="flex text-muted-foreground">{widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}<button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button></div>
+              <div className="flex min-w-0 items-center gap-1.5"><span draggable title="Drag to rearrange" className="cursor-grab text-muted-foreground print:hidden" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><div><CardTitle className="text-sm">{widget.title}</CardTitle>{id === "coverage" && <CardDescription>Click a location to open matching registrations.</CardDescription>}</div></div>
+              <div className="flex text-muted-foreground print:hidden">{widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}<button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button></div>
             </CardHeader>
             <CardContent>{widget.render(data, expanded, go)}</CardContent>
           </Card>;

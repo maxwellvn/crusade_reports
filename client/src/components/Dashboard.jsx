@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { GripVertical, X, Plus, Maximize2, Minimize2, RotateCcw, Search } from "lucide-react";
+import { GripVertical, X, Plus, Maximize2, Minimize2, RotateCcw, Search, FileDown } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -92,9 +92,12 @@ export function Dashboard() {
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Reports dashboard</h2><p className="text-sm text-muted-foreground">Registration progress, reports and ministry outcomes at a glance.</p></div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
           <Button type="button" size="sm" onClick={() => navigate("/crusade-registration/register")}>
             <Plus /> Register crusades
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => window.print()} title="Export this dashboard as a PDF">
+            <FileDown /> Export PDF
           </Button>
           {/* Global search: lands on /crusades backed by FTS5 across every field */}
           <form className="relative hidden sm:block"
@@ -138,7 +141,7 @@ export function Dashboard() {
               ) : id === "awaiting_reports" ? (
                 <button type="button" className="w-full text-left" onClick={() => goToRegistrations({ report_status: "unreported" })}>{WIDGETS[id].render(stats)}</button>
               ) : WIDGETS[id].render(stats)}
-              <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 print:hidden">
                 <span draggable className="cursor-grab p-1 text-muted-foreground/60 hover:text-muted-foreground active:cursor-grabbing"
                   title="Drag to rearrange" onDragStart={() => { dragId.current = id; }}>
                   <GripVertical className="size-3.5" />
@@ -164,13 +167,13 @@ export function Dashboard() {
               onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(id)}>
               <CardHeader className="flex-row items-center justify-between space-y-0 py-4">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <span draggable className="cursor-grab text-muted-foreground/60 transition-colors hover:text-muted-foreground active:cursor-grabbing"
+                  <span draggable className="cursor-grab text-muted-foreground/60 transition-colors hover:text-muted-foreground active:cursor-grabbing print:hidden"
                     title="Drag to rearrange" onDragStart={() => { dragId.current = id; }}>
                     <GripVertical className="size-4" />
                   </span>
                   <CardTitle className="truncate text-sm">{w.title}</CardTitle>
                 </div>
-                <div className="flex shrink-0 gap-0.5 text-muted-foreground">
+                <div className="flex shrink-0 gap-0.5 text-muted-foreground print:hidden">
                   {w.size !== 2 && (
                     <button type="button" className="rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground"
                       title={drill ? "Open full breakdown" : expanded ? "Collapse" : "Expand"}

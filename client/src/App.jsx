@@ -58,7 +58,7 @@ function Shell({ subtitle, links }) {
   const visibleLinks = links.filter(([, , , superAdminOnly]) => !superAdminOnly || admin?.is_super_admin);
   return (
     <div className="min-h-screen">
-      <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur">
+      <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4">
           {logoOk && (
             <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
