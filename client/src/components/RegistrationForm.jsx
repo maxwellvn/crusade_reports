@@ -485,11 +485,11 @@ export function RegistrationForm() {
                             <Field label="Venue / address" required error={rowErr.venue?.message} className="sm:col-span-2"
                               hint="No address yet? Tap “Unsure” — you can add it after submission.">
                               <div className="relative">
-                                <Input placeholder="e.g. City Stadium, 10 Main Road" className="pr-20" {...register(`items.${i}.venue`)} aria-invalid={!!rowErr.venue} />
+                                <Input placeholder="e.g. City Stadium, 10 Main Road" className="pr-40" {...register(`items.${i}.venue`)} aria-invalid={!!rowErr.venue} />
                                 {!(items?.[i]?.venue || "").trim() && (
                                   <button type="button" onClick={() => setValue(`items.${i}.venue`, "Unsure", { shouldValidate: true })}
-                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md border border-input bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent">
-                                    Unsure
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md border border-input bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent">
+                                    Click here if unsure
                                   </button>
                                 )}
                               </div>
