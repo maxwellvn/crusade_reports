@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, NavLink, Outlet, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ReportForm } from "@/components/ReportForm";
 import { Dashboard } from "@/components/Dashboard";
 import { WidgetDetail } from "@/components/WidgetDetail";
@@ -102,9 +102,12 @@ export default function App() {
           <Route path="/report" element={<ReportForm />} />
         </Route>
 
+        {/* /admin lands on the live registrations page */}
+        <Route path="/admin" element={<Navigate to="/registrations/live" replace />} />
+
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard", "Reports dashboard", true], ["/registrations", "Registrations", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
