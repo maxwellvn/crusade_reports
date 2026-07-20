@@ -29,6 +29,7 @@ export function ZonePortal() {
   const [error, setError] = React.useState(null);
   const [openCrusade, setOpenCrusade] = React.useState(null);
   const [reportingCrusade, setReportingCrusade] = React.useState(null);
+  const [viewingCrusade, setViewingCrusade] = React.useState(null);
   const [activeTab, setActiveTab] = React.useState("registrations");
   const [query, setQuery] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
@@ -164,7 +165,9 @@ export function ZonePortal() {
                             </td>
                             <td className="py-2 text-right">
                               {item.visitor ? (
-                                <span className="text-xs text-muted-foreground" title="Managed by the organization that registered it">View only</span>
+                                <Button type="button" variant="outline" size="sm" onClick={() => setViewingCrusade(item)}>
+                                  View
+                                </Button>
                               ) : (
                                 <Button type="button" variant="outline" size="sm" onClick={() => setOpenCrusade(item.id)}>
                                   Edit
@@ -228,7 +231,9 @@ export function ZonePortal() {
                           <td className="py-2 pr-3 text-right">{item.report_id ? nfull.format(item.reported_salvation || 0) : "—"}</td>
                           <td className="py-2 text-right">
                             {item.visitor ? (
-                              <span className="text-xs text-muted-foreground" title="Reported by the organization that registered it">View only</span>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setViewingCrusade(item)}>
+                                View
+                              </Button>
                             ) : (
                               <Button type="button" size="sm" disabled={!!item.report_id} onClick={() => setReportingCrusade(item)}>
                                 {item.report_id ? "Submitted" : "Submit report"}
@@ -267,6 +272,9 @@ export function ZonePortal() {
                 </div>}
               </CardContent>
             </Card>}
+            {viewingCrusade && (
+              <VisitorCrusadeDialog crusade={viewingCrusade} onClose={() => setViewingCrusade(null)} />
+            )}
             {editingCrusade && (
               <ZoneCrusadeEditDialog crusade={editingCrusade} token={token} onClose={() => setOpenCrusade(null)} onSaved={(updated) => {
                 setData((current) => ({ ...current, items: current.items.map((item) => item.id === editingCrusade.id ? { ...item, ...updated } : item) }));
@@ -292,6 +300,58 @@ export function ZonePortal() {
         )}
       </main>
     </div>
+  );
+}
+
+// Read-only details for a crusade owned by another org but shown on a network
+// dashboard because its type matches the network. No edit or report actions.
+function VisitorCrusadeDialog({ crusade, onClose }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => { ref.current?.showModal(); }, []);
+  const row = (label, value) => (
+    <div className="flex justify-between gap-4 border-b py-2 last:border-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{value || "—"}</span>
+    </div>
+  );
+  return (
+    <dialog ref={ref} onClose={onClose} onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
+      className="max-h-[calc(100vh-2rem)] w-[min(40rem,calc(100%-2rem))] overflow-y-auto border bg-background p-0 text-foreground backdrop:bg-black/60">
+      <div className="flex items-start justify-between gap-4 border-b p-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Crusade details — view only</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">{crusade.event_name || typeLabel(crusade.event_type)}</h2>
+        </div>
+        <Button type="button" variant="ghost" size="icon" onClick={() => ref.current?.close()} aria-label="Close details"><X /></Button>
+      </div>
+      <div className="space-y-5 p-5 text-sm">
+        <div>
+          {row("Type", typeLabel(crusade.event_type))}
+          {row("Date", crusade.event_date)}
+          {row("Country", crusade.country)}
+          {row("City", crusade.city)}
+          {row("Venue / address", crusade.venue)}
+          {row("Minister(s)", crusade.minister_name)}
+          {row("Expected attendance", crusade.expected_attendance ? nfull.format(crusade.expected_attendance) : "")}
+          {row("Readiness", STATUS_OPTIONS.find(([value]) => value === crusade.readiness_status)?.[1])}
+          {crusade.readiness_notes && row("Readiness notes", crusade.readiness_notes)}
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Organizers</p>
+          <div className="text-xs">{orgHierarchy(crusade)}</div>
+          {row("Contact name", crusade.contact_name)}
+          {row("Email", crusade.contact_email)}
+          {row("Phone", [crusade.phone_country_code, crusade.phone_number].filter(Boolean).join(" "))}
+          {row("KingsChat", crusade.kingschat_username)}
+        </div>
+        {crusade.report_id && <div>
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Reported outcomes</p>
+          {row("Attendance", nfull.format((crusade.reported_attendance || 0) + (crusade.reported_online_participation || 0)))}
+          {row("Souls won", nfull.format(crusade.reported_salvation || 0))}
+        </div>}
+        <p className="text-xs text-muted-foreground">This crusade is managed and reported by the organization that registered it.</p>
+      </div>
+    </dialog>
   );
 }
 

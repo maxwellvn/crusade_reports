@@ -97,8 +97,11 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
            registration_items.readiness_status, registration_items.readiness_notes, registration_items.readiness_updated_at,
            crusades.id AS report_crusade_id, crusades.report_id, crusades.created_at AS reported_at,
            crusades.attendance AS reported_attendance, crusades.online_participation AS reported_online_participation,
-           crusades.salvation AS reported_salvation
-    FROM registration_items LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
+           crusades.salvation AS reported_salvation,
+           reg.contact_name, reg.contact_email, reg.phone_country_code, reg.phone_number, reg.kingschat_username
+    FROM registration_items
+    LEFT JOIN registrations reg ON reg.id = registration_items.registration_id
+    LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
     WHERE ${listWhere("registration_items.")}
     ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
   `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
