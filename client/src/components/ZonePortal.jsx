@@ -163,9 +163,13 @@ export function ZonePortal() {
                               <StatusBadge status={item.readiness_status} />
                             </td>
                             <td className="py-2 text-right">
-                              <Button type="button" variant="outline" size="sm" onClick={() => setOpenCrusade(item.id)}>
-                                Edit
-                              </Button>
+                              {item.visitor ? (
+                                <span className="text-xs text-muted-foreground" title="Managed by the organization that registered it">View only</span>
+                              ) : (
+                                <Button type="button" variant="outline" size="sm" onClick={() => setOpenCrusade(item.id)}>
+                                  Edit
+                                </Button>
+                              )}
                             </td>
                           </tr>
                       ))}
@@ -223,9 +227,13 @@ export function ZonePortal() {
                           <td className="py-2 pr-3 text-right">{item.report_id ? nfull.format((item.reported_attendance || 0) + (item.reported_online_participation || 0)) : "—"}</td>
                           <td className="py-2 pr-3 text-right">{item.report_id ? nfull.format(item.reported_salvation || 0) : "—"}</td>
                           <td className="py-2 text-right">
-                            <Button type="button" size="sm" disabled={!!item.report_id} onClick={() => setReportingCrusade(item)}>
-                              {item.report_id ? "Submitted" : "Submit report"}
-                            </Button>
+                            {item.visitor ? (
+                              <span className="text-xs text-muted-foreground" title="Reported by the organization that registered it">View only</span>
+                            ) : (
+                              <Button type="button" size="sm" disabled={!!item.report_id} onClick={() => setReportingCrusade(item)}>
+                                {item.report_id ? "Submitted" : "Submit report"}
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       ))}

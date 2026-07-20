@@ -52,6 +52,15 @@ zonePortal.post("/zone-links", requireAdmin, wrap((req, res) => {
 
 // ---- Zone portal: token-scoped data ------------------------------------------
 
+// These networks also see crusades of their event type submitted from any
+// zone/group/church/cell — visible on their dashboard (visitor rows) but never
+// counted in their totals; the numbers stay with the submitting org.
+const NETWORK_EVENT_TYPES = {
+  "Youths Aglow": "youths-aglow",
+  "TEEVOLUTION": "teevolution",
+  "Say Yes to Kids": "say-yes-to-kids",
+};
+
 // GET /api/zone-portal/:token — everything the zone dashboard shows. Every query
 // is scoped to the token's zone; there is no way to reach another zone's rows.
 zonePortal.get("/zone-portal/:token", wrap((req, res) => {
@@ -59,6 +68,13 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
   const col = kind === "network" ? "network_name" : "zone"; // fixed string, never user input
+  const mappedType = kind === "network" ? NETWORK_EVENT_TYPES[name] : null;
+  // Visitor rows (matched by event type, owned by another org) appear in lists
+  // only — totals below keep the strict ${col} scope.
+  const listWhere = (prefix) => mappedType
+    ? `(${prefix}${col} = ? OR ${prefix}event_type = ?)`
+    : `${prefix}${col} = ?`;
+  const listParams = mappedType ? [name, mappedType] : [name];
 
   const registrations = db.prepare(`
     SELECT r.id, r.created_at, r.organization_type, r.group_name, r.church_name, r.country, r.plan_date,
@@ -83,16 +99,16 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
            crusades.attendance AS reported_attendance, crusades.online_participation AS reported_online_participation,
            crusades.salvation AS reported_salvation
     FROM registration_items LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
-    WHERE registration_items.${col} = ?
+    WHERE ${listWhere("registration_items.")}
     ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
-  `).all(name);
+  `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
 
   const crusades = db.prepare(`
     SELECT id, registration_item_id, event_date, event_type, other_event_type, event_name, format, city, country,
            organization_type, zone, group_name, church_name, cell_name, network_name,
            attendance, online_participation, salvation, minister_name, venue
-    FROM crusades WHERE ${col} = ? ORDER BY event_date DESC, id DESC LIMIT 500
-  `).all(name);
+    FROM crusades WHERE ${listWhere("")} ORDER BY event_date DESC, id DESC LIMIT 500
+  `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
 
   const totals = {
     planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${col} = ?`).get(name).n,
