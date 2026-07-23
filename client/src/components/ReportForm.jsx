@@ -48,7 +48,6 @@ export function ReportForm() {
   const { register, handleSubmit, control, watch, setValue, getValues, reset, trigger, formState: { errors, isSubmitting } } = form;
   const draftReady = React.useRef(false);
 
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const portalToken = searchParams.get("portal") || "";
   const [step, setStep] = React.useState(0);
