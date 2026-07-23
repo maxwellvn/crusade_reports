@@ -19,6 +19,7 @@ const crusade = z
     event_type: z.string().trim().min(1, "Crusade type is required"),
     other_event_type: z.string().trim().optional().default(""),
     event_name: z.string().trim().min(1, "Event name is required"),
+    country: z.string().trim().min(1, "Country is required"),
     city: z.string().trim().min(1, "City is required"),
     city_place_id: z.string().trim().optional().default(""),
     event_date: z.string().trim().min(1, "Event date is required"),
@@ -52,7 +53,9 @@ export const reportSchema = z
     network_name: z.string().trim().optional().default(""),
     network_type: z.preprocess((v) => v || undefined, z.enum(["predefined", "other"]).optional()),
 
-    country: z.string().trim().min(1, "Country is required"),
+    // Country is per crusade now; the report row keeps the first crusade's
+    // country as its primary (column is NOT NULL, drives report-level grouping).
+    country: z.string().trim().optional().default(""),
     ...contactFields,
     crusades: z.array(crusade).min(1, "At least one crusade is required"),
 

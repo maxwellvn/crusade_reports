@@ -27,6 +27,7 @@ const CRUSADE_COLS = [
   { h: "Crusade Type", k: "event_type", type: "crusadeType", req: true, d: "Pick from the dropdown. The kind of crusade held (e.g. Street, Mega, Prison, Online)." },
   { h: "Other Type", k: "other_event_type", d: "Only fill this if Crusade Type is 'Other' — then describe the type here." },
   { h: "Format", k: "format", d: "Physical or Online. Leave blank for Physical." },
+  { h: "Country", k: "country", req: true, d: "The country where this crusade held. Type the country name (e.g. Nigeria, Ghana, South Africa)." },
   { h: "City", k: "city", req: true, d: "The city where this crusade happened. We match it to Google Places on upload; if it's not found we keep what you typed." },
   { h: "Date (YYYY-MM-DD)", k: "event_date", type: "date", req: true, d: "The date the crusade held. Format: YYYY-MM-DD, e.g. 2026-06-01." },
   { h: "Onsite Attendance", k: "attendance", type: "int", req: true, d: "How many people were physically present at this one crusade. Put 0 for online crusades." },
@@ -80,20 +81,20 @@ importer.get("/template", wrap(async (_req, res) => {
   [
     ["Crusade Reports — import template"],
     [""],
-    ["1. First, in the app: choose WHO is reporting (Zone / Group / Church / Network) and the Country."],
+    ["1. First, in the app: choose WHO is reporting (Zone / Group / Church / Network)."],
     ["   You do that with the searchable pickers — it applies to every crusade in this file."],
-    ["2. Here in the 'Crusades' sheet: ONE ROW PER CRUSADE."],
-    ["3. Columns marked * (red header) are REQUIRED: Crusade Type, City, Date, Onsite Attendance, Minister, Venue, Event Name."],
+    ["2. Here in the 'Crusades' sheet: ONE ROW PER CRUSADE. Each row has its own Country."],
+    ["3. Columns marked * (red header) are REQUIRED: Crusade Type, Country, City, Date, Onsite Attendance, Minister, Venue, Event Name."],
     ["   Format: Physical or Online (blank = Physical). Online crusades: put 0 for Onsite Attendance and the viewers in Online Attendance."],
     ["4. 'Crusade Type' has a dropdown — pick from the list (don't hand-type)."],
     ["5. ONE ROW = ONE CRUSADE. Ran 5 street crusades? That's 5 rows (copy the row and change the details)."],
-    ["6. City = the city name (we match it to Google Places on upload). Date format: YYYY-MM-DD. Outcome numbers are optional (blank = 0)."],
+    ["6. Country + City = where this crusade held (we match the city to Google Places on upload). Date format: YYYY-MM-DD. Outcome numbers are optional (blank = 0)."],
     ["7. For online / TV / radio crusades, put something like 'Online' or 'N/A' for Venue."],
     ["8. Save and upload in the app. You'll see a preview and exact row/column errors before anything is saved."],
     [""],
     ["EXAMPLE (values like these in the Crusades sheet):"],
-    ["Crusade Type", "Format", "City", "Date (YYYY-MM-DD)", "Onsite Attendance", "Online Attendance", "Minister", "Venue", "Event Name", "Salvations"],
-    ["Street Crusades", "Physical", "Aba", "2026-06-01", 300, 0, "Pastor John", "Main Market Sq.", "Aba Street Reach", 100],
+    ["Crusade Type", "Format", "Country", "City", "Date (YYYY-MM-DD)", "Onsite Attendance", "Online Attendance", "Minister", "Venue", "Event Name", "Salvations"],
+    ["Street Crusades", "Physical", "Nigeria", "Aba", "2026-06-01", 300, 0, "Pastor John", "Main Market Sq.", "Aba Street Reach", 100],
   ].forEach((row) => info.addRow(row));
   info.getRow(1).font = { bold: true, size: 14 };
 
@@ -179,7 +180,7 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
     const c = {
       event_type: code || rawType, other_event_type: raw("other_event_type"), event_name: raw("event_name"),
       format: rawFormat === "online" ? "online" : "physical",
-      city: raw("city"), city_place_id: "", event_date: date, attendance: toInt(get("attendance"), 0),
+      country: raw("country"), city: raw("city"), city_place_id: "", event_date: date, attendance: toInt(get("attendance"), 0),
       online_participation: toInt(get("online_participation"), 0),
       minister_name: raw("minister_name"), venue: raw("venue"),
     };
@@ -214,7 +215,7 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
     online_attendance: crusades.reduce((s, c) => s + c.online_participation, 0),
     total_attendance: crusades.reduce((s, c) => s + c.attendance + c.online_participation, 0),
     reporting_as: report.organization_type,
-    country: report.country,
+    countries: [...new Set(crusades.map((c) => c.country).filter(Boolean))],
   };
 
   if (rowErrors.length) {
@@ -224,18 +225,19 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
 
   // Data is clean → relate each city to Google Places (canonical name + place_id);
   // if Places doesn't find it (or is down), keep the typed city and warn the reporter.
-  const cc = countryCodeByName(report.country);
+  // Country is per-crusade now, so each city is geocoded against its own country.
   const cityCache = new Map();
   const warnings = [];
   for (const c of crusades) {
     if (!c.city) continue;
-    const k = c.city.toLowerCase();
+    const cc = countryCodeByName(c.country);
+    const k = `${c.country.toLowerCase()}:${c.city.toLowerCase()}`;
     if (!cityCache.has(k)) {
       let resolved = { name: c.city, place_id: "" };
       try {
         const preds = await cityAutocomplete(c.city, cc);
         if (preds.length && preds[0].main) resolved = { name: preds[0].main, place_id: preds[0].place_id || "" };
-        else warnings.push(`City "${c.city}" was not found in ${report.country} — kept as you typed it.`);
+        else warnings.push(`City "${c.city}" was not found in ${c.country} — kept as you typed it.`);
       } catch (e) {
         logger.warn({ err: e, city: c.city }, "import city geocode failed — keeping typed name");
         warnings.push(`City "${c.city}" could not be checked — kept as you typed it.`);

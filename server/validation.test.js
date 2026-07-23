@@ -92,7 +92,7 @@ test("network planning edits lock once the crusade date has passed", () => {
 
 test("private dashboard report validates one complete registered crusade outcome", () => {
   const crusade = {
-    format: "physical", event_type: "street", event_name: "Lagos Street Crusade", city: "Lagos",
+    format: "physical", event_type: "street", event_name: "Lagos Street Crusade", country: "Nigeria", city: "Lagos",
     city_place_id: "place-1", event_date: "2026-07-20", attendance: 450, minister_name: "Pastor Test",
     venue: "Test Square", salvation: 25,
   };
@@ -103,10 +103,10 @@ test("private dashboard report validates one complete registered crusade outcome
 test("cell reports retain the full zone hierarchy", () => {
   const report = {
     organization_type: "cell", zone: "Lagos Zone 1", group_name: "Lekki Group",
-    church_name: "Christ Embassy Lekki", cell_name: "Victory Cell", country: "Nigeria",
+    church_name: "Christ Embassy Lekki", cell_name: "Victory Cell",
     contact_name: "Test Coordinator", contact_email: "test@example.com",
     phone_country_code: "+234", phone_number: "801 234 5678",
-    crusades: [{ format: "physical", event_type: "street", event_name: "Victory Reach", city: "Lagos",
+    crusades: [{ format: "physical", event_type: "street", event_name: "Victory Reach", country: "Nigeria", city: "Lagos",
       event_date: "2026-07-20", attendance: 50, minister_name: "Pastor Test", venue: "Community Hall" }],
   };
   assert.equal(reportSchema.safeParse(report).success, true);

@@ -405,7 +405,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
   const [report, setReport] = React.useState({
     format: ONLINE_TYPES.includes(crusade.event_type) ? "online" : "physical",
     event_type: crusade.event_type || "", other_event_type: "", event_name: crusade.event_name || "",
-    city: crusade.city || "", city_place_id: crusade.city_place_id || "", event_date: crusade.event_date || "",
+    country: crusade.country || "", city: crusade.city || "", city_place_id: crusade.city_place_id || "", event_date: crusade.event_date || "",
     attendance: 0, minister_name: crusade.minister_name || "", venue: crusade.venue || "",
     ...Object.fromEntries(METRIC_KEYS.map((key) => [key, 0])),
   });

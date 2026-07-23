@@ -31,8 +31,8 @@ export function CollaboratorPicker({ value = [], onChange, fetcher, invalid }) {
         </div>
       )}
       <Combobox value="" fetcher={fetcher} invalid={invalid} minChars={0}
-        placeholder={list.length ? "Add another collaborator" : "Select zones or networks"}
-        searchPlaceholder="Search zones and networks…" emptyText="No zones or networks found"
+        placeholder={list.length ? "Add another collaborator" : "Select zones, networks or ministries"}
+        searchPlaceholder="Search zones, networks and ministries…" emptyText="No collaborators found"
         onSelect={(option) => add(option.label)} />
     </div>
   );

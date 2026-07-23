@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "./db.js";
 import { ApiError, wrap } from "./logger.js";
+import { getDefaultLandingPage } from "./appSettings.js";
 
 export const auth = Router();
 const COOKIE = "kc_access_token";
@@ -154,15 +155,16 @@ auth.get("/kingschat/login", (req, res) => {
 
 auth.all("/kingschat/callback", wrap(async (req, res) => {
   const token = String(req.body?.accessToken || req.body?.access_token || req.query?.accessToken || req.query?.access_token || "").trim();
-  if (!token) return res.redirect("/dashboard?auth_error=missing_token");
+  const landing = getDefaultLandingPage();
+  if (!token) return res.redirect(`${landing}?auth_error=missing_token`);
   let user;
   try {
     user = await fetchKingsChatProfile(token);
   } catch {
-    return res.redirect("/dashboard?auth_error=kingschat_verification_failed");
+    return res.redirect(`${landing}?auth_error=kingschat_verification_failed`);
   }
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
-    return res.redirect(`/dashboard?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
+    return res.redirect(`${landing}?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
   }
   res.cookie(COOKIE, token, {
     httpOnly: true,
@@ -171,7 +173,7 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
     maxAge: 365 * 24 * 60 * 60 * 1000,
     path: "/",
   });
-  res.redirect("/dashboard");
+  res.redirect(landing);
 }));
 
 auth.get("/me", wrap(async (req, res) => res.json(await authorizedUser(req))));

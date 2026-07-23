@@ -188,6 +188,7 @@ db.exec(`
     value TEXT NOT NULL
   );
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('reporting_open', '1');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('default_landing_page', '/registrations/live');
 
   CREATE INDEX IF NOT EXISTS idx_reg_items_reg     ON registration_items(registration_id);
   CREATE INDEX IF NOT EXISTS idx_reg_items_type    ON registration_items(event_type);

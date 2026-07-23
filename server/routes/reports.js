@@ -28,6 +28,9 @@ const insertCrusadeStmt = db.prepare(
 // One transaction: the report row + one fact row per crusade. Attribution is copied
 // onto each crusade so dashboards GROUP BY any hierarchy level. Shared by form + import.
 export const insertReport = db.transaction((d) => {
+  // Country is per-crusade now; the report row keeps the first crusade's country
+  // as its primary (the column is NOT NULL and drives report-level grouping).
+  const reportCountry = d.country || d.crusades[0]?.country || "";
   const reportId = insertReportStmt.run({
     organization_type: d.organization_type,
     zone: d.zone || null,
@@ -36,7 +39,7 @@ export const insertReport = db.transaction((d) => {
     cell_name: d.cell_name || null,
     network_name: d.network_name || null,
     network_type: d.network_type || null,
-    country: d.country,
+    country: reportCountry,
     contact_name: d.contact_name,
     contact_email: d.contact_email,
     phone_country_code: d.phone_country_code,
@@ -55,7 +58,7 @@ export const insertReport = db.transaction((d) => {
       church_name: d.church_name || null,
       cell_name: d.cell_name || null,
       network_name: d.network_name || null,
-      country: d.country,
+      country: c.country || reportCountry,
       format: c.format,
       event_type: c.event_type,
       other_event_type: c.other_event_type || null,

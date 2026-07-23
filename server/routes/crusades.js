@@ -46,6 +46,10 @@ function crusadeFilters(query) {
   }
   if (query.date_from) { where.push("event_date >= @date_from"); params.date_from = String(query.date_from); }
   if (query.date_to) { where.push("event_date <= @date_to"); params.date_to = String(query.date_to); }
+  const minAttendance = parseInt(query.min_attendance, 10);
+  if (Number.isFinite(minAttendance) && minAttendance > 0) {
+    where.push("c.attendance >= @min_attendance"); params.min_attendance = minAttendance;
+  }
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
 }
 

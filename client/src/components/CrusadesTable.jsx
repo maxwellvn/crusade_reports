@@ -33,6 +33,7 @@ const FILTERS = [
   ["city", "City", "text"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
   ["format", "Format", "select", FORMATS],
+  ["min_attendance", "Min attendance", "number"],
   ["date_from", "From date", "date"],
   ["date_to", "To date", "date"],
 ];
@@ -141,8 +142,8 @@ export function CrusadesTable() {
                   {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </Select>
               ) : (
-                <Input type={kind} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
-                  placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : undefined} />
+                <Input type={kind} min={kind === "number" ? "0" : undefined} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
+                  placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : kind === "number" ? "e.g. 1000" : undefined} />
               )}
             </Field>
           ))}

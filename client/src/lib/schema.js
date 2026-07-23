@@ -19,6 +19,7 @@ const crusade = z
     event_type: z.string().min(1, "Type is required"),
     other_event_type: z.string().optional().default(""),
     event_name: z.string().min(1, "Event name is required"),
+    country: z.string().min(1, "Country is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
     event_date: z.string().min(1, "Date is required"),
@@ -44,7 +45,8 @@ export const reportSchema = z
     network_name: z.string().optional().default(""),
     network_type: z.string().optional().default(""),
 
-    country: z.string().min(1, "Country is required"),
+    // Country is per crusade now; the report row keeps the first crusade's country.
+    country: z.string().optional().default(""),
     ...contactFields,
     crusades: z.array(crusade).min(1, "Add at least one crusade"),
 

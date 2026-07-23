@@ -43,6 +43,7 @@ const FILTERS = [
   ["country", "Country", "text"],
   ["city", "City", "text"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
+  ["min_attendance", "Min expected attendance", "number"],
   ["date_from", "Crusade date from", "date"],
   ["date_to", "Crusade date to", "date"],
 ];
@@ -159,8 +160,8 @@ export function RegistrationsTable() {
                   {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </Select>
               ) : (
-                <Input type={kind} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
-                  placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : undefined} />
+                <Input type={kind} min={kind === "number" ? "0" : undefined} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
+                  placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : kind === "number" ? "e.g. 1000" : undefined} />
               )}
             </Field>
           ))}

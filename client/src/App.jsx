@@ -14,6 +14,7 @@ import { AdminGate, useAdmin } from "@/components/AdminGate";
 import { RegistrationForm } from "@/components/RegistrationForm";
 import { Settings } from "@/components/Settings";
 import { Toaster } from "@/components/ui/sonner";
+import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const BRAND = "Rhapsody End-Time Teaching Crusades";
@@ -84,6 +85,20 @@ function Shell({ subtitle, links }) {
   );
 }
 
+// /admin redirects to the configured default landing page. The setting lives in
+// app_settings and is editable from the Settings page; we fetch it once on mount.
+// While loading (and as a fallback if the fetch fails) we use /registrations/live,
+// which is the seeded default — so /admin always works even if the API is down.
+function AdminRedirect() {
+  const [to, setTo] = useState("/registrations/live");
+  useEffect(() => {
+    getJSON("/campaign-settings")
+      .then((s) => s.default_landing_page && setTo(s.default_landing_page))
+      .catch(() => {});
+  }, []);
+  return <Navigate to={to} replace />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -97,13 +112,11 @@ export default function App() {
         {/* Zone capability-link dashboards — self-contained, token-scoped */}
         <Route path="/zone/:token" element={<ZonePortal />} />
 
-        {/* Reporting surface */}
-        <Route element={<Shell subtitle="Capture crusade outcomes across zones, groups, churches and networks." links={[]} />}>
-          <Route path="/report" element={<ReportForm />} />
-        </Route>
+        {/* Reporting surface — standalone campaign-style page, same as registration */}
+        <Route path="/report" element={<ReportForm />} />
 
-        {/* /admin lands on the live registrations page */}
-        <Route path="/admin" element={<Navigate to="/registrations/live" replace />} />
+        {/* /admin lands on the configured default landing page */}
+        <Route path="/admin" element={<AdminRedirect />} />
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."

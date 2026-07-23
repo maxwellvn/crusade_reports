@@ -85,6 +85,7 @@ export const emptyCrusade = () => ({
   event_type: "",
   other_event_type: "",
   event_name: "",
+  country: "",
   city: "",
   city_place_id: "",
   event_date: "",

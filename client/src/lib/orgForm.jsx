@@ -6,6 +6,17 @@ import { getJSON } from "@/lib/api";
 // Shared plumbing for the two multi-step forms (report + registration):
 // zone/group/network/country/city fetchers, the stepper, and review summary rows.
 
+// Fixed ministry departments that can collaborate on a crusade, alongside zones
+// and networks. These are organizational units within the ministry, not zones or
+// networks, so they live as a constant rather than in the zones/networks tables.
+const MINISTRY_DEPARTMENTS = [
+  "Innercity Missions",
+  "Ministry of Children Affairs",
+  "Church Ministry",
+  "Ministry of Teens and Youths",
+  "Cell Ministry",
+];
+
 const COUNTRY_ALIASES = {
   uk: "united kingdom", gb: "united kingdom", britain: "united kingdom", england: "united kingdom",
   usa: "united states", us: "united states", america: "united states",
@@ -60,15 +71,17 @@ export function useOrgData(zone, countryCode) {
     async (q) => networks.filter((n) => n.name.toLowerCase().includes(q.toLowerCase())).map((n) => ({ value: n.name, label: n.name })),
     [networks]
   );
-  // Crusade collaborators: every zone AND every network, in one searchable list.
-  // Value is prefixed so a zone and a network sharing a name stay distinct keys;
-  // the stored collaborator is the plain name (option label).
+  // Crusade collaborators: every zone, every network, and the fixed ministry
+  // departments, in one searchable list. Value is prefixed so a zone and a
+  // network sharing a name stay distinct keys; the stored collaborator is the
+  // plain name (option label).
   const fetchCollaborators = React.useCallback(async (q) => {
     const s = q.trim().toLowerCase();
     const match = (name) => !s || name.toLowerCase().includes(s);
     return [
       ...zones.filter((z) => match(z.zone)).map((z) => ({ value: `zone:${z.zone}`, label: z.zone, sublabel: "Zone" })),
       ...networks.filter((n) => match(n.name)).map((n) => ({ value: `network:${n.name}`, label: n.name, sublabel: "Network" })),
+      ...MINISTRY_DEPARTMENTS.filter((name) => match(name)).map((name) => ({ value: `ministry:${name}`, label: name, sublabel: "Ministry" })),
     ];
   }, [zones, networks]);
 

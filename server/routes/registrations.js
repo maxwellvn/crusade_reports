@@ -308,6 +308,10 @@ function registrationFilters(query) {
   if (query.event_type) { where.push("i.event_type = @event_type"); params.event_type = String(query.event_type); }
   if (query.date_from) { where.push("i.event_date >= @date_from"); params.date_from = String(query.date_from); }
   if (query.date_to) { where.push("i.event_date <= @date_to"); params.date_to = String(query.date_to); }
+  const minAttendance = parseInt(query.min_attendance, 10);
+  if (Number.isFinite(minAttendance) && minAttendance > 0) {
+    where.push("i.expected_attendance >= @min_attendance"); params.min_attendance = minAttendance;
+  }
   // Free-text search: every word must match some field of the registration or its items.
   String(query.q || "").trim().split(/\s+/).filter(Boolean).slice(0, 8).forEach((tok, n) => {
     const p = `q${n}`;
