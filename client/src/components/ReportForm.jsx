@@ -160,7 +160,11 @@ export function ReportForm() {
   }
 
   function addCrusade(type = batchType) {
-    if (!type) return toast.error("Select the crusade type.");
+    if (!type) {
+      toast.error("Select the crusade type first.");
+      document.querySelector("[data-crusade-generator]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (crusadeArray.fields.length >= 500) return toast.error("Maximum of 500 crusades per report.");
     const current = getValues("crusades") || [];
     const lastIndex = current.length - 1;
@@ -171,6 +175,9 @@ export function ReportForm() {
     }
     crusadeArray.append({ ...emptyCrusade(), event_type: type });
     toast.success(`${typeLabel(type)} detail form added.`);
+    // Reset the type selector so the user consciously picks the type for the
+    // next crusade instead of silently stacking the same type.
+    setBatchType("");
   }
 
   function removeCrusade(i) {
@@ -440,7 +447,7 @@ export function ReportForm() {
                           onRemove={() => removeCrusade(i)} onClone={() => cloneCrusade(i)} />
                       ))}
                       {crusadeArray.fields.length > 0 && (
-                        <Button type="button" variant="outline" className="w-full" onClick={() => addCrusade(batchType || crusades?.[crusades.length - 1]?.event_type)}>
+                        <Button type="button" variant="outline" className="w-full" onClick={() => addCrusade()}>
                           <Plus /> Add another crusade
                         </Button>
                       )}

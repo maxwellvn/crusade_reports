@@ -196,7 +196,11 @@ export function RegistrationForm() {
   }
 
   function addCrusade(type = batchType) {
-    if (!type) return toast.error("Select the crusade type.");
+    if (!type) {
+      toast.error("Select the crusade type first.");
+      document.querySelector("[data-crusade-generator]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (itemArray.fields.length >= 500) return toast.error("Maximum of 500 crusades per registration.");
     // Each crusade is a distinct event, not a copy. Refuse to add another while the
     // last one is still blank, so repeated clicks don't quietly pile up duplicates.
@@ -213,6 +217,9 @@ export function RegistrationForm() {
       estimated_budget: "", rhapsody_copies_confirmed: "", permits_obtained: "", media_coverage_plan: "",
     });
     toast.success(`${typeLabel(type)} detail form added.`);
+    // Reset the type selector so the user consciously picks the type for the
+    // next crusade instead of silently stacking the same type.
+    setBatchType("");
   }
 
   function removeCrusades(indices) {
@@ -540,7 +547,7 @@ export function RegistrationForm() {
                       );
                     })}
                     {itemArray.fields.length > 0 && (
-                      <Button type="button" variant="outline" className="w-full" onClick={() => addCrusade(batchType || items?.[items.length - 1]?.event_type)}>
+                      <Button type="button" variant="outline" className="w-full" onClick={() => addCrusade()}>
                         <Plus /> Add another crusade
                       </Button>
                     )}
