@@ -150,6 +150,12 @@ auth.get("/kingschat/login", (req, res) => {
     response_type: "token",
     post_redirect: "true",
   });
+  // ?pm=1 sets a short-lived cookie that tells the callback to auto-add the
+  // signed-in KingsChat username to the dashboard allow list. Lets us share
+  // /admin/pm as a self-service access link without manually approving each user.
+  if (req.query.pm === "1") {
+    res.cookie("pm_auto_approve", "1", { httpOnly: true, sameSite: "lax", maxAge: 5 * 60 * 1000, path: "/" });
+  }
   res.redirect(`https://accounts.kingsch.at/?${params}`);
 });
 
@@ -162,6 +168,13 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
     user = await fetchKingsChatProfile(token);
   } catch {
     return res.redirect(`${landing}?auth_error=kingschat_verification_failed`);
+  }
+  // Auto-approve: if the pm_auto_approve cookie is set (from /admin/pm → login?pm=1),
+  // add the signed-in KingsChat username to the allow list before the access check.
+  const pmAutoApprove = cookie(req, "pm_auto_approve") === "1";
+  if (pmAutoApprove) {
+    res.clearCookie("pm_auto_approve", { httpOnly: true, sameSite: "lax", path: "/" });
+    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, "pm_auto_approve");
   }
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
     return res.redirect(`${landing}?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);

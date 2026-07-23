@@ -107,6 +107,26 @@ function SettingsRoute() {
   return <Settings />;
 }
 
+// /admin/pm — self-service access link. Sends the user to KingsChat login with
+// pm=1, which sets a short-lived cookie that auto-adds their username to the
+// dashboard allow list on callback. If already signed in and approved, go straight
+// to the dashboard.
+function PmRedirect() {
+  useEffect(() => {
+    getJSON("/auth/me")
+      .then(() => { window.location.assign("/admin"); })
+      .catch(() => { window.location.assign("/api/auth/kingschat/login?pm=1"); });
+  }, []);
+  return (
+    <div className="grid min-h-screen place-items-center bg-background px-6">
+      <div className="w-full max-w-md space-y-4 text-center">
+        <img src="/logo.png" alt="" className="mx-auto h-12 w-auto" />
+        <p className="text-sm text-muted-foreground">Redirecting to KingsChat sign-in…</p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -125,6 +145,10 @@ export default function App() {
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />
+
+        {/* /admin/pm — self-service access link. Redirects to KingsChat login
+            with pm=1, which auto-adds the signed-in username to the allow list. */}
+        <Route path="/admin/pm" element={<PmRedirect />} />
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
