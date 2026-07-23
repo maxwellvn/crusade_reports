@@ -205,6 +205,13 @@ auth.post("/logout", (_req, res) => {
   res.json({ ok: true });
 });
 
+// GET logout — clears the session cookie and redirects to the configured landing
+// page. Lets you log out by visiting a URL directly (e.g. /api/auth/logout).
+auth.get("/logout", (_req, res) => {
+  res.clearCookie(COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+  res.redirect(getDefaultLandingPage());
+});
+
 auth.get("/accounts", requireSuperAdmin, (_req, res) => {
   res.json(db.prepare("SELECT username, created_by, created_at FROM dashboard_accounts ORDER BY username COLLATE NOCASE").all());
 });
