@@ -153,8 +153,17 @@ auth.get("/kingschat/login", (req, res) => {
   // ?pm=1 sets a short-lived cookie that tells the callback to auto-add the
   // signed-in KingsChat username to the dashboard allow list. Lets us share
   // /admin/pm as a self-service access link without manually approving each user.
+  // sameSite=none + secure is required because KingsChat POSTs the token back
+  // from accounts.kingsch.at — a cross-site POST, which browsers won't carry
+  // sameSite=lax cookies on.
   if (req.query.pm === "1") {
-    res.cookie("pm_auto_approve", "1", { httpOnly: true, sameSite: "lax", maxAge: 5 * 60 * 1000, path: "/" });
+    res.cookie("pm_auto_approve", "1", {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true,
+      maxAge: 5 * 60 * 1000,
+      path: "/",
+    });
   }
   res.redirect(`https://accounts.kingsch.at/?${params}`);
 });
@@ -173,7 +182,7 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
   // add the signed-in KingsChat username to the allow list before the access check.
   const pmAutoApprove = cookie(req, "pm_auto_approve") === "1";
   if (pmAutoApprove) {
-    res.clearCookie("pm_auto_approve", { httpOnly: true, sameSite: "lax", path: "/" });
+    res.clearCookie("pm_auto_approve", { httpOnly: true, sameSite: "none", secure: true, path: "/" });
     db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, "pm_auto_approve");
   }
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
