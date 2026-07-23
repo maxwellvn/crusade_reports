@@ -99,6 +99,14 @@ function AdminRedirect() {
   return <Navigate to={to} replace />;
 }
 
+// Settings is super-admin only. Non-super-admins who hit the URL directly are
+// redirected to the dashboard instead of seeing the "only @maxwellvn" message.
+function SettingsRoute() {
+  const admin = useAdmin();
+  if (!admin?.is_super_admin) return <Navigate to="/dashboard" replace />;
+  return <Settings />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -127,7 +135,7 @@ export default function App() {
           <Route path="/registrations" element={<RegistrationsTable />} />
           <Route path="/registrations/live" element={<RegistrationsLive />} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
-          <Route path="/dashboard/settings" element={<Settings />} />
+          <Route path="/dashboard/settings" element={<SettingsRoute />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
