@@ -13,10 +13,31 @@ const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 // reports without a registration_item_id still belong in outcome totals, but
 // never in planned-vs-held progress. Scoped to program='public' (NULL allowed
 // for pre-migration rows) so Blue Elite registrations don't appear here.
+//
+// BLW campus/region zones (name starts with "BLW") are relabelled as
+// "Youths Aglow" in the network_name breakdown so their crusades count under
+// Youths Aglow in the admin dashboard widget.
 const REGISTRATION_DIMENSIONS = new Set(["event_type", "organization_type", "zone", "network_name", "country", "city"]);
+const YOUTHS_AGLOW = "Youths Aglow";
 export function registrationProgress(column) {
   if (!REGISTRATION_DIMENSIONS.has(column)) throw new Error(`Unsupported registration dimension: ${column}`);
   const qualified = `ri.${column}`;
+  // For network_name, relabel BLW zone rows as "Youths Aglow".
+  if (column === "network_name") {
+    return db.prepare(
+      `SELECT CASE WHEN LOWER(ri.zone) LIKE 'blw%' THEN ? ELSE ri.network_name END AS key,
+              COALESCE(SUM(ri.planned_count), 0) AS planned,
+              COUNT(ri.id) AS items,
+              COUNT(c.id) AS held,
+              COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
+       FROM registration_items ri
+       LEFT JOIN crusades c ON c.registration_item_id = ri.id
+       WHERE (ri.program = 'public' OR ri.program IS NULL)
+         AND (ri.network_name IS NOT NULL AND TRIM(ri.network_name) <> '' OR LOWER(ri.zone) LIKE 'blw%')
+       GROUP BY key
+       ORDER BY planned DESC, key COLLATE NOCASE`
+    ).all(YOUTHS_AGLOW);
+  }
   return db.prepare(
     `SELECT ${qualified} AS key,
             COALESCE(SUM(ri.planned_count), 0) AS planned,
@@ -54,7 +75,14 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
     by_group: by("group_name", "WHERE group_name IS NOT NULL"),
     by_church: by("church_name", "WHERE church_name IS NOT NULL"),
     by_cell: by("cell_name", "WHERE cell_name IS NOT NULL"),
-    by_network: by("network_name", "WHERE network_name IS NOT NULL"),
+    by_network: db.prepare(
+      `SELECT CASE WHEN LOWER(zone) LIKE 'blw%' THEN ? ELSE network_name END AS key,
+              COUNT(*) AS crusades, SUM(attendance) AS attendance,
+              SUM(online_participation) AS online_attendance, SUM(salvation) AS salvation
+       FROM crusades
+       WHERE network_name IS NOT NULL OR LOWER(zone) LIKE 'blw%'
+       GROUP BY key ORDER BY (SUM(attendance) + SUM(online_participation)) DESC`
+    ).all(YOUTHS_AGLOW),
     by_country: by("country"),
     by_city: by("city"),
     // Real geocoded city points for the map — no coordinates, no row.
