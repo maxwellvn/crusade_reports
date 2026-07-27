@@ -61,6 +61,16 @@ const NETWORK_EVENT_TYPES = {
   "Say Yes to Kids": "say-yes-to-kids",
 };
 
+// BLW campus/region zones are auto-detected by name: any zone whose name
+// starts with "BLW" (case-insensitive). All crusades (any type) from these
+// zones appear in the Youths Aglow network dashboard — both in listings AND
+// in totals — without affecting the zone's own dashboard numbers or the
+// global admin statistics. The zone keeps its own counts; Youths Aglow
+// simply absorbs the BLW rows into its view.
+const blwCampusZoneMatch = (prefix = "") =>
+  `(LOWER(${prefix}zone) LIKE 'blw%')`;
+const YOUTHS_AGLOW = "Youths Aglow";
+
 // GET /api/zone-portal/:token — everything the zone dashboard shows. Every query
 // is scoped to the token's zone; there is no way to reach another zone's rows.
 zonePortal.get("/zone-portal/:token", wrap((req, res) => {
@@ -69,18 +79,39 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   const { name, kind } = row;
   const col = kind === "network" ? "network_name" : "zone"; // fixed string, never user input
   const mappedType = kind === "network" ? NETWORK_EVENT_TYPES[name] : null;
+  // Youths Aglow absorbs BLW campus/region zone crusades into its listings
+  // AND totals. Other networks keep the existing visitor-rows-in-lists-only
+  // behaviour for their mapped event type.
+  const isYouthsAglow = kind === "network" && name === YOUTHS_AGLOW;
+
   // Visitor rows (matched by event type, owned by another org) appear in lists
-  // only — totals below keep the strict ${col} scope.
-  const listWhere = (prefix) => mappedType
-    ? `(${prefix}${col} = ? OR ${prefix}event_type = ?)`
-    : `${prefix}${col} = ?`;
+  // only — totals below keep the strict ${col} scope. Youths Aglow also pulls
+  // in BLW campus/region zone rows (all types) into both lists and totals.
+  const listWhere = (prefix) => {
+    if (isYouthsAglow) {
+      return `(${prefix}${col} = ? OR ${prefix}event_type = ? OR (${prefix}zone IS NOT NULL AND ${blwCampusZoneMatch(prefix)}))`;
+    }
+    return mappedType
+      ? `(${prefix}${col} = ? OR ${prefix}event_type = ?)`
+      : `${prefix}${col} = ?`;
+  };
   const listParams = mappedType ? [name, mappedType] : [name];
+
+  // Totals scope: Youths Aglow includes BLW campus/region zone rows; everyone
+  // else uses strict ${col} = ? (own rows only).
+  const totalsWhere = isYouthsAglow
+    ? `(${col} = ? OR (zone IS NOT NULL AND ${blwCampusZoneMatch()}))`
+    : `${col} = ?`;
+
+  const registrationsWhere = isYouthsAglow
+    ? `(r.${col} = ? OR (r.zone IS NOT NULL AND ${blwCampusZoneMatch("r.")}))`
+    : `r.${col} = ?`;
 
   const registrations = db.prepare(`
     SELECT r.id, r.created_at, r.organization_type, r.group_name, r.church_name, r.country, r.plan_date,
            COALESCE(SUM(i.planned_count), 0) AS planned
     FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
-    WHERE r.${col} = ? AND (r.program = 'public' OR r.program IS NULL)
+    WHERE ${registrationsWhere} AND (r.program = 'public' OR r.program IS NULL)
     GROUP BY r.id ORDER BY r.created_at DESC LIMIT 500
   `).all(name);
 
@@ -115,10 +146,10 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
 
   const totals = {
-    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${col} = ? AND (program = 'public' OR program IS NULL)`).get(name).n,
-    held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${col} = ?`).get(name).n,
-    attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${col} = ?`).get(name).n,
-    salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${col} = ?`).get(name).n,
+    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(name).n,
+    held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
+    attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
+    salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
   };
 
   res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, registrations, items, crusades });
