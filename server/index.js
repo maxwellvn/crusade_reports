@@ -18,6 +18,7 @@ import { crusades } from "./routes/crusades.js";
 import { registrations } from "./routes/registrations.js";
 import { zonePortal } from "./routes/zonePortal.js";
 import { campaignSettings } from "./routes/campaignSettings.js";
+import { blueElite } from "./routes/blueElite.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -42,6 +43,7 @@ app.use("/api/dashboard-layout", dashboardLayout);
 app.use("/api/crusades", crusades);
 app.use("/api/registrations", registrations);
 app.use("/api/campaign-settings", campaignSettings);
+app.use("/api/blue-elite", blueElite);
 app.use("/api", zonePortal);
 
 // 404 for unknown API routes (before the SPA catch-all).

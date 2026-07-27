@@ -12,6 +12,10 @@ import { Landing } from "@/components/Landing";
 import { NotFound } from "@/components/NotFound";
 import { AdminGate, useAdmin } from "@/components/AdminGate";
 import { RegistrationForm } from "@/components/RegistrationForm";
+import { BlueEliteLanding } from "@/components/BlueEliteLanding";
+import { BlueEliteRegistrationForm } from "@/components/BlueEliteRegistrationForm";
+import { BlueEliteDashboard } from "@/components/BlueEliteDashboard";
+import { BlueEliteRegistrationsTable } from "@/components/BlueEliteRegistrationsTable";
 import { Settings } from "@/components/Settings";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
@@ -22,15 +26,19 @@ const BRAND = "Rhapsody End-Time Teaching Crusades";
 // Per-route document title (first match wins; order matters for prefixes).
 const PAGE_TITLES = [
   [/^\/$/, "A Night of a Thousand Crusades"],
+  [/^\/blue-elite\/register/, "Blue Elite — Register your crusades"],
+  [/^\/blue-elite/, "Loveworld Blue Elite"],
   [/^\/crusade-registration\/register/, "Register your crusades"],
   [/^\/crusade-registration/, "A Night of a Thousand Crusades"],
   [/^\/report/, "Report a crusade"],
   [/^\/dashboard\/zone-links/, "Zone links"],
   [/^\/dashboard\/settings/, "Settings"],
+  [/^\/dashboard\/blue-elite/, "Blue Elite dashboard"],
   [/^\/dashboard\/widget/, "Reports dashboard"],
   [/^\/dashboard/, "Reports dashboard"],
   [/^\/crusades/, "Reports"],
   [/^\/registrations\/live/, "Live registrations"],
+  [/^\/registrations\/blue-elite/, "Blue Elite registrations"],
   [/^\/registrations/, "Registrations"],
   [/^\/zone\//, "Zone portal"],
 ];
@@ -107,6 +115,15 @@ function SettingsRoute() {
   return <Settings />;
 }
 
+// Blue Elite admin surface is super-admin only — the data is isolated from the
+// public registration views and only @maxwellvn can see it. Non-super-admins
+// who hit the URL directly are redirected to the standard dashboard.
+function SuperAdminRoute({ children }) {
+  const admin = useAdmin();
+  if (!admin?.is_super_admin) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 // /admin/pm — self-service access link. Sends the user to KingsChat login with
 // pm=1, which sets a short-lived cookie that auto-adds their username to the
 // dashboard allow list on callback. If already signed in and approved, go straight
@@ -137,6 +154,12 @@ export default function App() {
         <Route path="/crusade-registration" element={<Landing />} />
         <Route path="/crusade-registration/register" element={<RegistrationForm />} />
 
+        {/* Loveworld Blue Elite staff registration — standalone surface, same
+            crusade logic as the public form but a separate audience and data
+            partition (program='blue_elite'). No portal connection. */}
+        <Route path="/blue-elite" element={<BlueEliteLanding />} />
+        <Route path="/blue-elite/register" element={<BlueEliteRegistrationForm />} />
+
         {/* Zone capability-link dashboards — self-contained, token-scoped */}
         <Route path="/zone/:token" element={<ZonePortal />} />
 
@@ -152,7 +175,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
@@ -160,6 +183,9 @@ export default function App() {
           <Route path="/registrations/live" element={<RegistrationsLive />} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
           <Route path="/dashboard/settings" element={<SettingsRoute />} />
+          {/* Blue Elite admin surface — super-admin only */}
+          <Route path="/dashboard/blue-elite" element={<SuperAdminRoute><BlueEliteDashboard /></SuperAdminRoute>} />
+          <Route path="/registrations/blue-elite" element={<SuperAdminRoute><BlueEliteRegistrationsTable /></SuperAdminRoute>} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

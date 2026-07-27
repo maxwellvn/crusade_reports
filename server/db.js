@@ -110,6 +110,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS registrations (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    -- 'public' = the standard crusade-registration form; 'blue_elite' = the
+    -- Loveworld Blue Elite staff module. Existing rows default to 'public' so
+    -- the original admin views stay unchanged.
+    program           TEXT NOT NULL DEFAULT 'public',
+    department        TEXT,
     organization_type TEXT NOT NULL,
     zone              TEXT,
     group_name        TEXT,
@@ -133,6 +138,10 @@ db.exec(`
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     registration_id   INTEGER NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Mirror of registrations.program so item-level queries (live feed, exports)
+    -- can filter by module without joining back to the parent row.
+    program           TEXT NOT NULL DEFAULT 'public',
 
     -- attribution (denormalized, same as crusades)
     organization_type TEXT NOT NULL,
@@ -257,6 +266,19 @@ if (!registrationCols.has("confirmation_status")) {
     ALTER TABLE registrations ADD COLUMN confirmation_feedback TEXT;
     ALTER TABLE registrations ADD COLUMN confirmation_updated_at TEXT;
   `);
+}
+// Blue Elite module: program tags each row to its source form; department is
+// Blue Elite-only. Both nullable/defaulted so older rows stay 'public' with no
+// department, leaving the original admin views unchanged.
+if (!registrationCols.has("program")) {
+  db.exec(`
+    ALTER TABLE registrations ADD COLUMN program TEXT NOT NULL DEFAULT 'public';
+    ALTER TABLE registrations ADD COLUMN department TEXT;
+  `);
+}
+const registrationItemColsForProgram = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
+if (!registrationItemColsForProgram.has("program")) {
+  db.exec(`ALTER TABLE registration_items ADD COLUMN program TEXT NOT NULL DEFAULT 'public'`);
 }
 
 const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));

@@ -213,9 +213,12 @@ registrations.post("/:id/report", requireAdmin, wrap((req, res) => {
 const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_name, r.zone, r.organization_type)";
 
 // GET /api/registrations/live — everything the live dashboard + landing page need.
+// Scoped to program='public' (or NULL for rows that pre-date the column) so the
+// Blue Elite module's data never leaks into the original admin views.
+const PUBLIC_PROGRAM_FILTER = "(i.program = 'public' OR i.program IS NULL)";
 registrations.get("/live", requireAdmin, wrap((_req, res) => {
   const totals = db.prepare(`
-    SELECT (SELECT COUNT(*) FROM registrations) AS registrations,
+    SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
            COUNT(*)                             AS items,
            COUNT(DISTINCT country)              AS countries,
@@ -229,57 +232,57 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
            COALESCE(SUM(expected_attendance), 0) AS expected_attendance,
            SUM(CASE WHEN readiness_status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
            SUM(CASE WHEN readiness_status = 'not_holding' THEN 1 ELSE 0 END) AS not_holding,
-           (SELECT COUNT(*) FROM crusades WHERE registration_item_id IS NOT NULL) AS reported,
-           COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades WHERE registration_item_id IS NOT NULL) AS awaiting
-    FROM registration_items
+           (SELECT COUNT(*) FROM crusades c JOIN registration_items i ON c.registration_item_id = i.id WHERE ${PUBLIC_PROGRAM_FILTER}) AS reported,
+           COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades c JOIN registration_items i ON c.registration_item_id = i.id WHERE ${PUBLIC_PROGRAM_FILTER}) AS awaiting
+    FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
   `).get();
 
   res.json({
     totals,
     by_type: db.prepare(
       `SELECT event_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items GROUP BY event_type ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY event_type ORDER BY planned DESC`
     ).all(),
     by_country: db.prepare(
       `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items GROUP BY country ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY country ORDER BY planned DESC`
     ).all(),
     by_zone: db.prepare(
       `SELECT zone AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
     ).all(),
     by_network: db.prepare(
       `SELECT network_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE network_name IS NOT NULL GROUP BY network_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND network_name IS NOT NULL GROUP BY network_name ORDER BY planned DESC`
     ).all(),
     by_group: db.prepare(
       `SELECT group_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC`
     ).all(),
     by_church: db.prepare(
       `SELECT church_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC`
     ).all(),
     by_cell: db.prepare(
       `SELECT cell_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC`
     ).all(),
     by_city: db.prepare(
       `SELECT city AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE city IS NOT NULL GROUP BY city ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city IS NOT NULL GROUP BY city ORDER BY planned DESC`
     ).all(),
     by_org_type: db.prepare(
       `SELECT organization_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items GROUP BY organization_type ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY organization_type ORDER BY planned DESC`
     ).all(),
     by_readiness: db.prepare(
       `SELECT readiness_status AS key, COUNT(*) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items GROUP BY readiness_status ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY readiness_status ORDER BY planned DESC`
     ).all(),
     // Real city points (geocoded) for the coverage map.
     geo: db.prepare(
       `SELECT city AS key, country, MAX(city_lat) AS lat, MAX(city_lng) AS lng, SUM(planned_count) AS planned
-       FROM registration_items WHERE city_lat IS NOT NULL GROUP BY city, country`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city_lat IS NOT NULL GROUP BY city, country`
     ).all(),
     // The live feed: latest registrations with their own totals.
     recent: db.prepare(
@@ -287,14 +290,17 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
               ${ORG_LABEL} AS org,
               COALESCE(SUM(i.planned_count), 0) AS planned, COUNT(i.id) AS types
        FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
+       WHERE (r.program = 'public' OR r.program IS NULL)
        GROUP BY r.id ORDER BY r.created_at DESC, r.id DESC LIMIT 25`
     ).all(),
   });
 }));
 
 // Shared WHERE clause for the registrations table and its export.
+// Always scoped to public registrations (NULL allowed for pre-migration rows)
+// so Blue Elite rows never appear in the original admin table.
 function registrationFilters(query) {
-  const where = [];
+  const where = ["(r.program = 'public' OR r.program IS NULL)"];
   const params = {};
   for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name"]) {
     if (query[col]) { where.push(`r.${col} = @${col}`); params[col] = String(query[col]); }

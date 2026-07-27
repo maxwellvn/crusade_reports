@@ -11,7 +11,8 @@ const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 // Registration progress must compare like with like: a registered crusade is
 // "held" only after a report has been submitted for that exact item. General
 // reports without a registration_item_id still belong in outcome totals, but
-// never in planned-vs-held progress.
+// never in planned-vs-held progress. Scoped to program='public' (NULL allowed
+// for pre-migration rows) so Blue Elite registrations don't appear here.
 const REGISTRATION_DIMENSIONS = new Set(["event_type", "organization_type", "zone", "network_name", "country", "city"]);
 export function registrationProgress(column) {
   if (!REGISTRATION_DIMENSIONS.has(column)) throw new Error(`Unsupported registration dimension: ${column}`);
@@ -24,7 +25,8 @@ export function registrationProgress(column) {
             COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
      FROM registration_items ri
      LEFT JOIN crusades c ON c.registration_item_id = ri.id
-     WHERE ${qualified} IS NOT NULL AND TRIM(${qualified}) <> ''
+     WHERE (ri.program = 'public' OR ri.program IS NULL)
+       AND ${qualified} IS NOT NULL AND TRIM(${qualified}) <> ''
      GROUP BY ${qualified}
      ORDER BY planned DESC, key COLLATE NOCASE`
   ).all();
@@ -68,6 +70,8 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
        FROM crusades GROUP BY key ORDER BY key`
     ).all(),
     // Planned vs held uses only reports linked to the exact registered item.
+    // Scoped to public registrations so Blue Elite rows stay out of the existing
+    // dashboard's progress numbers.
     registered: {
       ...db.prepare(
         `SELECT COALESCE(SUM(ri.planned_count), 0) AS total,
@@ -77,7 +81,8 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
                 COALESCE(SUM(ri.planned_count), 0) - COUNT(c.id) AS awaiting,
                 COALESCE(SUM(CASE WHEN ri.readiness_status = 'ready' THEN ri.planned_count ELSE 0 END), 0) AS ready
          FROM registration_items ri
-         LEFT JOIN crusades c ON c.registration_item_id = ri.id`
+         LEFT JOIN crusades c ON c.registration_item_id = ri.id
+         WHERE (ri.program = 'public' OR ri.program IS NULL)`
       ).get(),
       by_type: registrationProgress("event_type"),
       by_org_type: registrationProgress("organization_type"),

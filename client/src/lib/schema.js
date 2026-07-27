@@ -122,6 +122,44 @@ export const registrationDefaults = {
   items: [],
 };
 
+// ---- Loveworld Blue Elite staff registration ------------------------------
+// Mirrors server/validation.js#blueEliteRegistrationSchema. Org side is fixed
+// (zone + group + church, no cell/network selector), KingsChat username and
+// department are required, and the per-crusade shape is identical to the public
+// registration. Server is the source of truth; this is UX.
+export const blueEliteRegistrationSchema = z
+  .object({
+    organization_type: z.literal("church").default("church"),
+    zone: z.string().min(1, "Zone is required"),
+    group_name: z.string().min(1, "Group is required"),
+    church_name: z.string().min(1, "Church name is required"),
+    cell_name: z.string().optional().default(""),
+    network_name: z.string().optional().default(""),
+    contact_name: z.string().trim().min(2, "Staff name is required").max(200),
+    contact_email: z.string().trim().email("Enter a valid email address").max(254),
+    phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
+    phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+    kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
+    department: z.string().trim().min(2, "Department is required").max(200),
+    items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
+  });
+
+export const blueEliteRegistrationDefaults = {
+  organization_type: "church",
+  zone: "",
+  group_name: "",
+  church_name: "",
+  cell_name: "",
+  network_name: "",
+  contact_name: "",
+  contact_email: "",
+  phone_country_code: "",
+  phone_number: "",
+  kingschat_username: "",
+  department: "",
+  items: [],
+};
+
 export const defaultValues = {
   organization_type: "",
   zone: "",

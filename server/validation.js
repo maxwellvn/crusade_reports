@@ -149,3 +149,31 @@ export const registrationCrusadeEditSchema = z
   .superRefine((d, ctx) => {
     if (d.status === "not_holding" && d.feedback.length < 3) issue(ctx, ["feedback"], "Tell us why the crusade is not holding, including any challenges.");
   });
+
+// ---- Loveworld Blue Elite staff registration -------------------------------
+// Same per-crusade shape as the public registration, but the org side is fixed:
+// Blue Elite staff always identify a zone + group + church (no cell, no network),
+// and they must supply a department and a KingsChat username. Reuses the
+// existing contact_name column for the staff member's name.
+
+const blueEliteContactFields = {
+  contact_name: z.string().trim().min(2, "Staff name is required").max(200),
+  contact_email: z.string().trim().email("Enter a valid email address").max(254),
+  phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
+  department: z.string().trim().min(2, "Department is required").max(200),
+};
+
+export const blueEliteRegistrationSchema = z
+  .object({
+    // Fixed internally; the form does not expose an org-type selector.
+    organization_type: z.literal("church").default("church"),
+    zone: z.string().trim().min(1, "Zone is required"),
+    group_name: z.string().trim().min(1, "Group is required"),
+    church_name: z.string().trim().min(1, "Church name is required"),
+    cell_name: z.string().trim().optional().default(""),
+    network_name: z.string().trim().optional().default(""),
+    ...blueEliteContactFields,
+    items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
+  });

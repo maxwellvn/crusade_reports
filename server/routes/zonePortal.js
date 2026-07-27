@@ -80,7 +80,8 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     SELECT r.id, r.created_at, r.organization_type, r.group_name, r.church_name, r.country, r.plan_date,
            COALESCE(SUM(i.planned_count), 0) AS planned
     FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
-    WHERE r.${col} = ? GROUP BY r.id ORDER BY r.created_at DESC LIMIT 500
+    WHERE r.${col} = ? AND (r.program = 'public' OR r.program IS NULL)
+    GROUP BY r.id ORDER BY r.created_at DESC LIMIT 500
   `).all(name);
 
   const items = db.prepare(`
@@ -102,7 +103,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     FROM registration_items
     LEFT JOIN registrations reg ON reg.id = registration_items.registration_id
     LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
-    WHERE ${listWhere("registration_items.")}
+    WHERE ${listWhere("registration_items.")} AND (registration_items.program = 'public' OR registration_items.program IS NULL)
     ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
   `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
 
@@ -114,7 +115,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
 
   const totals = {
-    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${col} = ?`).get(name).n,
+    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${col} = ? AND (program = 'public' OR program IS NULL)`).get(name).n,
     held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${col} = ?`).get(name).n,
     attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${col} = ?`).get(name).n,
     salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${col} = ?`).get(name).n,
