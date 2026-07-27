@@ -77,12 +77,15 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
     by_church: by("church_name", "WHERE church_name IS NOT NULL"),
     by_cell: by("cell_name", "WHERE cell_name IS NOT NULL"),
     by_network: db.prepare(
-      `SELECT CASE WHEN LOWER(zone) LIKE 'blw%' OR event_type = 'youths-aglow' THEN ? ELSE network_name END AS key,
-              COUNT(*) AS crusades, SUM(attendance) AS attendance,
-              SUM(online_participation) AS online_attendance, SUM(salvation) AS salvation
-       FROM crusades
-       WHERE network_name IS NOT NULL OR LOWER(zone) LIKE 'blw%' OR event_type = 'youths-aglow'
-       GROUP BY key ORDER BY (SUM(attendance) + SUM(online_participation)) DESC`
+      `SELECT CASE WHEN LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow' THEN ? ELSE i.network_name END AS key,
+              COALESCE(SUM(i.planned_count), 0) AS crusades,
+              COALESCE(SUM(i.expected_attendance), 0) AS attendance,
+              0 AS online_attendance,
+              0 AS salvation
+       FROM registration_items i
+       WHERE (i.program = 'public' OR i.program IS NULL)
+         AND (i.network_name IS NOT NULL OR LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow')
+       GROUP BY key ORDER BY crusades DESC`
     ).all(YOUTHS_AGLOW),
     by_country: by("country"),
     by_city: by("city"),

@@ -252,8 +252,11 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
     ).all(),
     by_network: db.prepare(
-      `SELECT network_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND network_name IS NOT NULL GROUP BY network_name ORDER BY planned DESC`
+      `SELECT CASE WHEN LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow' THEN 'Youths Aglow' ELSE i.network_name END AS key,
+              SUM(i.planned_count) AS planned, COUNT(DISTINCT i.registration_id) AS registrations
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
+         AND (i.network_name IS NOT NULL OR LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow')
+       GROUP BY key ORDER BY planned DESC`
     ).all(),
     by_group: db.prepare(
       `SELECT group_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
