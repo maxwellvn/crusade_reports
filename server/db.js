@@ -13,6 +13,7 @@ export const METRIC_FIELDS = [
   "salvation", "holy_spirit_filled", "water_baptisms", "ror_distributed", "bibles_distributed",
   "online_participation", "radio_tv_reach", "testimonies_recorded", "tap2read_distributed",
   "ntyba_distributed", "healing_nations_magazine",
+  "rabah_crusades", "rabah_people_reached",
 ];
 
 // reports = submitter/context (one submission). crusades = the FACT TABLE: one row
@@ -77,6 +78,8 @@ db.exec(`
     tap2read_distributed     INTEGER NOT NULL DEFAULT 0,
     ntyba_distributed        INTEGER NOT NULL DEFAULT 0,
     healing_nations_magazine INTEGER NOT NULL DEFAULT 0,
+    rabah_crusades           INTEGER NOT NULL DEFAULT 0,
+    rabah_people_reached     INTEGER NOT NULL DEFAULT 0,
 
     minister_name     TEXT,
     venue             TEXT,
@@ -331,6 +334,14 @@ if (!crusadeCols.includes("city_lat")) {
 // one registered crusade. Public reports leave this nullable.
 if (!crusadeCols.includes("registration_item_id")) {
   db.exec("ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
+}
+
+// RABAH crusade metrics — added for the RABAH crusade type.
+if (!crusadeCols.includes("rabah_crusades")) {
+  db.exec(`
+    ALTER TABLE crusades ADD COLUMN rabah_crusades INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE crusades ADD COLUMN rabah_people_reached INTEGER NOT NULL DEFAULT 0;
+  `);
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
 // This backfill must run after the registration_item_id migration above so

@@ -10,6 +10,7 @@ export const ONLINE_TYPES = ["tv", "radio", "social-media", "online", "mystreams
 export const CRUSADE_TYPES = [
   ["mega", "Mega Crusades (4,000+ people)"],
   ["tap2read", "TAP2read Crusades"],
+  ["rabah", "RABAH Crusades"],
   ["youths-aglow", "Youths Aglow Crusades"],
   ["teevolution", "Teevolution Crusades (Teens)"],
   ["say-yes-to-kids", "Say Yes To Kids Crusades"],
@@ -75,10 +76,16 @@ export const EXTENDED_OUTCOMES = [
   ["healing_nations_magazine", "Healing to the Nations Mag."],
 ];
 
+// RABAH-specific outcome fields — shown only when the crusade type is "rabah".
+export const RABAH_OUTCOMES = [
+  ["rabah_crusades", "Number of RABAH Crusades"],
+  ["rabah_people_reached", "People reached per RABAH Cell"],
+];
+
 // Every metric key (used for defaults, totals, import columns).
 // online_participation = ONLINE ATTENDANCE — promoted out of the outcome lists
 // to sit beside onsite attendance, but still a DB metric column.
-export const METRIC_KEYS = ["online_participation", ...CORE_OUTCOMES, ...EXTENDED_OUTCOMES].map((k) => (Array.isArray(k) ? k[0] : k));
+export const METRIC_KEYS = ["online_participation", ...CORE_OUTCOMES, ...EXTENDED_OUTCOMES, ...RABAH_OUTCOMES].map((k) => (Array.isArray(k) ? k[0] : k));
 
 export const emptyCrusade = () => ({
   format: "",

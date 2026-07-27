@@ -16,7 +16,7 @@ import { Combobox } from "@/components/Combobox";
 import { ImportPanel } from "@/components/ImportPanel";
 import { getJSON, postJSON } from "@/lib/api";
 import { reportSchema, defaultValues } from "@/lib/schema";
-import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES, PHONE_CODES, emptyCrusade } from "@/lib/constants";
+import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES, RABAH_OUTCOMES, PHONE_CODES, emptyCrusade } from "@/lib/constants";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import { nfull } from "@/lib/dashboardWidgets";
 import "../landing.css"; // campaign fonts; report theme lives in the .reg-page block
@@ -635,6 +635,19 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, o
           ))}
         </div>
       </div>
+
+      {c.event_type === "rabah" && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">RABAH outcomes <span className="font-normal">(optional — leave blank if none)</span></p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {RABAH_OUTCOMES.map(([key, label]) => (
+              <Field key={key} label={label} error={rowErr[key]?.message}>
+                <Input type="number" min="0" {...register(p(key))} aria-invalid={!!rowErr[key]} />
+              </Field>
+            ))}
+          </div>
+        </div>
+      )}
 
       {warns.length > 0 && (
         <div className="mt-3 flex flex-col gap-1">
