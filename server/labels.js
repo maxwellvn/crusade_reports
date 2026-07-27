@@ -2,7 +2,8 @@
 // separate copy because the client file is browser-only; this powers CSV/XLSX exports.
 
 export const CRUSADE_TYPE_LABELS = {
-  mega: "Mega Crusades (4,000+ people)", tap2read: "TAP2read Crusades", "youths-aglow": "Youths Aglow Crusades",
+  mega: "Mega Crusades (4,000+ people)", tap2read: "TAP2read Crusades", rabah: "RABAH Crusades",
+  "youths-aglow": "Youths Aglow Crusades",
   teevolution: "Teevolution Crusades (Teens)", "say-yes-to-kids": "Say Yes To Kids Crusades",
   nolb: "No One Left Behind Crusades", "leading-ladies": "Leading Ladies Crusades", "mighty-men": "Mighty Men Crusades",
   professionals: "Specialized Crusades to Professionals", tv: "TV Crusades", radio: "Radio Crusades",
@@ -22,6 +23,7 @@ export const METRIC_LABELS = {
   online_participation: "Online Participation", radio_tv_reach: "Radio/TV Reach",
   testimonies_recorded: "Testimonies Recorded", tap2read_distributed: "TAP2read Distributed",
   ntyba_distributed: "NTYBA Distributed", healing_nations_magazine: "Healing to the Nations Magazine",
+  rabah_crusades: "Number of RABAH Crusades", rabah_people_reached: "People reached per RABAH Cell",
 };
 
 export const FORMAT_LABELS = { physical: "Physical", online: "Online" };

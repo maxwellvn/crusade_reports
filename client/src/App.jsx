@@ -4,6 +4,7 @@ import { ReportForm } from "@/components/ReportForm";
 import { Dashboard } from "@/components/Dashboard";
 import { WidgetDetail } from "@/components/WidgetDetail";
 import { CrusadesTable } from "@/components/CrusadesTable";
+import { EditCrusadePage } from "@/components/EditCrusadePage";
 import { RegistrationsLive } from "@/components/RegistrationsLive";
 import { RegistrationsTable } from "@/components/RegistrationsTable";
 import { ZoneLinks } from "@/components/ZoneLinks";
@@ -179,6 +180,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
+          <Route path="/crusades/:id/edit" element={<SuperAdminRoute><EditCrusadePage /></SuperAdminRoute>} />
           <Route path="/registrations" element={<RegistrationsTable />} />
           <Route path="/registrations/live" element={<RegistrationsLive />} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />

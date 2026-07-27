@@ -122,3 +122,69 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
 crusades.delete("/:id", requireSuperAdmin, wrap((req, res) => {
   res.json(deleteCrusadeReport(req.params.id));
 }));
+
+// ---- Super-admin edit: full crusade + report fields ---------------------------
+
+const CRUSADE_EDIT_COLS = [
+  "format", "event_type", "other_event_type", "event_name", "city", "city_place_id",
+  "country", "event_date", "attendance", "minister_name", "venue",
+  "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
+  ...METRIC_FIELDS,
+];
+const REPORT_EDIT_COLS = [
+  "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username",
+  "highlights", "media_links",
+];
+
+// GET /api/crusades/:id/edit — full crusade + report data for the edit form.
+crusades.get("/:id/edit", requireSuperAdmin, wrap((req, res) => {
+  const row = db.prepare(`
+    SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
+           r.kingschat_username, r.highlights, r.media_links
+    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
+  `).get(req.params.id);
+  if (!row) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+  res.json(row);
+}));
+
+// PUT /api/crusades/:id — super admin updates all editable crusade + report fields.
+crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
+  const existing = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(req.params.id);
+  if (!existing) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+
+  const body = req.body || {};
+  const crusadeSet = [];
+  const crusadeVals = [];
+  for (const col of CRUSADE_EDIT_COLS) {
+    if (col in body) {
+      crusadeSet.push(`${col} = ?`);
+      crusadeVals.push(body[col]);
+    }
+  }
+  const reportSet = [];
+  const reportVals = [];
+  for (const col of REPORT_EDIT_COLS) {
+    if (col in body) {
+      reportSet.push(`${col} = ?`);
+      reportVals.push(body[col]);
+    }
+  }
+
+  db.transaction(() => {
+    if (crusadeSet.length) {
+      crusadeVals.push(req.params.id);
+      db.prepare(`UPDATE crusades SET ${crusadeSet.join(", ")} WHERE id = ?`).run(...crusadeVals);
+    }
+    if (reportSet.length && existing.report_id) {
+      reportVals.push(existing.report_id);
+      db.prepare(`UPDATE reports SET ${reportSet.join(", ")} WHERE id = ?`).run(...reportVals);
+    }
+  })();
+
+  const updated = db.prepare(`
+    SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
+           r.kingschat_username, r.highlights, r.media_links
+    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
+  `).get(req.params.id);
+  res.json(updated);
+}));

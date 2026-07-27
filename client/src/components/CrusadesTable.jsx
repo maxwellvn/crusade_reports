@@ -1,7 +1,7 @@
 import * as React from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, X, Search, Download, FileSpreadsheet } from "lucide-react";
+import { Trash2, X, Search, Download, FileSpreadsheet, Pencil } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ const PAGE_SIZE = 50;
 // Reached directly (nav link) or by clicking a breakdown row on the dashboard.
 export function CrusadesTable() {
   const admin = useAdmin();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
   const [deleting, setDeleting] = React.useState(null);
@@ -211,9 +212,14 @@ export function CrusadesTable() {
                     <td className="max-w-32 truncate py-2">{r.venue}</td>
                     {admin?.is_super_admin && (
                       <td className="py-2 pl-3">
-                        <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
-                          <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => navigate(`/crusades/${r.id}/edit`)}>
+                            <Pencil /> Edit
+                          </Button>
+                          <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
+                            <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
+                          </Button>
+                        </div>
                       </td>
                     )}
                   </tr>
