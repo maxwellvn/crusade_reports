@@ -97,10 +97,11 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   };
   const listParams = mappedType ? [name, mappedType] : [name];
 
-  // Totals scope: Youths Aglow includes BLW campus/region zone rows; everyone
-  // else uses strict ${col} = ? (own rows only).
+  // Totals scope: Youths Aglow includes BLW campus/region zone rows AND any
+  // crusade with event_type='youths-aglow' from any zone; everyone else uses
+  // strict ${col} = ? (own rows only).
   const totalsWhere = isYouthsAglow
-    ? `(${col} = ? OR (zone IS NOT NULL AND ${blwCampusZoneMatch()}))`
+    ? `(${col} = ? OR (zone IS NOT NULL AND ${blwCampusZoneMatch()}) OR event_type = 'youths-aglow')`
     : `${col} = ?`;
 
   const registrationsWhere = isYouthsAglow
