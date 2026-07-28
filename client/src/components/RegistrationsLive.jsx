@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
 import { getJSON, putJSON } from "@/lib/api";
 import { GeoMap, BarH, nfull, orgHierarchy, typeLabel, Empty, StatTile } from "@/lib/dashboardWidgets";
+import { groupByContinent } from "@/lib/continents";
 
 const POLL_MS = 10000;
 const LS_KEY = "crusades-live-registrations-v1";
@@ -21,6 +22,7 @@ const KPI_TONES = {
   cities_count: "bg-sky-50/80 [&_.stat-value]:!text-sky-700",
   expected_attendance: "bg-cyan-50/80 [&_.stat-value]:!text-cyan-700",
   countries_count: "bg-indigo-50/80 [&_.stat-value]:!text-indigo-700",
+  continents_count: "bg-blue-50/80 [&_.stat-value]:!text-blue-700",
   confirmed: "bg-teal-50/80 [&_.stat-value]:!text-teal-700",
   reports_submitted: "bg-green-50/80 [&_.stat-value]:!text-green-700",
   awaiting_reports: "bg-amber-50/90 [&_.stat-value]:!text-amber-700",
@@ -31,7 +33,7 @@ const READINESS_LABELS = {
 };
 const titleCase = (value) => value ? value[0].toUpperCase() + value.slice(1) : "—";
 const bars = (rows, label = (value) => value) => (rows || []).map((row) => ({
-  key: row.key, label: label(row.key), value: row.planned || 0, sub: `${row.registrations || 0} reg`,
+  key: row.key, label: label(row.key), value: row.planned || 0, sub: `${row.planned || 0} crusade${(row.planned || 0) === 1 ? "" : "s"}`,
 }));
 
 function timeAgo(sqliteUtc) {
@@ -44,13 +46,14 @@ function timeAgo(sqliteUtc) {
 
 const LIVE_WIDGETS = {
   planned: { title: "Crusades planned", kpi: true, filter: {}, render: (d) => <StatTile label="Crusades planned" value={nfull.format(d.totals.planned)} /> },
-  organizations: { title: "Registrations", kpi: true, filter: {}, render: (d) => <StatTile label="Registrations" value={nfull.format(d.totals.registrations)} /> },
+  organizations: { title: "Crusades", kpi: true, filter: {}, render: (d) => <StatTile label="Crusades" value={nfull.format(d.totals.planned)} /> },
   zones_count: { title: "Zones registered", kpi: true, filter: {}, render: (d) => <StatTile label="Zones" value={nfull.format(d.totals.zones)} /> },
   groups_count: { title: "Groups registered", kpi: true, filter: {}, render: (d) => <StatTile label="Groups" value={nfull.format(d.totals.groups)} /> },
   churches_count: { title: "Churches registered", kpi: true, filter: {}, render: (d) => <StatTile label="Churches" value={nfull.format(d.totals.churches)} /> },
   cells_count: { title: "Cells registered", kpi: true, filter: {}, render: (d) => <StatTile label="Cells" value={nfull.format(d.totals.cells)} /> },
   networks_count: { title: "Networks registered", kpi: true, filter: {}, render: (d) => <StatTile label="Networks" value={nfull.format(d.totals.networks)} /> },
   countries_count: { title: "Countries", kpi: true, filter: {}, render: (d) => <StatTile label="Countries" value={nfull.format(d.totals.countries)} /> },
+  continents_count: { title: "Continents", kpi: true, filter: {}, render: (d) => <StatTile label="Continents" value={nfull.format(groupByContinent(d.by_country).length)} /> },
   cities_count: { title: "Cities", kpi: true, filter: {}, render: (d) => <StatTile label="Cities" value={nfull.format(d.totals.cities)} /> },
   expected_attendance: { title: "Expected attendance", kpi: true, filter: {}, render: (d) => <StatTile label="Expected attendance" value={nfull.format(d.totals.expected_attendance)} /> },
   confirmed: { title: "Confirmed crusades", kpi: true, filter: { readiness_status: "confirmed" }, render: (d) => <StatTile label="Confirmed crusades" value={nfull.format(d.totals.confirmed)} /> },
@@ -78,6 +81,7 @@ const LIVE_WIDGETS = {
   },
   types: { title: "Planned by crusade type", filter: "event_type", render: (d, x, go) => <BarH rows={bars(d.by_type, typeLabel)} expanded={x} onRowClick={(row) => go("event_type", row.key)} /> },
   countries: { title: "Registrations by country", filter: "country", render: (d, x, go) => <BarH rows={bars(d.by_country)} expanded={x} onRowClick={(row) => go("country", row.key)} /> },
+  continents: { title: "Crusades by continent", render: (d, x) => <BarH rows={bars(groupByContinent(d.by_country))} expanded={x} /> },
   zones: { title: "Registrations by zone", filter: "zone", render: (d, x, go) => <BarH rows={bars(d.by_zone)} expanded={x} onRowClick={(row) => go("zone", row.key)} /> },
   groups: { title: "Registrations by group", filter: "group_name", render: (d, x, go) => <BarH rows={bars(d.by_group)} expanded={x} onRowClick={(row) => go("group_name", row.key)} /> },
   churches: { title: "Registrations by church", filter: "church_name", render: (d, x, go) => <BarH rows={bars(d.by_church)} expanded={x} onRowClick={(row) => go("church_name", row.key)} /> },
