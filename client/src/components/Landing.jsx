@@ -176,6 +176,7 @@ function Countdown() {
       <div className="countdown-glow" aria-hidden="true" />
       <span className="eyebrow">Save the date · 29 August</span>
       <h2 className="countdown-title">A Night of a Thousand Crusades</h2>
+      <p className="countdown-edition">The Continents &amp; Nations Edition</p>
       <div className="countdown-grid" ref={gridRef}>
         {units.map(([label, value]) => (
           <div className="cd-box" key={label}>
@@ -239,6 +240,9 @@ export function Landing() {
         // ---- Hero intro (plays as the loader dissolves) ----
         const intro = gsap.timeline({ defaults: { ease: spring }, delay: 0.5 });
         intro
+          .fromTo(".edition-badge",
+            { autoAlpha: 0, y: 20, scale: 0.9, filter: blur(8) },
+            { autoAlpha: 1, y: 0, scale: 1, filter: blur(0), duration: 0.7, clearProps: "filter" })
           .fromTo(".site-header",
             { autoAlpha: 0, y: -55, filter: blur(8) },
             { autoAlpha: 1, y: 0, filter: blur(0), duration: 0.9, clearProps: "filter" })
@@ -359,6 +363,7 @@ export function Landing() {
         </header>
 
         <div className="hero-content">
+          <span className="edition-badge">Continents &amp; Nations Edition</span>
           <h1>Rhapsody End-Time Teaching<br /><em aria-live="polite">{heroWord}<span className="type-caret" aria-hidden="true" /></em></h1>
           <div className="hero-sub">
             <h2>A Night of a Thousand Crusades</h2>
@@ -402,7 +407,7 @@ export function Landing() {
       {/* ===== Footer ===== */}
       <footer className="site-footer">
         <div className="footer-cta">
-          <span className="eyebrow">One night. Thousands of crusades.</span>
+          <span className="eyebrow">Continents &amp; Nations Edition</span>
           <h2 className="footer-tagline">Reaching the whole world in one night.</h2>
           <p className="footer-cta-sub">Register your crusade and join the global tally — appear on the live map across nations and continents of the world.</p>
           <RegisterButton className="btn-lg">Register your crusades</RegisterButton>
