@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
+import anime from "animejs/lib/anime.es.js";
 import "../landing.css";
 
 // Public campaign page — A Night of a Thousand Crusades.
@@ -123,6 +124,71 @@ function CookiePrompt() {
   );
 }
 
+// Countdown to A Night of a Thousand Crusades — 29 August (the next one; rolls to
+// next year once this year's has passed). anime.js staggers the boxes in and
+// pulses the seconds each tick. Static under reduced-motion.
+function nextAug29() {
+  const now = new Date();
+  const thisYear = new Date(now.getFullYear(), 7, 29, 0, 0, 0); // month 7 = August
+  return thisYear.getTime() > now.getTime() ? thisYear : new Date(now.getFullYear() + 1, 7, 29, 0, 0, 0);
+}
+
+function timeLeft(target) {
+  const ms = Math.max(0, target - Date.now());
+  return {
+    days: Math.floor(ms / 86400000),
+    hours: Math.floor((ms % 86400000) / 3600000),
+    minutes: Math.floor((ms % 3600000) / 60000),
+    seconds: Math.floor((ms % 60000) / 1000),
+  };
+}
+
+function Countdown() {
+  const target = React.useRef(nextAug29()).current;
+  const [t, setT] = React.useState(() => timeLeft(target));
+  const gridRef = React.useRef(null);
+  const secondsRef = React.useRef(null);
+  const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  React.useEffect(() => {
+    const id = setInterval(() => setT(timeLeft(target)), 1000);
+    return () => clearInterval(id);
+  }, [target]);
+
+  React.useEffect(() => {
+    if (!gridRef.current || reduced()) return;
+    anime({
+      targets: gridRef.current.querySelectorAll(".cd-box"),
+      translateY: [28, 0], opacity: [0, 1], scale: [0.92, 1],
+      delay: anime.stagger(110), duration: 750, easing: "easeOutExpo",
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!secondsRef.current || reduced()) return;
+    anime({ targets: secondsRef.current, scale: [1.16, 1], duration: 450, easing: "easeOutElastic(1, .6)" });
+  }, [t.seconds]);
+
+  const units = [["Days", t.days], ["Hours", t.hours], ["Minutes", t.minutes], ["Seconds", t.seconds]];
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    <section className="countdown" aria-label="Countdown to A Night of a Thousand Crusades">
+      <div className="countdown-glow" aria-hidden="true" />
+      <span className="eyebrow">Save the date · 29 August</span>
+      <h2 className="countdown-title">A Night of a Thousand Crusades</h2>
+      <p className="countdown-edition">The Continents &amp; Nations Edition</p>
+      <div className="countdown-grid" ref={gridRef}>
+        {units.map(([label, value]) => (
+          <div className="cd-box" key={label}>
+            <span className="cd-num" ref={label === "Seconds" ? secondsRef : undefined}>{pad(value)}</span>
+            <span className="cd-label">{label}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function Landing() {
   const [navOpen, setNavOpen] = React.useState(false);
   const closeNav = () => setNavOpen(false);
@@ -174,6 +240,9 @@ export function Landing() {
         // ---- Hero intro (plays as the loader dissolves) ----
         const intro = gsap.timeline({ defaults: { ease: spring }, delay: 0.5 });
         intro
+          .fromTo(".edition-badge",
+            { autoAlpha: 0, y: 20, scale: 0.9, filter: blur(8) },
+            { autoAlpha: 1, y: 0, scale: 1, filter: blur(0), duration: 0.7, clearProps: "filter" })
           .fromTo(".site-header",
             { autoAlpha: 0, y: -55, filter: blur(8) },
             { autoAlpha: 1, y: 0, filter: blur(0), duration: 0.9, clearProps: "filter" })
@@ -294,6 +363,7 @@ export function Landing() {
         </header>
 
         <div className="hero-content">
+          <span className="edition-badge">Continents &amp; Nations Edition</span>
           <h1>Rhapsody End-Time Teaching<br /><em aria-live="polite">{heroWord}<span className="type-caret" aria-hidden="true" /></em></h1>
           <div className="hero-sub">
             <h2>A Night of a Thousand Crusades</h2>
@@ -309,6 +379,9 @@ export function Landing() {
         </div>
       </section>
 
+      {/* ===== Countdown (right after the hero) ===== */}
+      <Countdown />
+
       {/* ===== How to Register ===== */}
       <section id="register" className="how-to">
         <h2>How to register</h2>
@@ -316,7 +389,7 @@ export function Landing() {
 
         <ol className="steps">
           {[
-            ["Tell us who you are", "Register as a zone, group, church or network, and pick your country and plan date."],
+            ["Tell us who you are", "Register as a zone, group, church or network."],
             ["Break it down by type", "Mega crusades, street crusades, medical outreaches… state how many of each — and the cities, if you know them."],
             ["Submit and be counted", "Your crusades join the global tally instantly and appear on the live map."],
           ].map(([title, body], i) => (
@@ -334,7 +407,7 @@ export function Landing() {
       {/* ===== Footer ===== */}
       <footer className="site-footer">
         <div className="footer-cta">
-          <span className="eyebrow">One night. Thousands of crusades.</span>
+          <span className="eyebrow">Continents &amp; Nations Edition</span>
           <h2 className="footer-tagline">Reaching the whole world in one night.</h2>
           <p className="footer-cta-sub">Register your crusade and join the global tally — appear on the live map across nations and continents of the world.</p>
           <RegisterButton className="btn-lg">Register your crusades</RegisterButton>

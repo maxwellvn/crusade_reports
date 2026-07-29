@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -9,34 +9,31 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
-import { CollaboratorPicker, ContributionChecklist } from "@/components/CollaborationFields";
 import { getJSON, postJSON } from "@/lib/api";
-import { registrationSchema, registrationDefaults } from "@/lib/schema";
-import { CRUSADE_TYPES, PERMIT_OPTIONS, PHONE_CODES } from "@/lib/constants";
+import { blueEliteRegistrationSchema, blueEliteRegistrationDefaults } from "@/lib/schema";
+import { CRUSADE_TYPES, PHONE_CODES } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
-import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
+import "../landing.css";
 
-// Public crusade registration — the intent-side twin of the report form.
-// Crusades are added one at a time; each click creates one required detail record.
-// The API still receives individual items, never an unaccounted aggregate.
+// Loveworld Blue Elite staff registration — same per-crusade shape as the public
+// /crusade-registration form, but the organization side is fixed (zone + group +
+// church, no cell/network selector) and staff must supply a department and a
+// KingsChat username. Submissions hit /api/blue-elite/registrations and are
+// tagged program='blue_elite' server-side so they stay out of the public
+// dashboard and the zone portals.
 
 const STEPS = ["Who you are", "Your crusades", "Review"];
-const DRAFT_KEY = "crusade-registration-draft-v1";
+const DRAFT_KEY = "blue-elite-registration-draft-v1";
 const clearStoredDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ } };
 const STEP_FIELDS = [
-  ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
-    "contact_name", "contact_email", "phone_country_code", "phone_number"],
+  ["zone", "group_name", "church_name", "department", "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username"],
   ["items"],
   [],
 ];
 
-// A crusade is "untouched" when none of its own detail fields have been filled.
-// Used to stop a distracted user from stacking blank duplicate forms by clicking
-// "Add another crusade" repeatedly — the previous one must be started first.
 const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "expected_attendance", "country", "city", "minister_name"];
 const isCrusadeUntouched = (item) => !!item && CRUSADE_DETAIL_FIELDS.every((key) => !String(item[key] ?? "").trim());
 
@@ -54,10 +51,7 @@ function MinisterTags({ value = "", onChange, invalid }) {
     }
   }, [value]);
 
-  function update(next) {
-    setTags(next);
-    onChange(next.join(", "));
-  }
+  function update(next) { setTags(next); onChange(next.join(", ")); }
   function add(names = draft) {
     const next = [...tags, ...split(names)];
     if (next.length !== tags.length) update(next);
@@ -91,30 +85,19 @@ function MinisterTags({ value = "", onChange, invalid }) {
   );
 }
 
-export function RegistrationForm() {
-  const form = useForm({ resolver: zodResolver(registrationSchema), defaultValues: registrationDefaults, mode: "onBlur" });
+export function BlueEliteRegistrationForm() {
+  const form = useForm({ resolver: zodResolver(blueEliteRegistrationSchema), defaultValues: blueEliteRegistrationDefaults, mode: "onBlur" });
   const { register, handleSubmit, control, watch, getValues, setValue, reset, trigger, formState: { errors, isSubmitting } } = form;
   const draftReady = React.useRef(false);
-  const [searchParams] = useSearchParams();
-  const portalToken = searchParams.get("portal") || "";
-  const [portalScope, setPortalScope] = React.useState(null);
-  const [portalError, setPortalError] = React.useState("");
 
   const [step, setStep] = React.useState(0);
   const [done, setDone] = React.useState(null);
   const [batchType, setBatchType] = React.useState("");
   const [selectedCrusades, setSelectedCrusades] = React.useState([]);
-  const orgType = watch("organization_type");
   const zone = watch("zone");
   const items = watch("items");
 
-  const needsZone = ["zone", "group", "church", "cell"].includes(orgType);
-  const needsGroup = ["group", "church", "cell"].includes(orgType);
-  const needsChurch = ["church", "cell"].includes(orgType);
-  const needsCell = orgType === "cell";
-
-  const { fetchCountries, countryCodeOf, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, clearGroupCache } = useOrgData(zone);
-  // Each crusade carries its own country, so its city search is scoped to that country.
+  const { fetchCountries, countryCodeOf, fetchZones, fetchGroups, clearGroupCache } = useOrgData(zone);
   const cityFetcherFor = React.useCallback((countryName) => {
     const code = countryCodeOf(countryName);
     return async (query) => {
@@ -126,34 +109,20 @@ export function RegistrationForm() {
 
   const totalPlanned = (items || []).length;
 
-  function applyScope(scope) {
-    if (!scope) return;
-    setValue("organization_type", scope.kind === "network" ? "network" : "zone", { shouldValidate: true });
-    setValue("zone", scope.kind === "zone" ? scope.zone : "", { shouldValidate: true });
-    setValue("network_name", scope.kind === "network" ? scope.zone : "", { shouldValidate: true });
-  }
-
   React.useEffect(() => {
     try {
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
       if (draft?.values && typeof draft.values === "object") {
-        reset({ ...registrationDefaults, ...draft.values, items: Array.isArray(draft.values.items) ? draft.values.items : [] });
+        reset({ ...blueEliteRegistrationDefaults, ...draft.values, items: Array.isArray(draft.values.items) ? draft.values.items : [] });
         setStep(Math.min(Math.max(Number(draft.step) || 0, 0), STEPS.length - 1));
         setBatchType(draft.batchType || "");
-        toast.success("Your saved registration draft has been restored.");
+        toast.success("Your saved Blue Elite draft has been restored.");
       }
     } catch {
       clearStoredDraft();
     }
     draftReady.current = true;
   }, [reset]);
-
-  React.useEffect(() => {
-    if (!portalToken) return;
-    getJSON(`/zone-portal/${encodeURIComponent(portalToken)}`)
-      .then((scope) => { setPortalScope(scope); applyScope(scope); })
-      .catch((error) => setPortalError(error.message));
-  }, [portalToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!draftReady.current || done) return;
@@ -172,7 +141,6 @@ export function RegistrationForm() {
     return () => { clearTimeout(timer); subscription.unsubscribe(); };
   }, [watch, getValues, step, batchType, done]);
 
-  // ---- Handlers --------------------------------------------------------------
   async function next() {
     const ok = await trigger(STEP_FIELDS[step]);
     if (!ok) return toast.error("Please fix the highlighted fields.");
@@ -202,8 +170,6 @@ export function RegistrationForm() {
       return;
     }
     if (itemArray.fields.length >= 500) return toast.error("Maximum of 500 crusades per registration.");
-    // Each crusade is a distinct event, not a copy. Refuse to add another while the
-    // last one is still blank, so repeated clicks don't quietly pile up duplicates.
     const current = getValues("items") || [];
     const lastIndex = current.length - 1;
     if (lastIndex >= 0 && isCrusadeUntouched(current[lastIndex])) {
@@ -213,12 +179,8 @@ export function RegistrationForm() {
     }
     itemArray.append({
       event_type: type, event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", country: "", city: "", city_place_id: "",
-      crusade_collaborators: [], zone_contribution: [],
-      estimated_budget: "", rhapsody_copies_confirmed: "", permits_obtained: "", media_coverage_plan: "",
     });
     toast.success(`${typeLabel(type)} detail form added.`);
-    // Reset the type selector so the user consciously picks the type for the
-    // next crusade instead of silently stacking the same type.
     setBatchType("");
   }
 
@@ -232,7 +194,7 @@ export function RegistrationForm() {
   async function onSubmit(data) {
     if (step !== STEPS.length - 1) return;
     try {
-      await postJSON("/registrations", { ...data, portal_token: portalToken || undefined });
+      await postJSON("/blue-elite/registrations", data);
       clearStoredDraft();
       setDone({ planned: totalPlanned });
       window.scrollTo({ top: 0 });
@@ -243,75 +205,61 @@ export function RegistrationForm() {
 
   function registerAnother() {
     clearStoredDraft();
-    reset(registrationDefaults);
+    reset(blueEliteRegistrationDefaults);
     setBatchType("");
     setSelectedCrusades([]);
     setStep(0);
     setDone(null);
-    applyScope(portalScope);
   }
 
   function discardDraft() {
     clearStoredDraft();
-    reset(registrationDefaults);
+    reset(blueEliteRegistrationDefaults);
     setBatchType("");
     setSelectedCrusades([]);
     setStep(0);
-    applyScope(portalScope);
     toast.success("Saved draft cleared.");
   }
 
   return (
     <div className="reg-page">
-      {/* Pill header, campaign style */}
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
-          <Link to="/crusade-registration" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" className="h-8 w-auto" />
-            <span className="hidden text-sm font-semibold sm:block">A Night of a Thousand Crusades</span>
+          <Link to="/blue-elite" className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="Loveworld Blue Elite" className="h-8 w-auto" />
+            <span className="hidden text-sm font-semibold sm:block">Loveworld Blue Elite — Crusade Registration</span>
           </Link>
-          <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer"
-            className="reg-header-link inline-flex items-center gap-1 text-sm font-semibold transition-colors">
-            rhapsodycrusades.org <ArrowUpRight className="size-3.5" />
-          </a>
+          <Link to="/blue-elite" className="reg-header-link inline-flex items-center gap-1 text-sm font-semibold transition-colors">
+            Back to landing <ArrowUpRight className="size-3.5" />
+          </Link>
         </div>
       </header>
 
       <main className="reg-main">
        <div className="reg-card">
-        {portalError ? (
-          <div className="space-y-4 py-16 text-center">
-            <h1 className="reg-title text-3xl">This dashboard link is not valid.</h1>
-            <p className="text-sm text-muted-foreground">{portalError}</p>
-          </div>
-        ) : done ? (
+        {done ? (
           <div className="animate-step-in space-y-6 pb-24 text-center motion-reduce:animate-none">
             <span className="mx-auto grid size-16 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="size-8" /></span>
             <h1 className="reg-title text-4xl tracking-[-0.9px]">You’re registered.</h1>
             <p className="mx-auto max-w-md text-muted-foreground">
-              <span className="font-semibold text-foreground">{nfull.format(done.planned)} individual crusades</span> have joined the global tally.
+              <span className="font-semibold text-foreground">{nfull.format(done.planned)} individual crusade{done.planned === 1 ? "" : "s"}</span> from your Blue Elite team have been logged.
               Thank you — now go make them happen.
             </p>
             <div className="flex flex-wrap justify-center gap-3 pt-2">
-              <Button type="button" onClick={registerAnother}>Register another organization</Button>
-              <Button type="button" variant="outline" asChild><Link to="/crusade-registration">Back to campaign page</Link></Button>
+              <Button type="button" onClick={registerAnother}>Register another set</Button>
+              <Button type="button" variant="outline" asChild><Link to="/blue-elite">Back to landing</Link></Button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit(onSubmit, () => toast.error("Please fix the highlighted fields."))} onKeyDown={onFormKeyDown} className="space-y-6 pb-28">
             <div className="space-y-2">
-              <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Crusade Registration</p>
-              <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your crusades.</h1>
+              <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Blue Elite Staff Registration</p>
+              <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your team’s crusades.</h1>
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <p>Your progress is saved automatically in this browser, even while offline.</p>
                 <button type="button" onClick={discardDraft} className="font-medium text-foreground underline underline-offset-4">Discard saved draft</button>
               </div>
             </div>
-
-            {portalScope && <Card><CardContent className="pt-6">
-              <p className="text-sm font-medium">Registering crusades for {portalScope.zone}</p>
-              <p className="text-xs text-muted-foreground">These crusades will be assigned to this {portalScope.kind} dashboard.</p>
-            </CardContent></Card>}
 
             <Stepper steps={STEPS} step={step} />
 
@@ -320,68 +268,46 @@ export function RegistrationForm() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Who is registering?</CardTitle>
-                    <CardDescription>Tell us which organization these crusades belong to.</CardDescription>
+                    <CardDescription>Tell us which Blue Elite team these crusades belong to.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <Field label="Registering as" required error={errors.organization_type?.message}>
-                      <Select {...register("organization_type")} aria-invalid={!!errors.organization_type} disabled={!!portalScope}
-                        onChange={(e) => setValue("organization_type", e.target.value, { shouldValidate: true })}>
-                        <option value="">Select…</option>
-                        <option value="zone">Zone</option>
-                        <option value="group">Group</option>
-                        <option value="church">Church</option>
-                        <option value="cell">Cell</option>
-                        <option value="network">Network</option>
-                      </Select>
-                    </Field>
-
-                    {needsZone && (
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Zone" required error={errors.zone?.message}>
-                          {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="zone" render={({ field }) => (
-                            <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
-                              fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("group_name", ""); clearGroupCache(); }} />
-                          )} />}
-                        </Field>
-                        {needsGroup && (
-                          <Field label="Group" required error={errors.group_name?.message}>
-                            <Controller control={control} name="group_name" render={({ field }) => (
-                              <Combobox value={field.value} invalid={!!errors.group_name} caps disabled={!zone}
-                                placeholder={zone ? "Select group" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
-                                fetcher={fetchGroups} onSelect={(o) => field.onChange(o.label)} />
-                            )} />
-                          </Field>
-                        )}
-                        {needsChurch && (
-                          <Field label="Church name" required error={errors.church_name?.message} className={needsCell ? "" : "sm:col-span-2"}>
-                            <Input {...register("church_name")} aria-invalid={!!errors.church_name} placeholder="e.g. Christ Embassy Lekki" />
-                          </Field>
-                        )}
-                        {needsCell && (
-                          <Field label="Cell name" required error={errors.cell_name?.message}>
-                            <Input {...register("cell_name")} aria-invalid={!!errors.cell_name} placeholder="e.g. Victory Cell" />
-                          </Field>
-                        )}
-                      </div>
-                    )}
-
-                    {orgType === "network" && (
-                      <Field label="Network" required error={errors.network_name?.message}>
-                        {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="network_name" render={({ field }) => (
-                          <Combobox value={field.value} invalid={!!errors.network_name} caps placeholder="Select network" searchPlaceholder="Search networks…"
-                            emptyText="No networks found" fetcher={fetchNetworks} onSelect={(o) => field.onChange(o.value)} />
-                        )} />}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Zone" required error={errors.zone?.message}>
+                        <Controller control={control} name="zone" render={({ field }) => (
+                          <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
+                            fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("group_name", ""); clearGroupCache(); }} />
+                        )} />
                       </Field>
-                    )}
+                      <Field label="Group" required error={errors.group_name?.message}>
+                        <Controller control={control} name="group_name" render={({ field }) => (
+                          <Combobox value={field.value} invalid={!!errors.group_name} caps disabled={!zone}
+                            placeholder={zone ? "Select group" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
+                            fetcher={fetchGroups} onSelect={(o) => field.onChange(o.label)} />
+                        )} />
+                      </Field>
+                      <Field label="Church name" required error={errors.church_name?.message} className="sm:col-span-2">
+                        <Input {...register("church_name")} aria-invalid={!!errors.church_name} placeholder="e.g. Christ Embassy Lekki" />
+                      </Field>
+                    </div>
 
                     <div className="border-t pt-4">
-                      <p className="mb-3 text-sm font-medium">Your contact details</p>
+                      <p className="mb-3 text-sm font-medium">Staff details</p>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Full name" required error={errors.contact_name?.message}>
+                        <Field label="Staff name" required error={errors.contact_name?.message}>
                           <Input autoComplete="name" {...register("contact_name")} aria-invalid={!!errors.contact_name} placeholder="Your full name" />
+                        </Field>
+                        <Field label="Department" required error={errors.department?.message}>
+                          <Select {...register("department")} aria-invalid={!!errors.department}>
+                            <option value="">Select…</option>
+                            <option value="Rhapsody of Realities">Rhapsody of Realities</option>
+                            <option value="Ministry of Publishing">Ministry of Publishing</option>
+                          </Select>
                         </Field>
                         <Field label="Email address" required error={errors.contact_email?.message}>
                           <Input type="email" autoComplete="email" {...register("contact_email")} aria-invalid={!!errors.contact_email} placeholder="you@example.com" />
+                        </Field>
+                        <Field label="KingsChat username" required error={errors.kingschat_username?.message}>
+                          <Input {...register("kingschat_username")} aria-invalid={!!errors.kingschat_username} placeholder="@username" />
                         </Field>
                         <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[120px_1fr]">
                           <Field label="Code" required error={errors.phone_country_code?.message}>
@@ -394,9 +320,6 @@ export function RegistrationForm() {
                             <Input type="tel" autoComplete="tel-national" {...register("phone_number")} aria-invalid={!!errors.phone_number} placeholder="801 234 5678" />
                           </Field>
                         </div>
-                        <Field label="KingsChat username (optional)" error={errors.kingschat_username?.message} className="sm:col-span-2">
-                          <Input {...register("kingschat_username")} aria-invalid={!!errors.kingschat_username} placeholder="@username" />
-                        </Field>
                       </div>
                     </div>
                   </CardContent>
@@ -507,42 +430,6 @@ export function RegistrationForm() {
                               <MinisterTags value={field.value} onChange={field.onChange} invalid={!!rowErr.minister_name} />
                             )} />
                           </Field>
-                          {orgType === "network" && (
-                            <div className="mt-4 space-y-4 border-t border-dashed pt-4">
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Who are the crusade collaborators?" hint="Zones or networks partnering on this crusade">
-                                  <Controller control={control} name={`items.${i}.crusade_collaborators`} render={({ field }) => (
-                                    <CollaboratorPicker value={field.value} onChange={field.onChange} fetcher={fetchCollaborators} />
-                                  )} />
-                                </Field>
-                                <Field label="Zone’s contribution to crusade" hint="Select all that apply">
-                                  <Controller control={control} name={`items.${i}.zone_contribution`} render={({ field }) => (
-                                    <ContributionChecklist value={field.value} onChange={field.onChange} />
-                                  )} />
-                                </Field>
-                              </div>
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Estimated crusade budget" hint="Amount in Espees">
-                                  <div className="flex items-center gap-2">
-                                    <span className="shrink-0 text-sm font-medium text-muted-foreground">Espees</span>
-                                    <Input placeholder="e.g. 2,000,000" {...register(`items.${i}.estimated_budget`)} />
-                                  </div>
-                                </Field>
-                                <Field label="Number of Rhapsody copies confirmed">
-                                  <Input type="number" min="0" placeholder="e.g. 5,000" {...register(`items.${i}.rhapsody_copies_confirmed`)} />
-                                </Field>
-                                <Field label="Have the required permits been obtained? (where applicable)">
-                                  <Select {...register(`items.${i}.permits_obtained`)}>
-                                    <option value="">Select…</option>
-                                    {PERMIT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                                  </Select>
-                                </Field>
-                                <Field label="Specify your media coverage plan" className="sm:col-span-2">
-                                  <Textarea rows={3} maxLength={2000} placeholder="TV, radio, social media, press…" {...register(`items.${i}.media_coverage_plan`)} />
-                                </Field>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -559,20 +446,18 @@ export function RegistrationForm() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Review your registration</CardTitle>
-                    <CardDescription>Check the details, then submit to join the global tally.</CardDescription>
+                    <CardDescription>Check the details, then submit to log your team’s crusades.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-5 text-sm">
                     <div className="grid grid-cols-2 gap-3">
-                      <Summary label="Registering as" value={orgType || "—"} />
-                      {zone && <Summary label="Zone" value={zone} />}
-                      {watch("group_name") && <Summary label="Group" value={watch("group_name")} />}
-                      {watch("church_name") && <Summary label="Church" value={watch("church_name")} />}
-                      {watch("cell_name") && <Summary label="Cell" value={watch("cell_name")} />}
-                      {watch("network_name") && <Summary label="Network" value={watch("network_name")} />}
-                      <Summary label="Contact name" value={watch("contact_name") || "—"} />
+                      <Summary label="Zone" value={watch("zone") || "—"} />
+                      <Summary label="Group" value={watch("group_name") || "—"} />
+                      <Summary label="Church" value={watch("church_name") || "—"} />
+                      <Summary label="Department" value={watch("department") || "—"} />
+                      <Summary label="Staff name" value={watch("contact_name") || "—"} />
+                      <Summary label="KingsChat" value={watch("kingschat_username") || "—"} />
                       <Summary label="Email" value={watch("contact_email") || "—"} />
                       <Summary label="Phone" value={`${watch("phone_country_code") || ""} ${watch("phone_number") || ""}`.trim() || "—"} />
-                      <Summary label="KingsChat" value={watch("kingschat_username") || "—"} />
                       <Summary label="Total crusades" value={nfull.format(totalPlanned)} />
                     </div>
                     <div className="divide-y rounded-lg border">
@@ -582,16 +467,6 @@ export function RegistrationForm() {
                             <span className="truncate">{it.event_name || typeLabel(it.event_type)} · {[it.city, it.country].filter(Boolean).join(", ")} · {it.venue} · {nfull.format(+it.expected_attendance || 0)} expected</span>
                             <span className="shrink-0 tabular-nums text-muted-foreground">{it.event_date}</span>
                           </div>
-                          {it.crusade_collaborators?.length > 0 && (
-                            <div className="mt-1 text-xs text-muted-foreground">Collaborators: {it.crusade_collaborators.join(", ")}</div>
-                          )}
-                          {it.zone_contribution?.length > 0 && (
-                            <div className="mt-0.5 text-xs text-muted-foreground">Contribution: {it.zone_contribution.join(", ")}</div>
-                          )}
-                          {it.estimated_budget && <div className="mt-0.5 text-xs text-muted-foreground">Budget: Espees {it.estimated_budget}</div>}
-                          {it.rhapsody_copies_confirmed && <div className="mt-0.5 text-xs text-muted-foreground">Rhapsody copies: {it.rhapsody_copies_confirmed}</div>}
-                          {it.permits_obtained && <div className="mt-0.5 text-xs text-muted-foreground">Permits obtained: {it.permits_obtained}</div>}
-                          {it.media_coverage_plan && <div className="mt-0.5 text-xs text-muted-foreground">Media plan: {it.media_coverage_plan}</div>}
                         </div>
                       ))}
                     </div>
@@ -600,7 +475,6 @@ export function RegistrationForm() {
               )}
             </div>
 
-            {/* Sticky bar: live total + navigation */}
             <div className="fixed inset-x-0 bottom-0 border-t bg-card/90 backdrop-blur">
               <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
                 <div className="flex items-center gap-4">

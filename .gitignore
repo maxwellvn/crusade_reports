@@ -2,6 +2,7 @@ node_modules
 client/dist
 data/*.sqlite
 data/*.sqlite-*
+data/backups/
 data/zones_cache.json
 .env
 *.log

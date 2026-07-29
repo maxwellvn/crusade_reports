@@ -11,11 +11,34 @@ const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 // Registration progress must compare like with like: a registered crusade is
 // "held" only after a report has been submitted for that exact item. General
 // reports without a registration_item_id still belong in outcome totals, but
-// never in planned-vs-held progress.
+// never in planned-vs-held progress. Scoped to program='public' (NULL allowed
+// for pre-migration rows) so Blue Elite registrations don't appear here.
+//
+// BLW campus/region zones (name starts with "BLW") are relabelled as
+// "Youths Aglow" in the network_name breakdown so their crusades count under
+// Youths Aglow in the admin dashboard widget.
 const REGISTRATION_DIMENSIONS = new Set(["event_type", "organization_type", "zone", "network_name", "country", "city"]);
+const YOUTHS_AGLOW = "Youths Aglow";
 export function registrationProgress(column) {
   if (!REGISTRATION_DIMENSIONS.has(column)) throw new Error(`Unsupported registration dimension: ${column}`);
   const qualified = `ri.${column}`;
+  // For network_name, relabel BLW zone rows and youths-aglow event type rows
+  // as "Youths Aglow" so they count under Youths Aglow in the admin widget.
+  if (column === "network_name") {
+    return db.prepare(
+      `SELECT CASE WHEN LOWER(ri.zone) LIKE 'blw%' OR ri.event_type = 'youths-aglow' THEN ? ELSE ri.network_name END AS key,
+              COALESCE(SUM(ri.planned_count), 0) AS planned,
+              COUNT(ri.id) AS items,
+              COUNT(c.id) AS held,
+              COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
+       FROM registration_items ri
+       LEFT JOIN crusades c ON c.registration_item_id = ri.id
+       WHERE (ri.program = 'public' OR ri.program IS NULL)
+         AND (ri.network_name IS NOT NULL AND TRIM(ri.network_name) <> '' OR LOWER(ri.zone) LIKE 'blw%' OR ri.event_type = 'youths-aglow')
+       GROUP BY key
+       ORDER BY planned DESC, key COLLATE NOCASE`
+    ).all(YOUTHS_AGLOW);
+  }
   return db.prepare(
     `SELECT ${qualified} AS key,
             COALESCE(SUM(ri.planned_count), 0) AS planned,
@@ -24,7 +47,8 @@ export function registrationProgress(column) {
             COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
      FROM registration_items ri
      LEFT JOIN crusades c ON c.registration_item_id = ri.id
-     WHERE ${qualified} IS NOT NULL AND TRIM(${qualified}) <> ''
+     WHERE (ri.program = 'public' OR ri.program IS NULL)
+       AND ${qualified} IS NOT NULL AND TRIM(${qualified}) <> ''
      GROUP BY ${qualified}
      ORDER BY planned DESC, key COLLATE NOCASE`
   ).all();
@@ -52,7 +76,17 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
     by_group: by("group_name", "WHERE group_name IS NOT NULL"),
     by_church: by("church_name", "WHERE church_name IS NOT NULL"),
     by_cell: by("cell_name", "WHERE cell_name IS NOT NULL"),
-    by_network: by("network_name", "WHERE network_name IS NOT NULL"),
+    by_network: db.prepare(
+      `SELECT CASE WHEN LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow' THEN ? ELSE i.network_name END AS key,
+              COALESCE(SUM(i.planned_count), 0) AS crusades,
+              COALESCE(SUM(i.expected_attendance), 0) AS attendance,
+              0 AS online_attendance,
+              0 AS salvation
+       FROM registration_items i
+       WHERE (i.program = 'public' OR i.program IS NULL)
+         AND (i.network_name IS NOT NULL OR LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow')
+       GROUP BY key ORDER BY crusades DESC`
+    ).all(YOUTHS_AGLOW),
     by_country: by("country"),
     by_city: by("city"),
     // Real geocoded city points for the map — no coordinates, no row.
@@ -68,6 +102,8 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
        FROM crusades GROUP BY key ORDER BY key`
     ).all(),
     // Planned vs held uses only reports linked to the exact registered item.
+    // Scoped to public registrations so Blue Elite rows stay out of the existing
+    // dashboard's progress numbers.
     registered: {
       ...db.prepare(
         `SELECT COALESCE(SUM(ri.planned_count), 0) AS total,
@@ -77,7 +113,8 @@ stats.get("/", requireAdmin, wrap((_req, res) => {
                 COALESCE(SUM(ri.planned_count), 0) - COUNT(c.id) AS awaiting,
                 COALESCE(SUM(CASE WHEN ri.readiness_status = 'ready' THEN ri.planned_count ELSE 0 END), 0) AS ready
          FROM registration_items ri
-         LEFT JOIN crusades c ON c.registration_item_id = ri.id`
+         LEFT JOIN crusades c ON c.registration_item_id = ri.id
+         WHERE (ri.program = 'public' OR ri.program IS NULL)`
       ).get(),
       by_type: registrationProgress("event_type"),
       by_org_type: registrationProgress("organization_type"),

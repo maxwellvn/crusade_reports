@@ -37,16 +37,18 @@ test("dashboard edits require full crusade details and expected attendance", () 
 
 test("each new registration item requires individual crusade details", () => {
   const base = {
-    organization_type: "zone", zone: "Test Zone", country: "Nigeria",
+    organization_type: "zone", zone: "Test Zone",
     contact_name: "Test Coordinator", contact_email: "test@example.com",
     phone_country_code: "+234", phone_number: "801 234 5678",
   };
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ event_type: "street", city: "Lagos" }] }).success, false);
   const item = {
     event_type: "street", event_name: "Test Street Crusade", event_date: "2026-07-20",
-    venue: "Test Square", expected_attendance: 500, city: "Lagos", minister_name: "Pastor Test",
+    venue: "Test Square", expected_attendance: 500, country: "Nigeria", city: "Lagos", minister_name: "Pastor Test",
   };
   assert.equal(registrationSchema.safeParse({ ...base, items: [item] }).success, true);
+  // country is per crusade now — a missing country fails validation
+  assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, country: "" }] }).success, false);
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, minister_name: "" }] }).success, false);
 });
 
@@ -90,7 +92,7 @@ test("network planning edits lock once the crusade date has passed", () => {
 
 test("private dashboard report validates one complete registered crusade outcome", () => {
   const crusade = {
-    format: "physical", event_type: "street", event_name: "Lagos Street Crusade", city: "Lagos",
+    format: "physical", event_type: "street", event_name: "Lagos Street Crusade", country: "Nigeria", city: "Lagos",
     city_place_id: "place-1", event_date: "2026-07-20", attendance: 450, minister_name: "Pastor Test",
     venue: "Test Square", salvation: 25,
   };
@@ -101,10 +103,10 @@ test("private dashboard report validates one complete registered crusade outcome
 test("cell reports retain the full zone hierarchy", () => {
   const report = {
     organization_type: "cell", zone: "Lagos Zone 1", group_name: "Lekki Group",
-    church_name: "Christ Embassy Lekki", cell_name: "Victory Cell", country: "Nigeria",
+    church_name: "Christ Embassy Lekki", cell_name: "Victory Cell",
     contact_name: "Test Coordinator", contact_email: "test@example.com",
     phone_country_code: "+234", phone_number: "801 234 5678",
-    crusades: [{ format: "physical", event_type: "street", event_name: "Victory Reach", city: "Lagos",
+    crusades: [{ format: "physical", event_type: "street", event_name: "Victory Reach", country: "Nigeria", city: "Lagos",
       event_date: "2026-07-20", attendance: 50, minister_name: "Pastor Test", venue: "Community Hall" }],
   };
   assert.equal(reportSchema.safeParse(report).success, true);

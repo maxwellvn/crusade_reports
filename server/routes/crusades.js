@@ -2,6 +2,8 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAdmin, requireSuperAdmin } from "../auth.js";
+import { sendExport } from "./exporter.js";
+import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
 
 export const crusades = Router();
 
@@ -20,20 +22,18 @@ export function deleteCrusadeReport(id) {
 // Exact-match filters (dropdown-driven); "city" is substring since it's free text.
 const FILTER_COLS = ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "event_type", "format"];
 
-// GET /api/crusades — paginated, filtered table backing the "All crusades" view.
-crusades.get("/", requireAdmin, wrap((req, res) => {
+// Build the shared WHERE clause for the table and its export, so both apply the
+// exact same filters and free-text search.
+function crusadeFilters(query) {
   const where = [];
   const params = {};
-
   for (const col of FILTER_COLS) {
-    const v = req.query[col];
+    const v = query[col];
     if (v) { where.push(`c.${col} = @${col}`); params[col] = String(v); }
   }
-  if (req.query.city) { where.push("c.city LIKE @city"); params.city = `%${req.query.city}%`; }
-  // Free-text search: each word prefix-matches any field via FTS5 ("lag ben" finds
-  // Lagos + Pastor Benson rows). Quoted per-token so user input can't break MATCH syntax.
-  if (req.query.q) {
-    const match = String(req.query.q).trim().split(/\s+/).slice(0, 8)
+  if (query.city) { where.push("c.city LIKE @city"); params.city = `%${query.city}%`; }
+  if (query.q) {
+    const match = String(query.q).trim().split(/\s+/).slice(0, 8)
       .map((t) => `"${t.replace(/"/g, "")}"*`).join(" ");
     if (match.length > 3) {
       where.push(`(c.id IN (SELECT rowid FROM crusades_fts WHERE crusades_fts MATCH @q)
@@ -41,13 +41,60 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
         OR r.phone_country_code || r.phone_number LIKE @contact_q
         OR r.kingschat_username LIKE @contact_q OR c.cell_name LIKE @contact_q)`);
       params.q = match;
-      params.contact_q = `%${String(req.query.q).trim()}%`;
+      params.contact_q = `%${String(query.q).trim()}%`;
     }
   }
-  if (req.query.date_from) { where.push("event_date >= @date_from"); params.date_from = String(req.query.date_from); }
-  if (req.query.date_to) { where.push("event_date <= @date_to"); params.date_to = String(req.query.date_to); }
+  if (query.date_from) { where.push("event_date >= @date_from"); params.date_from = String(query.date_from); }
+  if (query.date_to) { where.push("event_date <= @date_to"); params.date_to = String(query.date_to); }
+  const minAttendance = parseInt(query.min_attendance, 10);
+  if (Number.isFinite(minAttendance) && minAttendance > 0) {
+    where.push("c.attendance >= @min_attendance"); params.min_attendance = minAttendance;
+  }
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
 
-  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+const CRUSADE_FROM = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id";
+const CRUSADE_EXPORT_SELECT =
+  `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
+          c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
+          c.attendance, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
+          r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username`;
+
+// One column per field a report can carry, in a readable order — attribution,
+// the crusade, every outcome metric, then reporter contact.
+const CRUSADE_EXPORT_COLUMNS = [
+  { header: "Date held", value: (row) => row.event_date },
+  { header: "Crusade name", value: (row) => row.event_name },
+  { header: "Type", value: (row) => typeLabel(row.event_type, row.other_event_type) },
+  { header: "Format", value: (row) => FORMAT_LABELS[row.format] || row.format },
+  { header: "Country", value: (row) => row.country },
+  { header: "City", value: (row) => row.city },
+  { header: "Venue / address", value: (row) => row.venue },
+  { header: "Ministers", value: (row) => row.minister_name },
+  { header: "Reporting level", value: (row) => ORG_TYPE_LABELS[row.organization_type] || row.organization_type },
+  { header: "Zone", value: (row) => row.zone },
+  { header: "Group", value: (row) => row.group_name },
+  { header: "Church", value: (row) => row.church_name },
+  { header: "Cell", value: (row) => row.cell_name },
+  { header: "Network", value: (row) => row.network_name },
+  { header: "Onsite attendance", value: (row) => row.attendance },
+  ...METRIC_FIELDS.map((field) => ({ header: METRIC_LABELS[field] || field, value: (row) => row[field] })),
+  { header: "Contact name", value: (row) => row.contact_name },
+  { header: "Contact email", value: (row) => row.contact_email },
+  { header: "Contact phone", value: (row) => phone(row.phone_country_code, row.phone_number) },
+  { header: "KingsChat", value: (row) => row.kingschat_username },
+];
+
+// GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
+crusades.get("/export", requireAdmin, wrap(async (req, res) => {
+  const { clause, params } = crusadeFilters(req.query);
+  const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY c.event_date DESC, c.id DESC`).all(params);
+  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "crusade-reports", CRUSADE_EXPORT_COLUMNS, rows);
+}));
+
+// GET /api/crusades — paginated, filtered table backing the "All crusades" view.
+crusades.get("/", requireAdmin, wrap((req, res) => {
+  const { clause, params } = crusadeFilters(req.query);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
@@ -74,4 +121,70 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
 
 crusades.delete("/:id", requireSuperAdmin, wrap((req, res) => {
   res.json(deleteCrusadeReport(req.params.id));
+}));
+
+// ---- Super-admin edit: full crusade + report fields ---------------------------
+
+const CRUSADE_EDIT_COLS = [
+  "format", "event_type", "other_event_type", "event_name", "city", "city_place_id",
+  "country", "event_date", "attendance", "minister_name", "venue",
+  "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
+  ...METRIC_FIELDS,
+];
+const REPORT_EDIT_COLS = [
+  "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username",
+  "highlights", "media_links",
+];
+
+// GET /api/crusades/:id/edit — full crusade + report data for the edit form.
+crusades.get("/:id/edit", requireSuperAdmin, wrap((req, res) => {
+  const row = db.prepare(`
+    SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
+           r.kingschat_username, r.highlights, r.media_links
+    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
+  `).get(req.params.id);
+  if (!row) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+  res.json(row);
+}));
+
+// PUT /api/crusades/:id — super admin updates all editable crusade + report fields.
+crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
+  const existing = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(req.params.id);
+  if (!existing) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+
+  const body = req.body || {};
+  const crusadeSet = [];
+  const crusadeVals = [];
+  for (const col of CRUSADE_EDIT_COLS) {
+    if (col in body) {
+      crusadeSet.push(`${col} = ?`);
+      crusadeVals.push(body[col]);
+    }
+  }
+  const reportSet = [];
+  const reportVals = [];
+  for (const col of REPORT_EDIT_COLS) {
+    if (col in body) {
+      reportSet.push(`${col} = ?`);
+      reportVals.push(body[col]);
+    }
+  }
+
+  db.transaction(() => {
+    if (crusadeSet.length) {
+      crusadeVals.push(req.params.id);
+      db.prepare(`UPDATE crusades SET ${crusadeSet.join(", ")} WHERE id = ?`).run(...crusadeVals);
+    }
+    if (reportSet.length && existing.report_id) {
+      reportVals.push(existing.report_id);
+      db.prepare(`UPDATE reports SET ${reportSet.join(", ")} WHERE id = ?`).run(...reportVals);
+    }
+  })();
+
+  const updated = db.prepare(`
+    SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
+           r.kingschat_username, r.highlights, r.media_links
+    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
+  `).get(req.params.id);
+  res.json(updated);
 }));

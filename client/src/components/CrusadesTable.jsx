@@ -1,7 +1,7 @@
 import * as React from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, X, Search } from "lucide-react";
+import { Trash2, X, Search, Download, FileSpreadsheet, Pencil } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ const FILTERS = [
   ["city", "City", "text"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
   ["format", "Format", "select", FORMATS],
+  ["min_attendance", "Min attendance", "number"],
   ["date_from", "From date", "date"],
   ["date_to", "To date", "date"],
 ];
@@ -43,6 +44,7 @@ const PAGE_SIZE = 50;
 // Reached directly (nav link) or by clicking a breakdown row on the dashboard.
 export function CrusadesTable() {
   const admin = useAdmin();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
   const [deleting, setDeleting] = React.useState(null);
@@ -88,21 +90,40 @@ export function CrusadesTable() {
   }
   const { Th } = useTableSort(params, setParams, "event_date");
 
+  // Download every row matching the current filters (cookie authenticates the request).
+  function exportRows(format) {
+    const qs = new URLSearchParams(params);
+    qs.set("format", format);
+    qs.delete("page");
+    const link = Object.assign(document.createElement("a"), { href: `/api/crusades/export?${qs.toString()}` });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
   const activeFilters = FILTERS.filter(([key]) => params.get(key));
 
   // If we arrived by clicking a dashboard breakdown row, show that widget in the trail.
   const fromWidgetId = Object.keys(DRILL_MAP).find((id) => params.get(DRILL_MAP[id].filterField));
-  const crumbs = [{ label: "Dashboard", to: "/dashboard" }];
+  const crumbs = [{ label: "Reports dashboard", to: "/dashboard" }];
   if (fromWidgetId) crumbs.push({ label: WIDGETS[fromWidgetId].title, to: `/dashboard/widget/${fromWidgetId}` });
-  crumbs.push({ label: "All crusades" });
+  crumbs.push({ label: "Reports" });
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <Breadcrumbs items={crumbs} />
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">All crusades</h2>
-        {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold tracking-tight">Reports</h2>
+        <div className="flex items-center gap-2">
+          {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total} title="Export matching rows as CSV">
+            <Download /> CSV
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!data?.total} title="Export matching rows as Excel">
+            <FileSpreadsheet /> Excel
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -122,8 +143,8 @@ export function CrusadesTable() {
                   {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </Select>
               ) : (
-                <Input type={kind} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
-                  placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : undefined} />
+                <Input type={kind} min={kind === "number" ? "0" : undefined} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
+                  placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : kind === "number" ? "e.g. 1000" : undefined} />
               )}
             </Field>
           ))}
@@ -191,9 +212,14 @@ export function CrusadesTable() {
                     <td className="max-w-32 truncate py-2">{r.venue}</td>
                     {admin?.is_super_admin && (
                       <td className="py-2 pl-3">
-                        <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
-                          <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => navigate(`/crusades/${r.id}/edit`)}>
+                            <Pencil /> Edit
+                          </Button>
+                          <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
+                            <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
+                          </Button>
+                        </div>
                       </td>
                     )}
                   </tr>

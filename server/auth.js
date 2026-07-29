@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "./db.js";
 import { ApiError, wrap } from "./logger.js";
+import { getDefaultLandingPage } from "./appSettings.js";
 
 export const auth = Router();
 const COOKIE = "kc_access_token";
@@ -149,20 +150,43 @@ auth.get("/kingschat/login", (req, res) => {
     response_type: "token",
     post_redirect: "true",
   });
+  // ?pm=1 sets a short-lived cookie that tells the callback to auto-add the
+  // signed-in KingsChat username to the dashboard allow list. Lets us share
+  // /admin/pm as a self-service access link without manually approving each user.
+  // sameSite=none + secure is required because KingsChat POSTs the token back
+  // from accounts.kingsch.at — a cross-site POST, which browsers won't carry
+  // sameSite=lax cookies on.
+  if (req.query.pm === "1") {
+    res.cookie("pm_auto_approve", "1", {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true,
+      maxAge: 5 * 60 * 1000,
+      path: "/",
+    });
+  }
   res.redirect(`https://accounts.kingsch.at/?${params}`);
 });
 
 auth.all("/kingschat/callback", wrap(async (req, res) => {
   const token = String(req.body?.accessToken || req.body?.access_token || req.query?.accessToken || req.query?.access_token || "").trim();
-  if (!token) return res.redirect("/dashboard?auth_error=missing_token");
+  const landing = getDefaultLandingPage();
+  if (!token) return res.redirect(`${landing}?auth_error=missing_token`);
   let user;
   try {
     user = await fetchKingsChatProfile(token);
   } catch {
-    return res.redirect("/dashboard?auth_error=kingschat_verification_failed");
+    return res.redirect(`${landing}?auth_error=kingschat_verification_failed`);
+  }
+  // Auto-approve: if the pm_auto_approve cookie is set (from /admin/pm → login?pm=1),
+  // add the signed-in KingsChat username to the allow list before the access check.
+  const pmAutoApprove = cookie(req, "pm_auto_approve") === "1";
+  if (pmAutoApprove) {
+    res.clearCookie("pm_auto_approve", { httpOnly: true, sameSite: "none", secure: true, path: "/" });
+    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, "pm_auto_approve");
   }
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
-    return res.redirect(`/dashboard?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
+    return res.redirect(`${landing}?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
   }
   res.cookie(COOKIE, token, {
     httpOnly: true,
@@ -171,7 +195,7 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
     maxAge: 365 * 24 * 60 * 60 * 1000,
     path: "/",
   });
-  res.redirect("/dashboard");
+  res.redirect(landing);
 }));
 
 auth.get("/me", wrap(async (req, res) => res.json(await authorizedUser(req))));
@@ -179,6 +203,13 @@ auth.get("/me", wrap(async (req, res) => res.json(await authorizedUser(req))));
 auth.post("/logout", (_req, res) => {
   res.clearCookie(COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
   res.json({ ok: true });
+});
+
+// GET logout — clears the session cookie and redirects to the configured landing
+// page. Lets you log out by visiting a URL directly (e.g. /api/auth/logout).
+auth.get("/logout", (_req, res) => {
+  res.clearCookie(COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+  res.redirect(getDefaultLandingPage());
 });
 
 auth.get("/accounts", requireSuperAdmin, (_req, res) => {

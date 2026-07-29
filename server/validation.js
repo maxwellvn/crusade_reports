@@ -19,6 +19,7 @@ const crusade = z
     event_type: z.string().trim().min(1, "Crusade type is required"),
     other_event_type: z.string().trim().optional().default(""),
     event_name: z.string().trim().min(1, "Event name is required"),
+    country: z.string().trim().min(1, "Country is required"),
     city: z.string().trim().min(1, "City is required"),
     city_place_id: z.string().trim().optional().default(""),
     event_date: z.string().trim().min(1, "Event date is required"),
@@ -52,7 +53,9 @@ export const reportSchema = z
     network_name: z.string().trim().optional().default(""),
     network_type: z.preprocess((v) => v || undefined, z.enum(["predefined", "other"]).optional()),
 
-    country: z.string().trim().min(1, "Country is required"),
+    // Country is per crusade now; the report row keeps the first crusade's
+    // country as its primary (column is NOT NULL, drives report-level grouping).
+    country: z.string().trim().optional().default(""),
     ...contactFields,
     crusades: z.array(crusade).min(1, "At least one crusade is required"),
 
@@ -99,6 +102,7 @@ const collaborationFields = {
 const registrationItem = z
   .object({
     ...registrationDetails,
+    country: z.string().trim().min(1, "Country is required"),
     city_place_id: z.string().trim().optional().default(""),
     ...collaborationFields,
   });
@@ -111,7 +115,7 @@ export const registrationSchema = z
     church_name: z.string().trim().optional().default(""),
     cell_name: z.string().trim().optional().default(""),
     network_name: z.string().trim().optional().default(""),
-    country: z.string().trim().min(1, "Country is required"),
+    // country is per crusade now (registrationItem), so a registration can span countries
     ...contactFields,
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   })
@@ -126,7 +130,7 @@ export const registrationSchema = z
 
 export const confirmationSchema = z
   .object({
-    status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
+    status: z.enum(["confirmed", "pending", "preparing", "ready", "holding", "not_holding"]),
     feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
   })
   .refine((d) => d.status !== "not_holding" || d.feedback.length >= 3, {
@@ -139,9 +143,37 @@ export const registrationCrusadeEditSchema = z
     ...registrationDetails,
     city_place_id: z.string().trim().optional().default(""),
     ...collaborationFields,
-    status: z.enum(["pending", "preparing", "ready", "holding", "not_holding"]),
+    status: z.enum(["confirmed", "pending", "preparing", "ready", "holding", "not_holding"]),
     feedback: z.string().trim().max(2000, "Feedback must be 2,000 characters or fewer.").optional().default(""),
   })
   .superRefine((d, ctx) => {
     if (d.status === "not_holding" && d.feedback.length < 3) issue(ctx, ["feedback"], "Tell us why the crusade is not holding, including any challenges.");
+  });
+
+// ---- Loveworld Blue Elite staff registration -------------------------------
+// Same per-crusade shape as the public registration, but the org side is fixed:
+// Blue Elite staff always identify a zone + group + church (no cell, no network),
+// and they must supply a department and a KingsChat username. Reuses the
+// existing contact_name column for the staff member's name.
+
+const blueEliteContactFields = {
+  contact_name: z.string().trim().min(2, "Staff name is required").max(200),
+  contact_email: z.string().trim().email("Enter a valid email address").max(254),
+  phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
+  department: z.string().trim().min(2, "Department is required").max(200),
+};
+
+export const blueEliteRegistrationSchema = z
+  .object({
+    // Fixed internally; the form does not expose an org-type selector.
+    organization_type: z.literal("church").default("church"),
+    zone: z.string().trim().min(1, "Zone is required"),
+    group_name: z.string().trim().min(1, "Group is required"),
+    church_name: z.string().trim().min(1, "Church name is required"),
+    cell_name: z.string().trim().optional().default(""),
+    network_name: z.string().trim().optional().default(""),
+    ...blueEliteContactFields,
+    items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   });

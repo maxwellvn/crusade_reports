@@ -46,3 +46,14 @@
   table thead th { @apply text-slate-600; }
   table tbody tr { @apply transition-colors hover:bg-blue-50/55; }
 }
+
+/* PDF export = the browser's print-to-PDF. `print:` variants hide the nav and
+   widget chrome; this keeps colours and chart fills faithful in the export. */
+@media print {
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  @page { margin: 14mm; }
+  body { background-image: none !important; }
+}

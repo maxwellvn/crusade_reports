@@ -13,6 +13,7 @@ export const METRIC_FIELDS = [
   "salvation", "holy_spirit_filled", "water_baptisms", "ror_distributed", "bibles_distributed",
   "online_participation", "radio_tv_reach", "testimonies_recorded", "tap2read_distributed",
   "ntyba_distributed", "healing_nations_magazine",
+  "rabah_crusades", "rabah_people_reached",
 ];
 
 // reports = submitter/context (one submission). crusades = the FACT TABLE: one row
@@ -77,6 +78,8 @@ db.exec(`
     tap2read_distributed     INTEGER NOT NULL DEFAULT 0,
     ntyba_distributed        INTEGER NOT NULL DEFAULT 0,
     healing_nations_magazine INTEGER NOT NULL DEFAULT 0,
+    rabah_crusades           INTEGER NOT NULL DEFAULT 0,
+    rabah_people_reached     INTEGER NOT NULL DEFAULT 0,
 
     minister_name     TEXT,
     venue             TEXT,
@@ -110,6 +113,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS registrations (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    -- 'public' = the standard crusade-registration form; 'blue_elite' = the
+    -- Loveworld Blue Elite staff module. Existing rows default to 'public' so
+    -- the original admin views stay unchanged.
+    program           TEXT NOT NULL DEFAULT 'public',
+    department        TEXT,
     organization_type TEXT NOT NULL,
     zone              TEXT,
     group_name        TEXT,
@@ -133,6 +141,10 @@ db.exec(`
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     registration_id   INTEGER NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Mirror of registrations.program so item-level queries (live feed, exports)
+    -- can filter by module without joining back to the parent row.
+    program           TEXT NOT NULL DEFAULT 'public',
 
     -- attribution (denormalized, same as crusades)
     organization_type TEXT NOT NULL,
@@ -188,6 +200,7 @@ db.exec(`
     value TEXT NOT NULL
   );
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('reporting_open', '1');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('default_landing_page', '/registrations/live');
 
   CREATE INDEX IF NOT EXISTS idx_reg_items_reg     ON registration_items(registration_id);
   CREATE INDEX IF NOT EXISTS idx_reg_items_type    ON registration_items(event_type);
@@ -257,6 +270,19 @@ if (!registrationCols.has("confirmation_status")) {
     ALTER TABLE registrations ADD COLUMN confirmation_updated_at TEXT;
   `);
 }
+// Blue Elite module: program tags each row to its source form; department is
+// Blue Elite-only. Both nullable/defaulted so older rows stay 'public' with no
+// department, leaving the original admin views unchanged.
+if (!registrationCols.has("program")) {
+  db.exec(`
+    ALTER TABLE registrations ADD COLUMN program TEXT NOT NULL DEFAULT 'public';
+    ALTER TABLE registrations ADD COLUMN department TEXT;
+  `);
+}
+const registrationItemColsForProgram = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
+if (!registrationItemColsForProgram.has("program")) {
+  db.exec(`ALTER TABLE registration_items ADD COLUMN program TEXT NOT NULL DEFAULT 'public'`);
+}
 
 const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
 for (const col of ["event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
@@ -308,6 +334,14 @@ if (!crusadeCols.includes("city_lat")) {
 // one registered crusade. Public reports leave this nullable.
 if (!crusadeCols.includes("registration_item_id")) {
   db.exec("ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
+}
+
+// RABAH crusade metrics — added for the RABAH crusade type.
+if (!crusadeCols.includes("rabah_crusades")) {
+  db.exec(`
+    ALTER TABLE crusades ADD COLUMN rabah_crusades INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE crusades ADD COLUMN rabah_people_reached INTEGER NOT NULL DEFAULT 0;
+  `);
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
 // This backfill must run after the registration_item_id migration above so

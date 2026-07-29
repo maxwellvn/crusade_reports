@@ -19,6 +19,7 @@ const crusade = z
     event_type: z.string().min(1, "Type is required"),
     other_event_type: z.string().optional().default(""),
     event_name: z.string().min(1, "Event name is required"),
+    country: z.string().min(1, "Country is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
     event_date: z.string().min(1, "Date is required"),
@@ -44,7 +45,8 @@ export const reportSchema = z
     network_name: z.string().optional().default(""),
     network_type: z.string().optional().default(""),
 
-    country: z.string().min(1, "Country is required"),
+    // Country is per crusade now; the report row keeps the first crusade's country.
+    country: z.string().optional().default(""),
     ...contactFields,
     crusades: z.array(crusade).min(1, "Add at least one crusade"),
 
@@ -71,6 +73,7 @@ const registrationItem = z
     venue: z.string().trim().min(2, "Venue is required").max(1000),
     expected_attendance: z.coerce.number({ message: "Expected attendance is required" }).int().min(1, "Expected attendance is required"),
     minister_name: z.string().trim().min(1, "Minister name is required"),
+    country: z.string().min(1, "Country is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
     // Network-only planning (gated in the UI); optional for every org type.
@@ -90,7 +93,7 @@ export const registrationSchema = z
     church_name: z.string().optional().default(""),
     cell_name: z.string().optional().default(""),
     network_name: z.string().optional().default(""),
-    country: z.string().min(1, "Country is required"),
+    // country is now per crusade (see registrationItem), so a registration can span countries
     ...contactFields,
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   })
@@ -111,12 +114,49 @@ export const registrationDefaults = {
   church_name: "",
   cell_name: "",
   network_name: "",
-  country: "",
   contact_name: "",
   contact_email: "",
   phone_country_code: "",
   phone_number: "",
   kingschat_username: "",
+  items: [],
+};
+
+// ---- Loveworld Blue Elite staff registration ------------------------------
+// Mirrors server/validation.js#blueEliteRegistrationSchema. Org side is fixed
+// (zone + group + church, no cell/network selector), KingsChat username and
+// department are required, and the per-crusade shape is identical to the public
+// registration. Server is the source of truth; this is UX.
+export const blueEliteRegistrationSchema = z
+  .object({
+    organization_type: z.literal("church").default("church"),
+    zone: z.string().min(1, "Zone is required"),
+    group_name: z.string().min(1, "Group is required"),
+    church_name: z.string().min(1, "Church name is required"),
+    cell_name: z.string().optional().default(""),
+    network_name: z.string().optional().default(""),
+    contact_name: z.string().trim().min(2, "Staff name is required").max(200),
+    contact_email: z.string().trim().email("Enter a valid email address").max(254),
+    phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
+    phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+    kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
+    department: z.string().trim().min(2, "Department is required").max(200),
+    items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
+  });
+
+export const blueEliteRegistrationDefaults = {
+  organization_type: "church",
+  zone: "",
+  group_name: "",
+  church_name: "",
+  cell_name: "",
+  network_name: "",
+  contact_name: "",
+  contact_email: "",
+  phone_country_code: "",
+  phone_number: "",
+  kingschat_username: "",
+  department: "",
   items: [],
 };
 

@@ -6,8 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { deleteJSON, getJSON, postJSON, putJSON } from "@/lib/api";
 import { useAdmin } from "@/components/AdminGate";
+
+// Human-readable labels for the whitelisted landing-page routes. The server is
+// the source of truth for which routes are allowed; this map just makes them
+// readable in the dropdown. Falls back to the raw path if a route is missing.
+const LANDING_PAGE_LABELS = {
+  "/dashboard": "Reports dashboard",
+  "/registrations/live": "Live registrations",
+  "/registrations": "Registered crusades",
+  "/crusades": "Reports",
+  "/dashboard/zone-links": "Zone links",
+};
 
 export function Settings() {
   const admin = useAdmin();
@@ -17,6 +29,9 @@ export function Settings() {
   const [lookup, setLookup] = React.useState({ state: "idle", user: null, message: "" });
   const [reportingOpen, setReportingOpen] = React.useState(null);
   const [savingReporting, setSavingReporting] = React.useState(false);
+  const [landingPage, setLandingPage] = React.useState("");
+  const [landingOptions, setLandingOptions] = React.useState([]);
+  const [savingLanding, setSavingLanding] = React.useState(false);
 
   React.useEffect(() => {
     if (!admin?.is_super_admin) { setLoading(false); return; }
@@ -29,7 +44,11 @@ export function Settings() {
   React.useEffect(() => {
     if (!admin?.is_super_admin) return;
     getJSON("/campaign-settings")
-      .then((settings) => setReportingOpen(settings.reporting_open))
+      .then((settings) => {
+        setReportingOpen(settings.reporting_open);
+        setLandingPage(settings.default_landing_page || "");
+        setLandingOptions(Array.isArray(settings.landing_page_options) ? settings.landing_page_options : []);
+      })
       .catch((error) => toast.error(error.message));
   }, [admin]);
 
@@ -79,7 +98,9 @@ export function Settings() {
 
   async function logout() {
     await postJSON("/auth/logout", {});
-    window.location.assign("/dashboard");
+    // After logout the user lands on the configured default page — same place
+    // /admin and the KingsChat callback send signed-in users.
+    window.location.assign(landingPage || "/registrations/live");
   }
 
   async function toggleReporting() {
@@ -96,13 +117,27 @@ export function Settings() {
     }
   }
 
+  async function saveLandingPage(value) {
+    setSavingLanding(true);
+    try {
+      const settings = await putJSON("/campaign-settings", { default_landing_page: value });
+      setLandingPage(settings.default_landing_page);
+      setLandingOptions(Array.isArray(settings.landing_page_options) ? settings.landing_page_options : landingOptions);
+      toast.success(`Default landing page set to ${LANDING_PAGE_LABELS[settings.default_landing_page] || settings.default_landing_page}.`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingLanding(false);
+    }
+  }
+
   if (!admin?.is_super_admin) {
     return <div className="mx-auto max-w-3xl"><Card><CardContent className="pt-6 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard accounts.</CardContent></Card></div>;
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Breadcrumbs items={[{ label: "Dashboard", to: "/dashboard" }, { label: "Settings" }]} />
+      <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Settings" }]} />
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
@@ -127,6 +162,24 @@ export function Settings() {
             <span className={`absolute top-1 block size-4 bg-background transition-transform ${reportingOpen ? "translate-x-6" : "translate-x-1"}`} />
             <span className="sr-only">{reportingOpen ? "Close reporting" : "Open reporting"}</span>
           </button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Default landing page</CardTitle>
+          <CardDescription>Where signed-in admins land after login, after sign-out, and when visiting /admin.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Field label="Landing page">
+            <Select value={landingPage} disabled={savingLanding || !landingOptions.length} onChange={(e) => saveLandingPage(e.target.value)}>
+              {landingOptions.map((path) => <option key={path} value={path}>{LANDING_PAGE_LABELS[path] || path}</option>)}
+            </Select>
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Currently: <span className="font-medium text-foreground">{LANDING_PAGE_LABELS[landingPage] || landingPage || "—"}</span>
+            {" — "}applies to the KingsChat login callback, the sign-out redirect, and the /admin shortcut.
+          </p>
         </CardContent>
       </Card>
 

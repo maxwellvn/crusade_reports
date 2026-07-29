@@ -16,8 +16,8 @@ export function ImportPanel({ onLoaded, getReportFields }) {
 
   async function send(f) {
     const fields = getReportFields?.() || {};
-    if (!fields.organization_type || !fields.country) {
-      toast.error("First choose who's reporting and the country (step 1) above.");
+    if (!fields.organization_type) {
+      toast.error("First choose who's reporting (step 1) above.");
       return;
     }
     setBusy(true);
@@ -63,8 +63,8 @@ export function ImportPanel({ onLoaded, getReportFields }) {
       {open && (
         <CardContent className="space-y-3 border-t pt-4">
           <p className="text-sm text-muted-foreground">
-            For lots of crusades at once. <strong>1.</strong> Make sure you've chosen who's reporting and the country above.
-            <strong> 2.</strong> Download the template and fill one row per crusade (columns marked <span className="text-destructive">*</span> are required).
+            For lots of crusades at once. <strong>1.</strong> Make sure you've chosen who's reporting above.
+            <strong> 2.</strong> Download the template and fill one row per crusade — each row has its own Country (columns marked <span className="text-destructive">*</span> are required).
             <strong> 3.</strong> Upload it — you'll see a preview and any row-by-row errors, then the rows load into the form below for you to review and submit.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -84,7 +84,7 @@ export function ImportPanel({ onLoaded, getReportFields }) {
                 {preview.summary?.crusades ?? 0} crusades · {(preview.summary?.total_attendance ?? 0).toLocaleString()} attendance
                 {" "}({(preview.summary?.onsite_attendance ?? 0).toLocaleString()} onsite · {(preview.summary?.online_attendance ?? 0).toLocaleString()} online)
                 {preview.summary?.reporting_as ? ` · ${preview.summary.reporting_as}` : ""}
-                {preview.summary?.country ? ` · ${preview.summary.country}` : ""}
+                {preview.summary?.countries?.length ? ` · ${preview.summary.countries.join(", ")}` : ""}
               </p>
               {preview.ok ? (
                 <div className="space-y-2">
