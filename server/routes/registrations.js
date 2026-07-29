@@ -232,6 +232,11 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
            COALESCE(SUM(expected_attendance), 0) AS expected_attendance,
            SUM(CASE WHEN readiness_status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
            SUM(CASE WHEN readiness_status = 'not_holding' THEN 1 ELSE 0 END) AS not_holding,
+           SUM(CASE WHEN organization_type = 'zone' THEN planned_count ELSE 0 END)    AS zone_crusades,
+           SUM(CASE WHEN organization_type = 'group' THEN planned_count ELSE 0 END)   AS group_crusades,
+           SUM(CASE WHEN organization_type = 'church' THEN planned_count ELSE 0 END)  AS church_crusades,
+           SUM(CASE WHEN organization_type = 'cell' THEN planned_count ELSE 0 END)    AS cell_crusades,
+           SUM(CASE WHEN organization_type = 'network' THEN planned_count ELSE 0 END) AS network_crusades,
            (SELECT COUNT(*) FROM crusades c JOIN registration_items i ON c.registration_item_id = i.id WHERE ${PUBLIC_PROGRAM_FILTER}) AS reported,
            COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades c JOIN registration_items i ON c.registration_item_id = i.id WHERE ${PUBLIC_PROGRAM_FILTER}) AS awaiting
     FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
