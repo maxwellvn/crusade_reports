@@ -350,6 +350,9 @@ if (!mediaTrainingColumns.has("zone_name")) {
 for (const column of ["group_name", "church_name"]) {
   if (!mediaTrainingColumns.has(column)) db.exec(`ALTER TABLE media_training_registrations ADD COLUMN ${column} TEXT`);
 }
+for (const column of ["church_country_code", "church_country_name", "church_city", "church_city_place_id"]) {
+  if (!mediaTrainingColumns.has(column)) db.exec(`ALTER TABLE media_training_registrations ADD COLUMN ${column} TEXT`);
+}
 db.exec("UPDATE media_training_registrations SET church_name = organization_name WHERE church_name IS NULL");
 db.exec("CREATE INDEX IF NOT EXISTS idx_media_training_zone ON media_training_registrations(zone_name COLLATE NOCASE)");
 
@@ -410,6 +413,8 @@ if (/CHECK\s*\(\s*role\s+IN/i.test(mediaTraineeSql)) {
     CREATE INDEX idx_media_training_trainees_role ON media_training_trainees(role);
   `))();
 }
+const mediaTraineeColumns = new Set(db.prepare("PRAGMA table_info(media_training_trainees)").all().map((column) => column.name));
+if (!mediaTraineeColumns.has("languages_spoken")) db.exec("ALTER TABLE media_training_trainees ADD COLUMN languages_spoken TEXT");
 
 // Older databases restricted this table to id=1. Rebuild it once so the Live
 // Registrations dashboard can persist its separate id=2 layout.

@@ -209,6 +209,10 @@ export const mediaTrainingRegistrationSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone").max(250),
   group_name: z.string().trim().max(250).optional().default(""),
   church_name: z.string().trim().max(250).optional().default(""),
+  church_country_code: z.string().trim().length(2, "Select the church country").toUpperCase(),
+  church_city: z.string().trim().min(1, "Select the church city").max(200),
+  church_city_place_id: z.string().trim().max(300).optional().default(""),
+  languages_spoken: z.array(z.string().trim().min(1).max(80)).min(1, "Add at least one language").max(20),
   ...mediaTrainingTraineeFields,
 }).refine((data) => data.role !== "Other" || data.other_role.length >= 2, { path: ["other_role"], message: "Enter your media role" });
 

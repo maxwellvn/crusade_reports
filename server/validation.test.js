@@ -65,7 +65,7 @@ test("mission-trip volunteers identify their passport and accept partnership ter
 
 test("media training accepts an individual trainee and supports admin filtering", () => {
   const registration = {
-    zone_name: "Lagos Zone 1", group_name: "Lekki Group", church_name: "Christ Embassy Lekki", full_name: "Ada Example",
+    zone_name: "Lagos Zone 1", group_name: "Lekki Group", church_name: "Christ Embassy Lekki", church_country_code: "NG", church_city: "Lagos", church_city_place_id: "place-lagos", languages_spoken: ["English", "Yoruba"], full_name: "Ada Example",
     role: "Presenter", email: "ada@example.com", kingschat_username: "ada", phone_country_code: "+234", phone_number: "8012345678",
   };
   assert.equal(mediaTrainingRegistrationSchema.safeParse(registration).success, true);
