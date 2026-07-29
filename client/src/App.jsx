@@ -32,40 +32,57 @@ import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const BRAND = "Rhapsody End-Time Teaching Crusades";
+const DEFAULT_DESCRIPTION = "Join A Night of a Thousand Crusades, register crusades, access approved resources, and take part in global mission initiatives.";
 
-// Per-route document title (first match wins; order matters for prefixes).
-const PAGE_TITLES = [
-  [/^\/$/, "A Night of a Thousand Crusades"],
-  [/^\/blue-elite\/register/, "Blue Elite — Register your crusades"],
-  [/^\/blue-elite/, "Loveworld Blue Elite"],
-  [/^\/crusade-registration\/register/, "Register your crusades"],
-  [/^\/crusade-registration/, "A Night of a Thousand Crusades"],
-  [/^\/report/, "Report a crusade"],
-  [/^\/resources$/, "Resource library"],
-  [/^\/select-nation/, "Mission Nation Selection"],
-  [/^\/media-training$/, "Global Media Training"],
-  [/^\/mission-trips$/, "Mission Trip Volunteers"],
-  [/^\/dashboard\/mission-trips/, "Mission-trip volunteers"],
-  [/^\/dashboard\/media-training/, "Media training registrations"],
-  [/^\/dashboard\/mission-nations/, "Mission nation selections"],
-  [/^\/dashboard\/resources/, "Manage resources"],
-  [/^\/dashboard\/zone-links/, "Zone links"],
-  [/^\/dashboard\/settings/, "Settings"],
-  [/^\/dashboard\/blue-elite/, "Blue Elite dashboard"],
-  [/^\/dashboard\/widget/, "Reports dashboard"],
-  [/^\/dashboard/, "Reports dashboard"],
-  [/^\/crusades/, "Reports"],
-  [/^\/registrations\/live/, "Live registrations"],
-  [/^\/registrations\/blue-elite/, "Blue Elite registrations"],
-  [/^\/registrations/, "Registrations"],
-  [/^\/zone\//, "Zone portal"],
+// First match wins. Public pages are indexable; protected and tokenized pages are not.
+const PAGE_META = [
+  [/^\/$/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/"],
+  [/^\/crusade-registration\/register/, "Register Your Crusades", "Register confirmed crusades for A Night of a Thousand Crusades and add them to the global record.", true, "/crusade-registration/register"],
+  [/^\/crusade-registration/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/crusade-registration"],
+  [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register confirmed crusades for the Loveworld Blue Elite team.", true, "/blue-elite/register"],
+  [/^\/blue-elite/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", true, "/blue-elite"],
+  [/^\/report/, "Report a Crusade", "Submit the verified outcome of a completed A Night of a Thousand Crusades event.", true, "/report"],
+  [/^\/resources$/, "NOTC Resource Library", "Find approved NOTC documents, media, songs, videos, images, and ministry resources.", true, "/resources"],
+  [/^\/select-nation/, "NOTC National Missions Leadership Initiative", "Zonal Pastors can state their preferred mission nation and proposed commitment of at least 1,000 crusades.", true, "/select-nation"],
+  [/^\/media-training$/, "NOTC Global Media Training Mobilisation", "Register individually for the Night of a Thousand Crusades Global Media Training Mobilisation.", true, "/media-training", "/media-training-mobilisation.png"],
+  [/^\/mission-trips$/, "NOTC Mission Trip Volunteers", "Volunteer for international NOTC mission trips and identify the nations where you can serve.", true, "/mission-trips"],
+  [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
+  [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
+
+function setMeta(selector, attribute, value) {
+  let element = document.head.querySelector(selector);
+  if (!element) { element = document.createElement("meta"); document.head.appendChild(element); }
+  Object.entries(attribute).forEach(([name, content]) => element.setAttribute(name, content));
+  element.setAttribute("content", value);
+}
 
 function TitleManager() {
   const { pathname } = useLocation();
   useEffect(() => {
-    const match = PAGE_TITLES.find(([re]) => re.test(pathname));
-    document.title = `${match ? match[1] : "Page not found"} — ${BRAND}`;
+    const match = PAGE_META.find(([re]) => re.test(pathname));
+    const title = match?.[1] || "Page Not Found";
+    const description = match?.[2] || DEFAULT_DESCRIPTION;
+    const indexable = Boolean(match?.[3]);
+    const canonicalPath = match?.[4] || pathname;
+    const canonicalUrl = `${window.location.origin}${canonicalPath}`;
+    const socialImage = `${window.location.origin}${match?.[5] || "/logo.png"}`;
+    document.title = `${title} — ${BRAND}`;
+    setMeta('meta[name="description"]', { name: "description" }, description);
+    setMeta('meta[name="robots"]', { name: "robots" }, indexable ? "index, follow" : "noindex, nofollow");
+    setMeta('meta[property="og:title"]', { property: "og:title" }, document.title);
+    setMeta('meta[property="og:description"]', { property: "og:description" }, description);
+    setMeta('meta[property="og:type"]', { property: "og:type" }, "website");
+    setMeta('meta[property="og:url"]', { property: "og:url" }, canonicalUrl);
+    setMeta('meta[property="og:site_name"]', { property: "og:site_name" }, BRAND);
+    setMeta('meta[property="og:image"]', { property: "og:image" }, socialImage);
+    setMeta('meta[name="twitter:card"]', { name: "twitter:card" }, "summary");
+    setMeta('meta[name="twitter:title"]', { name: "twitter:title" }, document.title);
+    setMeta('meta[name="twitter:description"]', { name: "twitter:description" }, description);
+    setMeta('meta[name="twitter:image"]', { name: "twitter:image" }, socialImage);
+    let canonical = document.head.querySelector('link[rel="canonical"]');
+    if (!canonical) { canonical = document.createElement("link"); canonical.rel = "canonical"; document.head.appendChild(canonical); }
+    canonical.href = canonicalUrl;
   }, [pathname]);
   return null;
 }
