@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
-import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
+import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
@@ -51,7 +51,16 @@ test("Blue Elite registration allows zonal staff without a group or church", () 
   };
 
   assert.equal(blueEliteRegistrationSchema.safeParse(registration).success, true);
+  assert.equal(blueEliteRegistrationSchema.safeParse({ ...registration, kingschat_username: "" }).success, true);
   assert.equal(blueEliteRegistrationSchema.safeParse({ ...registration, zone: "" }).success, false);
+});
+
+test("mission-trip volunteers identify their passport and accept partnership terms", () => {
+  const volunteer = { designation: "Pastor", first_name: "Ada", last_name: "Example", email: "ada@example.com", phone_country_code: "+44", phone_number: "7700900123", kingschat_username: "ada.example", zone_name: "", group_name: "", church_name: "", passport_country_code: "GB", additional_passports: ["CA"], passport_expiry: "2028-10", preferred_destination_code: "NG", ready_for_any_destination: true, valid_passport: true, covers_travel_expenses: true, medically_fit: true, sponsor_interest: false, partnership_acknowledged: true, additional_information: "" };
+  assert.equal(missionTripVolunteerSchema.safeParse(volunteer).success, true);
+  assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, kingschat_username: "" }).success, true);
+  assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, passport_country_code: "" }).success, false);
+  assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, partnership_acknowledged: false }).success, false);
 });
 
 test("media training accepts an individual trainee and supports admin filtering", () => {
@@ -60,6 +69,7 @@ test("media training accepts an individual trainee and supports admin filtering"
     role: "Presenter", email: "ada@example.com", kingschat_username: "ada", phone_country_code: "+234", phone_number: "8012345678",
   };
   assert.equal(mediaTrainingRegistrationSchema.safeParse(registration).success, true);
+  assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, kingschat_username: "" }).success, true);
   assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, group_name: "", church_name: "" }).success, true);
   assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, role: "Other", other_role: "Video Editor" }).success, true);
   assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, role: "Other", other_role: "" }).success, false);
@@ -86,6 +96,7 @@ test("mission nation catalogue contains 242 nations and rejects home-nation sele
     phone_number: "8012345678", kingschat_username: "pastor.test",
   };
   assert.equal(missionNationSelectionSchema.safeParse(selection).success, true);
+  assert.equal(missionNationSelectionSchema.safeParse({ ...selection, kingschat_username: "" }).success, true);
   assert.equal(missionNationSelectionSchema.safeParse({ ...selection, mission_country_code: "NG" }).success, false);
 });
 

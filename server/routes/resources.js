@@ -66,21 +66,29 @@ export function metadataImage(html, baseUrl) {
       try { return new URL(attrs.content, baseUrl).href; } catch { /* malformed metadata */ }
     }
   }
+  const imageSrc = html.match(/<link\s+[^>]*rel=["'](?:image_src|apple-touch-icon)["'][^>]*>/i)?.[0];
+  const href = imageSrc?.match(/href=["']([^"']+)["']/i)?.[1];
+  if (href) { try { return new URL(href, baseUrl).href; } catch { /* malformed link */ } }
+  const jsonThumbnail = html.match(/["'](?:thumbnailUrl|thumbnail_url)["']\s*:\s*["']([^"']+)["']/i)?.[1];
+  if (jsonThumbnail) { try { return new URL(jsonThumbnail.replace(/\\\//g, "/"), baseUrl).href; } catch { /* malformed JSON-LD */ } }
   return null;
 }
 
-async function discoverThumbnail(value) {
+export async function discoverThumbnail(value) {
   try {
     let url = await assertPublicUrl(value);
     const youtube = youtubeThumbnail(url);
     if (youtube) return youtube;
     for (let redirects = 0; redirects < 4; redirects += 1) {
-      const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(6000), headers: { Accept: "text/html,application/xhtml+xml", "User-Agent": "NOTC-Resource-Preview/1.0" } });
+      const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(8000), headers: { Accept: "text/html,application/xhtml+xml,image/avif,image/webp,image/*,*/*;q=0.7", "User-Agent": "Mozilla/5.0 (compatible; NOTCResourcePreview/1.0; +https://rhapsodycrusades.org)" } });
       if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
         url = await assertPublicUrl(new URL(response.headers.get("location"), url).href);
         continue;
       }
-      if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return null;
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok) return null;
+      if (contentType.startsWith("image/")) return url.href;
+      if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) return null;
       const reader = response.body.getReader();
       const chunks = []; let size = 0;
       while (size < 512 * 1024) { const { done, value: chunk } = await reader.read(); if (done) break; chunks.push(chunk); size += chunk.length; }
@@ -139,6 +147,7 @@ resources.post("/", requireSuperAdmin, upload.single("file"), wrap(async (req, r
     const description = clean(req.body.description, 2000);
     const category = clean(req.body.category, 80);
     const externalUrl = clean(req.body.external_url, 2000);
+    const suppliedThumbnail = clean(req.body.thumbnail_url, 2000);
     let type = clean(req.body.resource_type, 20).toLowerCase();
     if (!title) throw new ApiError(400, "TITLE_REQUIRED", "Please enter a resource title.");
     if (!db.prepare("SELECT 1 FROM resource_categories WHERE name = ? COLLATE NOCASE").get(category)) {
@@ -148,7 +157,12 @@ resources.post("/", requireSuperAdmin, upload.single("file"), wrap(async (req, r
     if (!req.file && !externalUrl) throw new ApiError(400, "RESOURCE_REQUIRED", "Upload a file or add a web link.");
     if (req.file && externalUrl) throw new ApiError(400, "ONE_SOURCE_ONLY", "Use either a file or a web link, not both.");
     if (externalUrl && !validHttpUrl(externalUrl)) throw new ApiError(400, "INVALID_URL", "The link must start with http:// or https://.");
-    const thumbnailUrl = externalUrl ? await discoverThumbnail(externalUrl) : null;
+    if (suppliedThumbnail && (!externalUrl || !validHttpUrl(suppliedThumbnail))) throw new ApiError(400, "INVALID_THUMBNAIL", "The thumbnail must be a valid web image URL.");
+    let thumbnailUrl = externalUrl ? await discoverThumbnail(externalUrl) : null;
+    if (suppliedThumbnail) {
+      try { thumbnailUrl = (await assertPublicUrl(suppliedThumbnail)).href; }
+      catch { throw new ApiError(400, "INVALID_THUMBNAIL", "Use a publicly accessible thumbnail image URL."); }
+    }
     const result = db.prepare(`INSERT INTO resources
       (title, description, category, resource_type, external_url, thumbnail_url, stored_name, original_name, mime_type, file_size, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

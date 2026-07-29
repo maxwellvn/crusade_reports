@@ -307,7 +307,7 @@ export function BlueEliteRegistrationForm() {
                         <Field label="Email address" required error={errors.contact_email?.message}>
                           <Input type="email" autoComplete="email" {...register("contact_email")} aria-invalid={!!errors.contact_email} placeholder="you@example.com" />
                         </Field>
-                        <Field label="KingsChat username" required error={errors.kingschat_username?.message}>
+                        <Field label="KingsChat username" hint="Optional" error={errors.kingschat_username?.message}>
                           <Input {...register("kingschat_username")} aria-invalid={!!errors.kingschat_username} placeholder="@username" />
                         </Field>
                         <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[120px_1fr]">

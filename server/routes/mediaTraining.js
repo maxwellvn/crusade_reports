@@ -64,7 +64,7 @@ const exportColumns = [
   { header: "Reference", value: (row) => row.reference_code }, { header: "Zone", value: (row) => row.zone_name },
   { header: "Group", value: (row) => row.group_name }, { header: "Church", value: (row) => row.church_name }, { header: "Trainee", value: (row) => row.full_name },
   { header: "Role", value: (row) => row.role }, { header: "Email", value: (row) => row.email },
-  { header: "KingsChat Username", value: (row) => `@${row.kingschat_username}` },
+  { header: "KingsChat Username", value: (row) => row.kingschat_username ? `@${row.kingschat_username}` : "" },
   { header: "Phone", value: (row) => `${row.phone_country_code} ${row.phone_number}` }, { header: "Submitted At (UTC)", value: (row) => row.created_at },
 ];
 mediaTraining.get("/admin/export", requireSuperAdmin, wrap(async (req, res) => {

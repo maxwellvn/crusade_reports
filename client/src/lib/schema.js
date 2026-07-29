@@ -130,7 +130,7 @@ export const missionNationSelectionSchema = z.object({
   contact_email: z.string().trim().email("Enter a valid email address"),
   phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a phone country code"),
   phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
-  kingschat_username: z.string().trim().min(2, "Enter a KingsChat username"),
+  kingschat_username: z.string().trim().max(100).optional().default(""),
 }).refine((data) => data.home_country_code !== data.mission_country_code, {
   path: ["mission_country_code"], message: "Your zone cannot select its home nation",
 });
@@ -143,10 +143,17 @@ export const mediaTrainingRegistrationSchema = z.object({
   role: z.enum(["Presenter", "Cameraman", "Technical Personnel", "Other"], { message: "Select a role" }),
   other_role: z.string().trim().max(100).optional().default(""),
   email: z.string().trim().email("Enter a valid email address").max(254),
-  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter a valid KingsChat username"),
+  kingschat_username: z.string().trim().refine((value) => !value || /^@?[A-Za-z0-9._-]{2,100}$/.test(value), "Enter a valid KingsChat username").optional().default(""),
   phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"),
   phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
 }).refine((data) => data.role !== "Other" || data.other_role.length >= 2, { path: ["other_role"], message: "Enter your media role" });
+
+export const missionTripVolunteerSchema = z.object({
+  designation: z.string().min(1, "Select your designation"), first_name: z.string().trim().min(2, "First name is required"), last_name: z.string().trim().min(2, "Last name is required"),
+  email: z.string().trim().email("Enter a valid email address"), phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"), phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"), kingschat_username: z.string().trim().max(100).optional().default(""),
+  zone_name: z.string().optional().default(""), group_name: z.string().optional().default(""), church_name: z.string().optional().default(""), passport_country_code: z.string().length(2, "Select your passport country"), additional_passports: z.array(z.string()).max(5).default([]), passport_expiry: z.string().min(1, "Enter the passport expiry month"), preferred_destination_code: z.string().length(2, "Select a preferred destination"), ready_for_any_destination: z.boolean().default(false),
+  valid_passport: z.literal(true, { errorMap: () => ({ message: "Confirm that your passport is valid" }) }), covers_travel_expenses: z.literal(true, { errorMap: () => ({ message: "Confirm that you can cover the travel expenses" }) }), medically_fit: z.literal(true, { errorMap: () => ({ message: "Confirm your medical readiness" }) }), sponsor_interest: z.boolean().default(false), partnership_acknowledged: z.literal(true, { errorMap: () => ({ message: "Acknowledge the partnership information" }) }), additional_information: z.string().max(2000).optional().default(""),
+});
 
 // ---- Loveworld Blue Elite staff registration ------------------------------
 // Mirrors server/validation.js#blueEliteRegistrationSchema. Org side is fixed
@@ -165,7 +172,7 @@ export const blueEliteRegistrationSchema = z
     contact_email: z.string().trim().email("Enter a valid email address").max(254),
     phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
     phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
-    kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
+    kingschat_username: z.string().trim().max(100).optional().default(""),
     department: z.string().trim().min(2, "Department is required").max(200),
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   });

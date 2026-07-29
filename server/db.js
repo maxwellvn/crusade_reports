@@ -353,6 +353,41 @@ for (const column of ["group_name", "church_name"]) {
 db.exec("UPDATE media_training_registrations SET church_name = organization_name WHERE church_name IS NULL");
 db.exec("CREATE INDEX IF NOT EXISTS idx_media_training_zone ON media_training_registrations(zone_name COLLATE NOCASE)");
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS mission_trip_volunteers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_code TEXT NOT NULL UNIQUE,
+    designation TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone_country_code TEXT NOT NULL,
+    phone_number TEXT NOT NULL,
+    kingschat_username TEXT NOT NULL,
+    zone_name TEXT,
+    group_name TEXT,
+    church_name TEXT,
+    passport_country_code TEXT NOT NULL,
+    passport_country_name TEXT NOT NULL,
+    additional_passports TEXT,
+    passport_expiry TEXT NOT NULL,
+    preferred_destination_code TEXT NOT NULL,
+    preferred_destination_name TEXT NOT NULL,
+    ready_for_any_destination INTEGER NOT NULL DEFAULT 0,
+    valid_passport INTEGER NOT NULL DEFAULT 0,
+    covers_travel_expenses INTEGER NOT NULL DEFAULT 0,
+    medically_fit INTEGER NOT NULL DEFAULT 0,
+    sponsor_interest INTEGER NOT NULL DEFAULT 0,
+    partnership_acknowledged INTEGER NOT NULL DEFAULT 0,
+    additional_information TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_mission_trip_created ON mission_trip_volunteers(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_mission_trip_zone ON mission_trip_volunteers(zone_name COLLATE NOCASE);
+  CREATE INDEX IF NOT EXISTS idx_mission_trip_passport ON mission_trip_volunteers(passport_country_code);
+  CREATE INDEX IF NOT EXISTS idx_mission_trip_destination ON mission_trip_volunteers(preferred_destination_code);
+`);
+
 // Custom media roles require removing the original three-role CHECK while
 // preserving every existing trainee and its registration relationship.
 const mediaTraineeSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'media_training_trainees'").get()?.sql || "";

@@ -24,6 +24,8 @@ import { MissionNationSelection } from "@/components/MissionNationSelection";
 import { MissionNationAdmin } from "@/components/MissionNationAdmin";
 import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistration";
 import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
+import { MissionTripRegistration } from "@/components/MissionTripRegistration";
+import { MissionTripAdmin } from "@/components/MissionTripAdmin";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,8 @@ const PAGE_TITLES = [
   [/^\/resources$/, "Resource library"],
   [/^\/select-nation/, "Mission Nation Selection"],
   [/^\/media-training$/, "Global Media Training"],
+  [/^\/mission-trips$/, "Mission Trip Volunteers"],
+  [/^\/dashboard\/mission-trips/, "Mission-trip volunteers"],
   [/^\/dashboard\/media-training/, "Media training registrations"],
   [/^\/dashboard\/mission-nations/, "Mission nation selections"],
   [/^\/dashboard\/resources/, "Manage resources"],
@@ -81,7 +85,8 @@ function Shell({ subtitle, links }) {
   return (
     <div className="min-h-screen">
       <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4">
+        <div className="mx-auto max-w-7xl px-4 py-3">
+          <div className="flex min-w-0 items-center gap-4">
           {logoOk && (
             <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
           )}
@@ -89,11 +94,11 @@ function Shell({ subtitle, links }) {
             <h1 className="truncate text-base font-semibold tracking-tight">Rhapsody End-Time Teaching Crusades</h1>
             <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>
           </div>
+          </div>
           {visibleLinks.length > 0 && (
-            // On phones the nav wraps to its own row and scrolls sideways if needed.
-            <nav className="flex gap-1 max-sm:w-full max-sm:overflow-x-auto max-sm:whitespace-nowrap sm:ml-auto sm:shrink-0">
+            <nav className="mt-3 flex w-full gap-1 overflow-x-auto border-t border-blue-100 pt-2 [scrollbar-width:thin]">
               {visibleLinks.map(([to, label, end]) => (
-                <NavLink key={to} to={to} end={end} className={navLink}>{label}</NavLink>
+                <NavLink key={to} to={to} end={end} className={(state) => cn(navLink(state), "shrink-0 whitespace-nowrap")}>{label}</NavLink>
               ))}
             </nav>
           )}
@@ -181,6 +186,7 @@ export default function App() {
         <Route path="/resources" element={<ResourcesLibrary />} />
         <Route path="/select-nation" element={<MissionNationSelection />} />
         <Route path="/media-training" element={<MediaTrainingRegistration />} />
+        <Route path="/mission-trips" element={<MissionTripRegistration />} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />
@@ -191,7 +197,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/mission-trips", "Mission trips", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
@@ -203,6 +209,7 @@ export default function App() {
           <Route path="/dashboard/resources" element={<SuperAdminRoute><ResourcesAdmin /></SuperAdminRoute>} />
           <Route path="/dashboard/mission-nations" element={<SuperAdminRoute><MissionNationAdmin /></SuperAdminRoute>} />
           <Route path="/dashboard/media-training" element={<SuperAdminRoute><MediaTrainingAdmin /></SuperAdminRoute>} />
+          <Route path="/dashboard/mission-trips" element={<SuperAdminRoute><MissionTripAdmin /></SuperAdminRoute>} />
           {/* Blue Elite admin surface — super-admin only */}
           <Route path="/dashboard/blue-elite" element={<SuperAdminRoute><BlueEliteDashboard /></SuperAdminRoute>} />
           <Route path="/registrations/blue-elite" element={<SuperAdminRoute><BlueEliteRegistrationsTable /></SuperAdminRoute>} />

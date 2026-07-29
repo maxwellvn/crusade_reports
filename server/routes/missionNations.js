@@ -114,7 +114,7 @@ const exportColumns = [
   { header: "Minimum Crusades", value: () => 1000 },
   { header: "Email", value: (row) => row.contact_email },
   { header: "Phone", value: (row) => `${row.phone_country_code} ${row.phone_number}` },
-  { header: "KingsChat Username", value: (row) => `@${row.kingschat_username}` },
+  { header: "KingsChat Username", value: (row) => row.kingschat_username ? `@${row.kingschat_username}` : "" },
   { header: "Submitted At (UTC)", value: (row) => row.created_at },
 ];
 

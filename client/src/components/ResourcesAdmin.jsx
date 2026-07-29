@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
-const EMPTY = { title: "", description: "", category: "Teaching", resource_type: "document", external_url: "" };
+const EMPTY = { title: "", description: "", category: "Teaching", resource_type: "document", external_url: "", thumbnail_url: "" };
 
 function AdminSection({ title, description, children }) {
   return <section className="grid gap-5 border-t border-slate-200 py-8 sm:grid-cols-[15rem_minmax(0,1fr)] sm:gap-10 sm:py-10">
@@ -26,8 +26,27 @@ export function ResourcesAdmin() {
   const [file, setFile] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   const fileRef = React.useRef(null);
+  const thumbnailAttempts = React.useRef(new Set());
   const load = React.useCallback(() => getJSON("/resources").then((d) => { setResources(d.resources); setCategories(d.categories); }).catch((e) => toast.error(e.message)), []);
   React.useEffect(() => { load(); }, [load]);
+
+  React.useEffect(() => {
+    const missing = resources.filter((resource) => resource.is_external && !resource.thumbnail_url && !thumbnailAttempts.current.has(resource.id));
+    if (!missing.length) return;
+    missing.forEach((resource) => thumbnailAttempts.current.add(resource.id));
+    let cancelled = false;
+    (async () => {
+      for (const resource of missing) {
+        try {
+          const response = await fetch(`/api/resources/${resource.id}/thumbnail`, { method: "POST" });
+          if (!response.ok) continue;
+          const result = await response.json();
+          if (!cancelled) setResources((rows) => rows.map((row) => row.id === result.id ? result : row));
+        } catch { /* sites may decline automated previews */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [resources]);
 
   async function submit(event) {
     event.preventDefault();
@@ -99,6 +118,7 @@ export function ResourcesAdmin() {
         <fieldset className="space-y-4 border-t border-slate-200 pt-5"><legend className="pr-3 text-sm font-semibold text-slate-950">Source</legend><p className="text-sm leading-6 text-slate-600">Choose one source. Adding a file disables the link field, and adding a link disables file upload.</p>
           <Field label="File"><Input ref={fileRef} type="file" disabled={Boolean(form.external_url)} onChange={(e) => setFile(e.target.files?.[0] || null)} />{file && <p className="mt-2 text-xs text-slate-600">Selected: <span className="font-semibold text-slate-900">{file.name}</span></p>}</Field>
           <Field label="External link"><Input type="url" disabled={Boolean(file)} value={form.external_url} onChange={(e) => setForm({ ...form, external_url: e.target.value })} placeholder="https://example.com/resource" /></Field>
+          {form.external_url && <Field label="Thumbnail image URL" hint="Optional fallback — the portal first tries to fetch the link's preview image automatically."><Input type="url" value={form.thumbnail_url} onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })} placeholder="https://example.com/preview.jpg" /></Field>}
         </fieldset>
         <Button type="submit" disabled={saving || !categories.length} className="rounded-full"><FileUp />{saving ? "Publishing…" : "Publish resource"}</Button>
       </form>
