@@ -18,8 +18,8 @@ export function mediaTrainingRows(query = {}) {
       OR t.full_name LIKE @q OR t.email LIKE @q OR t.kingschat_username LIKE @q OR t.phone_number LIKE @q)`);
     params.q = `%${q}%`;
   }
-  const role = String(query.role || "").trim();
-  if (["Presenter", "Cameraman", "Technical Personnel"].includes(role)) { where.push("t.role = @role"); params.role = role; }
+  const role = String(query.role || "").trim().slice(0, 100);
+  if (role) { where.push("t.role = @role COLLATE NOCASE"); params.role = role; }
   const zone = String(query.zone || "").trim().slice(0, 250);
   if (zone) { where.push("r.zone_name = @zone COLLATE NOCASE"); params.zone = zone; }
   const direction = String(query.direction).toLowerCase() === "asc" ? "ASC" : "DESC";
@@ -45,7 +45,7 @@ mediaTraining.post("/registrations", wrap(async (req, res) => {
       .run(reference, canonicalZone, data.group_name, data.church_name, data.church_name).lastInsertRowid;
     const insert = db.prepare(`INSERT INTO media_training_trainees
       (registration_id, full_name, role, email, kingschat_username, phone_country_code, phone_number) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    insert.run(registrationId, data.full_name, data.role, data.email,
+    insert.run(registrationId, data.full_name, data.role === "Other" ? data.other_role : data.role, data.email,
       data.kingschat_username.replace(/^@/, ""), data.phone_country_code, data.phone_number);
   })();
   res.status(201).json({ reference_code: reference, zone_name: canonicalZone, group_name: data.group_name, church_name: data.church_name, full_name: data.full_name, training_date: "2026-08-24" });
@@ -56,7 +56,8 @@ mediaTraining.get("/admin", requireSuperAdmin, wrap((req, res) => {
   const totals = db.prepare(`SELECT COUNT(*) AS registrations,
     (SELECT COUNT(*) FROM media_training_trainees) AS trainees FROM media_training_registrations`).get();
   const zones = db.prepare("SELECT DISTINCT zone_name AS name FROM media_training_registrations WHERE zone_name IS NOT NULL ORDER BY name COLLATE NOCASE").all().map((row) => row.name);
-  res.json({ rows, filtered_total: rows.length, ...totals, filter_options: { zones } });
+  const roles = db.prepare("SELECT DISTINCT role AS name FROM media_training_trainees ORDER BY name COLLATE NOCASE").all().map((row) => row.name);
+  res.json({ rows, filtered_total: rows.length, ...totals, filter_options: { zones, roles } });
 }));
 
 const exportColumns = [

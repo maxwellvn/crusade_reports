@@ -196,7 +196,8 @@ export const missionNationSelectionSchema = z.object({
 
 const mediaTrainingTraineeFields = {
   full_name: z.string().trim().min(2, "Trainee name is required").max(200),
-  role: z.enum(["Presenter", "Cameraman", "Technical Personnel"], { message: "Select the trainee's role" }),
+  role: z.enum(["Presenter", "Cameraman", "Technical Personnel", "Other"], { message: "Select the trainee's role" }),
+  other_role: z.string().trim().max(100).optional().default(""),
   email: z.string().trim().email("Enter a valid email address").max(254),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter a valid KingsChat username"),
   phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Select a phone country code"),
@@ -208,4 +209,4 @@ export const mediaTrainingRegistrationSchema = z.object({
   group_name: z.string().trim().max(250).optional().default(""),
   church_name: z.string().trim().max(250).optional().default(""),
   ...mediaTrainingTraineeFields,
-});
+}).refine((data) => data.role !== "Other" || data.other_role.length >= 2, { path: ["other_role"], message: "Enter your media role" });

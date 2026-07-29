@@ -24,6 +24,8 @@ test("media training accepts an individual trainee and supports admin filtering"
   };
   assert.equal(mediaTrainingRegistrationSchema.safeParse(registration).success, true);
   assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, group_name: "", church_name: "" }).success, true);
+  assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, role: "Other", other_role: "Video Editor" }).success, true);
+  assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, role: "Other", other_role: "" }).success, false);
   assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, zone_name: "" }).success, false);
   assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, full_name: "" }).success, false);
   db.exec("BEGIN");

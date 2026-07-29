@@ -350,6 +350,29 @@ for (const column of ["group_name", "church_name"]) {
 db.exec("UPDATE media_training_registrations SET church_name = organization_name WHERE church_name IS NULL");
 db.exec("CREATE INDEX IF NOT EXISTS idx_media_training_zone ON media_training_registrations(zone_name COLLATE NOCASE)");
 
+// Custom media roles require removing the original three-role CHECK while
+// preserving every existing trainee and its registration relationship.
+const mediaTraineeSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'media_training_trainees'").get()?.sql || "";
+if (/CHECK\s*\(\s*role\s+IN/i.test(mediaTraineeSql)) {
+  db.transaction(() => db.exec(`
+    ALTER TABLE media_training_trainees RENAME TO media_training_trainees_fixed_roles;
+    CREATE TABLE media_training_trainees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      registration_id INTEGER NOT NULL REFERENCES media_training_registrations(id) ON DELETE CASCADE,
+      full_name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      email TEXT NOT NULL,
+      kingschat_username TEXT NOT NULL,
+      phone_country_code TEXT NOT NULL,
+      phone_number TEXT NOT NULL
+    );
+    INSERT INTO media_training_trainees SELECT * FROM media_training_trainees_fixed_roles;
+    DROP TABLE media_training_trainees_fixed_roles;
+    CREATE INDEX idx_media_training_trainees_registration ON media_training_trainees(registration_id);
+    CREATE INDEX idx_media_training_trainees_role ON media_training_trainees(role);
+  `))();
+}
+
 // Older databases restricted this table to id=1. Rebuild it once so the Live
 // Registrations dashboard can persist its separate id=2 layout.
 const dashboardLayoutSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'dashboard_layout'").get()?.sql || "";
