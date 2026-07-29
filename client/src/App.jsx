@@ -26,6 +26,7 @@ import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistratio
 import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
 import { MissionTripRegistration } from "@/components/MissionTripRegistration";
 import { MissionTripAdmin } from "@/components/MissionTripAdmin";
+import { PublicTranslator } from "@/components/PublicTranslator";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -166,6 +167,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <TitleManager />
+      <PublicTranslator />
       <Routes>
         {/* Public campaign surface — self-contained pages, no app chrome */}
         <Route path="/" element={<Landing />} />

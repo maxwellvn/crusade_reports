@@ -23,6 +23,7 @@ import { resources, RESOURCE_FILES_DIR } from "./routes/resources.js";
 import { missionNations } from "./routes/missionNations.js";
 import { mediaTraining } from "./routes/mediaTraining.js";
 import { missionTrips } from "./routes/missionTrips.js";
+import { translation } from "./routes/translation.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -53,6 +54,7 @@ app.use("/api/resources", resources);
 app.use("/api/mission-nations", missionNations);
 app.use("/api/media-training", mediaTraining);
 app.use("/api/mission-trips", missionTrips);
+app.use("/api/translation", translation);
 app.use("/api", zonePortal);
 
 // 404 for unknown API routes (before the SPA catch-all).
