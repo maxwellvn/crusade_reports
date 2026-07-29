@@ -822,6 +822,63 @@
     background: #efe89a;
 }
 
+/* Blue Elite refinements: let the campaign field become the page frame and
+   reserve white surfaces for the actual work instead of nesting cards. */
+.blue-elite-register .reg-main { max-width: 900px; }
+.blue-elite-register .reg-card {
+    background: transparent;
+    border-radius: 0;
+    padding-inline: clamp(4px, 2vw, 18px);
+    box-shadow: none;
+}
+.blue-elite-register form > .space-y-2 .reg-title { color: #fff; }
+.blue-elite-register .reg-eyebrow { color: #efe89a; }
+.blue-elite-register .reg-eyebrow::before { background: rgba(255, 255, 255, 0.75); }
+.blue-elite-register form > .space-y-2 .text-muted-foreground { color: #e1e2ff; }
+.blue-elite-register form > .space-y-2 button { color: #fff; }
+.blue-elite-register form > ol {
+    border: 0;
+    border-radius: 14px;
+    box-shadow: 0 14px 34px rgba(15, 17, 60, 0.16);
+}
+.blue-elite-register form > .animate-step-in > [class*="rounded-xl"],
+.blue-elite-register form > .animate-step-in > [class*="rounded-lg"] {
+    border: 0;
+    box-shadow: 0 20px 50px rgba(15, 17, 60, 0.16);
+}
+.blue-elite-register .blue-elite-action-bar {
+    border-color: rgba(48, 53, 176, 0.14);
+    box-shadow: 0 -12px 35px rgba(15, 17, 60, 0.12);
+}
+.blue-elite-register .reg-card > .animate-step-in {
+    border-radius: 24px;
+    background: #fff;
+    padding: clamp(28px, 5vw, 56px);
+    box-shadow: 0 24px 60px rgba(15, 17, 60, 0.2);
+}
+
+.blue-elite-landing { padding-bottom: 0; }
+.blue-elite-landing-main {
+    min-height: calc(100vh - 112px);
+    margin-top: clamp(76px, 9vw, 104px);
+    overflow: hidden;
+    border-radius: clamp(22px, 3vw, 38px) clamp(22px, 3vw, 38px) 0 0;
+    box-shadow: 0 30px 80px rgba(15, 17, 60, 0.24);
+}
+.blue-elite-landing-lead { background: #16194f; }
+
+@media (max-width: 639px) {
+    .blue-elite-register { padding-inline: 12px; }
+    .blue-elite-register .reg-main { padding-top: 92px; }
+    .blue-elite-register .reg-card { padding-inline: 0; }
+    .blue-elite-register form > ol { padding: 12px; }
+    .blue-elite-register .blue-elite-mobile-step { margin-bottom: -14px; }
+    .blue-elite-register .blue-elite-action-bar > div { min-height: 56px; }
+    .blue-elite-register .blue-elite-action-bar .text-sm { font-size: 12px; }
+    .blue-elite-landing { padding-inline: 12px; }
+    .blue-elite-landing-main { min-height: auto; }
+}
+
 /* ===== Footer KingsChat badge ===== */
 .landing-page .footer-kingschat { padding: 0; overflow: hidden; }
 .landing-page .footer-kingschat img {

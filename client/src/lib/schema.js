@@ -150,15 +150,15 @@ export const mediaTrainingRegistrationSchema = z.object({
 
 // ---- Loveworld Blue Elite staff registration ------------------------------
 // Mirrors server/validation.js#blueEliteRegistrationSchema. Org side is fixed
-// (zone + group + church, no cell/network selector), KingsChat username and
+// (zone with optional group/church, no cell/network selector), KingsChat username and
 // department are required, and the per-crusade shape is identical to the public
 // registration. Server is the source of truth; this is UX.
 export const blueEliteRegistrationSchema = z
   .object({
     organization_type: z.literal("church").default("church"),
     zone: z.string().min(1, "Zone is required"),
-    group_name: z.string().min(1, "Group is required"),
-    church_name: z.string().min(1, "Church name is required"),
+    group_name: z.string().trim().max(200).optional().default(""),
+    church_name: z.string().trim().max(200).optional().default(""),
     cell_name: z.string().optional().default(""),
     network_name: z.string().optional().default(""),
     contact_name: z.string().trim().min(2, "Staff name is required").max(200),

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowUpRight, ExternalLink, FileUp, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, ExternalLink, FileUp, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON, deleteJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,16 @@ export function ResourcesAdmin() {
     catch (error) { toast.error(error.message); }
   }
 
+  async function fetchThumbnail(resource) {
+    try {
+      const response = await fetch(`/api/resources/${resource.id}/thumbnail`, { method: "POST" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error?.message || "Could not fetch a thumbnail.");
+      setResources((rows) => rows.map((row) => row.id === result.id ? result : row));
+      toast.success("Thumbnail updated.");
+    } catch (error) { toast.error(error.message); }
+  }
+
   async function addCategory(event) {
     event.preventDefault();
     try {
@@ -84,7 +94,7 @@ export function ResourcesAdmin() {
     <AdminSection title="Publish a resource" description="Add a file up to 150 MB or point visitors to an external resource.">
       <form onSubmit={submit} className="max-w-2xl space-y-5">
         <Field label="Title" required><Input required maxLength={160} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Name this resource" /></Field>
-        <div className="grid gap-5 sm:grid-cols-2"><Field label="Resource type"><Select value={form.resource_type} disabled={Boolean(form.external_url)} onChange={(e) => setForm({ ...form, resource_type: e.target.value })}><option value="document">Document</option><option value="image">Image</option><option value="video">Video</option><option value="audio">Song / audio</option><option value="other">Other file</option></Select></Field><Field label="Category"><Select required value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</Select></Field></div>
+        <div className="grid gap-5 sm:grid-cols-2"><Field label="Resource type"><Select value={form.resource_type} onChange={(e) => setForm({ ...form, resource_type: e.target.value })}><option value="document">Document</option><option value="image">Image</option><option value="video">Video</option><option value="audio">Song / audio</option><option value="link">Web link</option><option value="other">Other</option></Select></Field><Field label="Category"><Select required value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</Select></Field></div>
         <Field label="Description"><Textarea rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Explain what this resource contains and who it is for." /></Field>
         <fieldset className="space-y-4 border-t border-slate-200 pt-5"><legend className="pr-3 text-sm font-semibold text-slate-950">Source</legend><p className="text-sm leading-6 text-slate-600">Choose one source. Adding a file disables the link field, and adding a link disables file upload.</p>
           <Field label="File"><Input ref={fileRef} type="file" disabled={Boolean(form.external_url)} onChange={(e) => setFile(e.target.files?.[0] || null)} />{file && <p className="mt-2 text-xs text-slate-600">Selected: <span className="font-semibold text-slate-900">{file.name}</span></p>}</Field>
@@ -100,7 +110,7 @@ export function ResourcesAdmin() {
     </AdminSection>
 
     <AdminSection title="Published resources" description={`${resources.length} resource${resources.length === 1 ? " is" : "s are"} currently available in the public library.`}>
-      <div>{resources.length ? resources.map((resource) => <div key={resource.id} className="flex items-center gap-2 border-b border-slate-200 py-4 sm:gap-4"><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-950">{resource.title}</p><p className="mt-1 truncate text-xs text-slate-500">{resource.category} · {resource.resource_type}{resource.original_name ? ` · ${resource.original_name}` : ""}</p></div><a href={resource.url} target="_blank" rel="noreferrer" className="grid size-10 shrink-0 place-items-center text-slate-600 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" aria-label={`Open ${resource.title}`}><ExternalLink className="size-4" /></a><Button type="button" variant="ghost" size="sm" onClick={() => remove(resource)} className="shrink-0 text-slate-600 hover:text-red-700" aria-label={`Delete ${resource.title}`}><Trash2 /> <span className="hidden sm:inline">Delete</span></Button></div>) : <div className="py-10"><p className="text-sm font-semibold text-slate-950">Nothing published yet</p><p className="mt-2 text-sm leading-6 text-slate-600">Use the publishing form above to add the first resource.</p></div>}</div>
+      <div>{resources.length ? resources.map((resource) => <div key={resource.id} className="flex items-center gap-3 border-b border-slate-200 py-4 sm:gap-4"><div className="grid aspect-[16/10] w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-100">{resource.thumbnail_url ? <img src={resource.thumbnail_url} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" /> : resource.resource_type === "image" ? <img src={resource.url} alt="" loading="lazy" className="h-full w-full object-cover" /> : resource.resource_type === "video" ? <video src={resource.url} preload="metadata" muted className="h-full w-full object-cover" /> : <ExternalLink className="size-4 text-slate-400" />}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-950">{resource.title}</p><p className="mt-1 truncate text-xs text-slate-500">{resource.category} · {resource.resource_type}{resource.thumbnail_url ? " · Thumbnail found" : ""}{resource.original_name ? ` · ${resource.original_name}` : ""}</p></div>{resource.is_external && <Button type="button" variant="ghost" size="icon" onClick={() => fetchThumbnail(resource)} className="shrink-0 text-slate-600" aria-label={`${resource.thumbnail_url ? "Refresh" : "Fetch"} thumbnail for ${resource.title}`} title={resource.thumbnail_url ? "Refresh thumbnail" : "Fetch thumbnail"}><RefreshCw /></Button>}<a href={resource.url} target="_blank" rel="noreferrer" className="grid size-10 shrink-0 place-items-center text-slate-600 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" aria-label={`Open ${resource.title}`}><ExternalLink className="size-4" /></a><Button type="button" variant="ghost" size="sm" onClick={() => remove(resource)} className="shrink-0 text-slate-600 hover:text-red-700" aria-label={`Delete ${resource.title}`}><Trash2 /> <span className="hidden sm:inline">Delete</span></Button></div>) : <div className="py-10"><p className="text-sm font-semibold text-slate-950">Nothing published yet</p><p className="mt-2 text-sm leading-6 text-slate-600">Use the publishing form above to add the first resource.</p></div>}</div>
     </AdminSection>
   </div>;
 }

@@ -18,19 +18,21 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
+function ResourcePreview({ resource, Icon }) {
+  const [thumbnailFailed, setThumbnailFailed] = React.useState(false);
+  if (resource.thumbnail_url && !thumbnailFailed) return <img src={resource.thumbnail_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]" />;
+  if (resource.resource_type === "image") return <img src={resource.url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]" />;
+  if (resource.resource_type === "video") return <video src={resource.url} preload="metadata" muted className="h-full w-full object-cover" />;
+  return <Icon className="size-10 text-slate-500" strokeWidth={1.4} />;
+}
+
 function ResourceRow({ resource }) {
   const Icon = ICONS[resource.resource_type] || BookOpen;
   const action = resource.is_external ? "Visit link" : "Open resource";
   return (
     <article className="group grid gap-5 border-t border-slate-200 py-6 first:border-t-0 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-8 sm:py-8 lg:grid-cols-[18rem_minmax(0,1fr)]">
       <div className="relative grid aspect-[16/10] place-items-center overflow-hidden rounded-lg bg-slate-100">
-        {resource.resource_type === "image" ? (
-          <img src={resource.url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]" />
-        ) : resource.resource_type === "video" ? (
-          <video src={resource.url} preload="metadata" muted className="h-full w-full object-cover" />
-        ) : (
-          <Icon className="size-10 text-slate-500" strokeWidth={1.4} />
-        )}
+        <ResourcePreview resource={resource} Icon={Icon} />
       </div>
       <div className="flex min-w-0 flex-col py-0.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">

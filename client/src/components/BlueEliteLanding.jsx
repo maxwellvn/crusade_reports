@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check, Radio, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import "../landing.css";
 
@@ -15,7 +15,7 @@ const REGISTER = "/blue-elite/register";
 export function BlueEliteLanding() {
   const navigate = useNavigate();
   return (
-    <div className="reg-page">
+    <div className="reg-page blue-elite-landing">
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/blue-elite" className="flex items-center gap-2.5">
@@ -25,32 +25,13 @@ export function BlueEliteLanding() {
         </div>
       </header>
 
-      <main className="reg-main">
-        <div className="reg-card space-y-8 pb-24 text-center">
-          <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Loveworld Blue Elite Staff</p>
-          <h1 className="reg-title text-4xl tracking-[-0.9px] sm:text-5xl">
-            Register your crusades.
-          </h1>
-          <div className="flex flex-wrap justify-center gap-3 pt-2">
-            <Button type="button" size="lg" onClick={() => navigate(REGISTER)}>
-              Register your crusades <ArrowRight />
-            </Button>
-          </div>
-
-          <div className="grid gap-4 pt-8 text-left sm:grid-cols-3">
-            {[
-              { n: "1", t: "Identify your team", d: "Pick your zone, group and church, and tell us your department." },
-              { n: "2", t: "Add each crusade", d: "One row per crusade — type, date, venue, expected attendance, ministers." },
-              { n: "3", t: "Submit", d: "Your crusades join the Blue Elite tally and become visible to the coordinator." },
-            ].map((s) => (
-              <div key={s.n} className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm">
-                <div className="mb-2 grid size-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{s.n}</div>
-                <div className="font-medium">{s.t}</div>
-                <p className="mt-1 text-muted-foreground">{s.d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+      <main className="blue-elite-landing-main mx-auto grid max-w-6xl items-stretch gap-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,.85fr)]">
+        <section className="blue-elite-landing-lead flex flex-col justify-between px-6 py-14 text-white sm:px-10 sm:py-20 lg:px-14"><div><p className="text-sm font-semibold text-[#efe89a]">Loveworld Blue Elite Staff</p><h1 className="mt-5 max-w-3xl text-5xl font-medium leading-[.98] tracking-[-0.03em] sm:text-7xl">Put every confirmed crusade on the record.</h1><p className="mt-7 max-w-xl text-base leading-7 text-indigo-100">Register each confirmed crusade individually so the Blue Elite team can coordinate plans and follow campaign progress accurately.</p><Button type="button" size="lg" className="mt-9 rounded-full bg-white px-6 text-indigo-950 hover:bg-indigo-50" onClick={() => navigate(REGISTER)}>Start registration <ArrowRight /></Button></div><p className="mt-16 max-w-xl border-t border-white/25 pt-6 text-sm leading-6 text-indigo-100">Your progress is saved in this browser as you work, so a long registration can be completed without starting again.</p></section>
+        <section className="bg-white px-6 py-12 sm:px-10 sm:py-16 lg:px-12 lg:py-20"><p className="text-sm font-semibold text-indigo-700">Before you begin</p><h2 className="mt-3 text-3xl font-normal tracking-[-0.03em] text-slate-950">Have each crusade’s details ready.</h2><div className="mt-10 border-y border-slate-200">{[
+          [UsersRound, "Your Blue Elite team", "Zone, group, church, department, and staff contact details."],
+          [Radio, "Every confirmed crusade", "Type, name, date, venue, location, expected attendance, and ministers."],
+          [Check, "One final review", "Check the complete list before sending it to the campaign record."],
+        ].map(([Icon, title, copy]) => <div key={title} className="grid grid-cols-[2.5rem_1fr] gap-4 border-b border-slate-200 py-6 last:border-0"><span className="grid size-9 place-items-center rounded-full bg-indigo-50 text-indigo-700"><Icon className="size-4" /></span><div><h3 className="text-base font-semibold text-slate-950">{title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{copy}</p></div></div>)}</div></section>
       </main>
     </div>
   );

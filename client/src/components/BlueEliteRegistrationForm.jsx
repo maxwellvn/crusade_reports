@@ -19,8 +19,8 @@ import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import "../landing.css";
 
 // Loveworld Blue Elite staff registration — same per-crusade shape as the public
-// /crusade-registration form, but the organization side is fixed (zone + group +
-// church, no cell/network selector) and staff must supply a department and a
+// /crusade-registration form, but the organization side is fixed (zone with
+// optional group/church, no cell/network selector) and staff must supply a department and a
 // KingsChat username. Submissions hit /api/blue-elite/registrations and are
 // tagged program='blue_elite' server-side so they stay out of the public
 // dashboard and the zone portals.
@@ -222,7 +222,7 @@ export function BlueEliteRegistrationForm() {
   }
 
   return (
-    <div className="reg-page">
+    <div className="reg-page blue-elite-register">
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/blue-elite" className="flex items-center gap-2.5">
@@ -251,7 +251,7 @@ export function BlueEliteRegistrationForm() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit, () => toast.error("Please fix the highlighted fields."))} onKeyDown={onFormKeyDown} className="space-y-6 pb-28">
+          <form onSubmit={handleSubmit(onSubmit, () => toast.error("Please fix the highlighted fields."))} onKeyDown={onFormKeyDown} className="space-y-6 pb-24">
             <div className="space-y-2">
               <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Blue Elite Staff Registration</p>
               <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your team’s crusades.</h1>
@@ -261,7 +261,8 @@ export function BlueEliteRegistrationForm() {
               </div>
             </div>
 
-            <Stepper steps={STEPS} step={step} />
+            <p className="blue-elite-mobile-step text-sm font-semibold text-white sm:hidden">Step {step + 1} of {STEPS.length} · {STEPS[step]}</p>
+            <Stepper steps={STEPS} step={step} compact />
 
             <div key={step} className="animate-step-in space-y-6 motion-reduce:animate-none">
               {step === 0 && (
@@ -278,14 +279,14 @@ export function BlueEliteRegistrationForm() {
                             fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("group_name", ""); clearGroupCache(); }} />
                         )} />
                       </Field>
-                      <Field label="Group" required error={errors.group_name?.message}>
+                      <Field label="Group" hint="Optional — leave blank if you serve in the zonal church" error={errors.group_name?.message}>
                         <Controller control={control} name="group_name" render={({ field }) => (
                           <Combobox value={field.value} invalid={!!errors.group_name} caps disabled={!zone}
                             placeholder={zone ? "Select group" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
                             fetcher={fetchGroups} onSelect={(o) => field.onChange(o.label)} />
                         )} />
                       </Field>
-                      <Field label="Church name" required error={errors.church_name?.message} className="sm:col-span-2">
+                      <Field label="Church name" hint="Optional — add it only when applicable" error={errors.church_name?.message} className="sm:col-span-2">
                         <Input {...register("church_name")} aria-invalid={!!errors.church_name} placeholder="e.g. Christ Embassy Lekki" />
                       </Field>
                     </div>
@@ -475,11 +476,11 @@ export function BlueEliteRegistrationForm() {
               )}
             </div>
 
-            <div className="fixed inset-x-0 bottom-0 border-t bg-card/90 backdrop-blur">
-              <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
+            <div className="blue-elite-action-bar fixed inset-x-0 bottom-0 border-t bg-card/95 backdrop-blur">
+              <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
                 <div className="flex items-center gap-4">
                   {step > 0 && <Button type="button" variant="ghost" onClick={back}><ArrowLeft /> Back</Button>}
-                  <span className="text-sm text-muted-foreground">
+                  <span className="hidden text-sm text-muted-foreground sm:inline">
                     {totalPlanned > 0
                       ? <><span className="font-semibold text-foreground tabular-nums">{nfull.format(totalPlanned)}</span> crusade{totalPlanned === 1 ? "" : "s"} planned</>
                       : `Step ${step + 1} of ${STEPS.length}`}

@@ -317,6 +317,9 @@ if (/mission_country_code\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(missionSelectionSq
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_mission_selections_assignment ON mission_nation_selections(assigned_country_code)");
 
+const resourceColumns = new Set(db.prepare("PRAGMA table_info(resources)").all().map((column) => column.name));
+if (!resourceColumns.has("thumbnail_url")) db.exec("ALTER TABLE resources ADD COLUMN thumbnail_url TEXT");
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS media_training_registrations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

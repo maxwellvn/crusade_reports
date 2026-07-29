@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
-import { confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
+import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
@@ -16,6 +16,43 @@ import { applyPortalScope } from "./portalScope.js";
 import { COUNTRIES } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
+import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
+
+test("resource links discover safe media thumbnails", () => {
+  assert.equal(youtubeThumbnail(new URL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")), "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+  assert.equal(metadataImage('<meta content="/preview.jpg" property="og:image">', "https://example.com/article"), "https://example.com/preview.jpg");
+  assert.equal(isPrivateAddress("127.0.0.1"), true);
+  assert.equal(isPrivateAddress("192.168.1.5"), true);
+  assert.equal(isPrivateAddress("8.8.8.8"), false);
+});
+
+test("Blue Elite registration allows zonal staff without a group or church", () => {
+  const registration = {
+    organization_type: "church",
+    zone: "Lagos Zone 1",
+    group_name: "",
+    church_name: "",
+    contact_name: "Ada Example",
+    contact_email: "ada@example.com",
+    phone_country_code: "+234",
+    phone_number: "8012345678",
+    kingschat_username: "ada.example",
+    department: "Ministry of Publishing",
+    items: [{
+      event_type: "street",
+      event_name: "City Reach",
+      event_date: "2026-08-24",
+      venue: "City Hall",
+      expected_attendance: 100,
+      minister_name: "Pastor Example",
+      country: "Nigeria",
+      city: "Lagos",
+    }],
+  };
+
+  assert.equal(blueEliteRegistrationSchema.safeParse(registration).success, true);
+  assert.equal(blueEliteRegistrationSchema.safeParse({ ...registration, zone: "" }).success, false);
+});
 
 test("media training accepts an individual trainee and supports admin filtering", () => {
   const registration = {

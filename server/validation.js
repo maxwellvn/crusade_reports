@@ -152,8 +152,9 @@ export const registrationCrusadeEditSchema = z
 
 // ---- Loveworld Blue Elite staff registration -------------------------------
 // Same per-crusade shape as the public registration, but the org side is fixed:
-// Blue Elite staff always identify a zone + group + church (no cell, no network),
-// and they must supply a department and a KingsChat username. Reuses the
+// Blue Elite staff always identify a zone; group and church are optional because
+// staff may serve directly in a zonal or group church. They must supply a
+// department and a KingsChat username. Reuses the
 // existing contact_name column for the staff member's name.
 
 const blueEliteContactFields = {
@@ -170,8 +171,8 @@ export const blueEliteRegistrationSchema = z
     // Fixed internally; the form does not expose an org-type selector.
     organization_type: z.literal("church").default("church"),
     zone: z.string().trim().min(1, "Zone is required"),
-    group_name: z.string().trim().min(1, "Group is required"),
-    church_name: z.string().trim().min(1, "Church name is required"),
+    group_name: z.string().trim().max(200).optional().default(""),
+    church_name: z.string().trim().max(200).optional().default(""),
     cell_name: z.string().trim().optional().default(""),
     network_name: z.string().trim().optional().default(""),
     ...blueEliteContactFields,

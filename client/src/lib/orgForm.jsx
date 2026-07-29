@@ -90,7 +90,7 @@ export function useOrgData(zone, countryCode) {
   return { fetchCountries, countryCodeOf, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, networks, setNetworks, clearGroupCache };
 }
 
-export function Stepper({ steps, step }) {
+export function Stepper({ steps, step, compact = false }) {
   return (
     <ol className="flex items-center gap-2 rounded-lg border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60">
       {steps.map((label, i) => {
@@ -106,7 +106,7 @@ export function Stepper({ steps, step }) {
               {state === "done" ? <Check className="size-4" /> : <span className="text-xs font-semibold leading-none tabular-nums">{i + 1}</span>}
             </span>
             {/* on phones only the active step's label fits comfortably */}
-            <span className={"text-sm font-medium transition-colors " + (state === "todo" ? "text-muted-foreground" : "text-foreground") + (state === "current" ? "" : " max-sm:hidden")}>{label}</span>
+            <span className={"text-sm font-medium transition-colors " + (state === "todo" ? "text-muted-foreground" : "text-foreground") + (compact ? " max-sm:hidden" : state === "current" ? "" : " max-sm:hidden")}>{label}</span>
             {i < steps.length - 1 && (
               <span className="mx-1 h-px flex-1 overflow-hidden rounded-full bg-border">
                 <span className={"block h-full origin-left bg-primary transition-transform duration-300 ease-emphasized " + (i < step ? "scale-x-100" : "scale-x-0")} />
