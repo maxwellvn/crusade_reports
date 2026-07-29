@@ -4,9 +4,9 @@ import { ApiError, wrap } from "../logger.js";
 export const translation = Router();
 
 const LANGUAGES = [
-  ["af", "Afrikaans"], ["am", "Amharic"], ["ar", "Arabic"], ["bn", "Bengali"], ["bg", "Bulgarian"],
+  ["en", "English"], ["af", "Afrikaans"], ["am", "Amharic"], ["ar", "Arabic"], ["bn", "Bengali"], ["bg", "Bulgarian"],
   ["zh-CN", "Chinese (Simplified)"], ["zh-TW", "Chinese (Traditional)"], ["hr", "Croatian"], ["cs", "Czech"], ["da", "Danish"],
-  ["nl", "Dutch"], ["en", "English"], ["fi", "Finnish"], ["fr", "French"], ["de", "German"], ["el", "Greek"],
+  ["nl", "Dutch"], ["fi", "Finnish"], ["fr", "French"], ["de", "German"], ["el", "Greek"],
   ["gu", "Gujarati"], ["ha", "Hausa"], ["he", "Hebrew"], ["hi", "Hindi"], ["hu", "Hungarian"], ["ig", "Igbo"],
   ["id", "Indonesian"], ["it", "Italian"], ["ja", "Japanese"], ["kn", "Kannada"], ["ko", "Korean"], ["ms", "Malay"],
   ["ml", "Malayalam"], ["mr", "Marathi"], ["ne", "Nepali"], ["no", "Norwegian"], ["fa", "Persian"], ["pl", "Polish"],
@@ -48,13 +48,12 @@ translation.post("/translate", wrap(async (req, res) => {
   if (!CODES.has(target) || target === "en") throw new ApiError(400, "INVALID_LANGUAGE", "Choose an available translation language.");
   if (!texts.length || texts.length > 50 || texts.some((text) => !text || text.length > 600) || texts.join("").length > 12000) throw new ApiError(400, "INVALID_TEXT", "The page contains too much text to translate at once.");
 
-  const ip = req.ip || "unknown"; const now = Date.now(); const recent = (usage.get(ip) || []).filter((time) => now - time < 60_000);
-  if (recent.length >= 30) throw new ApiError(429, "TRANSLATION_LIMIT", "Too many translation requests. Please wait a moment and try again.");
-  usage.set(ip, [...recent, now]);
-
   const translated = new Array(texts.length); const missing = []; const indexes = [];
   texts.forEach((text, index) => { const cached = cache.get(`${target}\0${text}`); if (cached) translated[index] = cached; else { missing.push(text); indexes.push(index); } });
   if (missing.length) {
+    const ip = req.ip || "unknown"; const now = Date.now(); const recent = (usage.get(ip) || []).filter((time) => now - time < 60_000);
+    if (recent.length >= 30) throw new ApiError(429, "TRANSLATION_LIMIT", "Too many translation requests. Please wait a moment and try again.");
+    usage.set(ip, [...recent, now]);
     const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(key)}`, {
       method: "POST", signal: AbortSignal.timeout(15_000), headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ q: missing, source: "en", target, format: "text" }),
