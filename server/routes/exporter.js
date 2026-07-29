@@ -31,11 +31,14 @@ async function sendXlsx(res, baseName, columns, rows) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Export");
   sheet.columns = columns.map((c) => ({
-    header: c.header, key: c.header, width: Math.min(Math.max(c.header.length + 2, 12), 42),
+    header: c.header,
+    key: c.header,
+    width: Math.min(Math.max(c.header.length + 2, 12, ...rows.map((row) => String(cellOf(c, row)).length + 2)), 42),
   }));
   sheet.getRow(1).font = { bold: true };
   sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3FF" } };
   sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
   for (const row of rows) {
     sheet.addRow(Object.fromEntries(columns.map((c) => [c.header, cellOf(c, row)])));
   }

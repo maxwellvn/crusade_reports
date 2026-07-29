@@ -177,3 +177,35 @@ export const blueEliteRegistrationSchema = z
     ...blueEliteContactFields,
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   });
+
+// ---- Mission nation selection ----------------------------------------------
+
+export const missionNationSelectionSchema = z.object({
+  pastor_name: z.string().trim().min(2, "Zonal Pastor name is required").max(200),
+  zone_name: z.string().trim().min(2, "Zone is required").max(200),
+  home_country_code: z.string().trim().length(2, "Zone home nation is required").toUpperCase(),
+  mission_country_code: z.string().trim().length(2, "Select a mission nation").toUpperCase(),
+  contact_email: z.string().trim().email("Enter a valid email address").max(254),
+  phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
+}).refine((data) => data.home_country_code !== data.mission_country_code, {
+  path: ["mission_country_code"],
+  message: "Choose a nation outside your zone's home nation",
+});
+
+const mediaTrainingTraineeFields = {
+  full_name: z.string().trim().min(2, "Trainee name is required").max(200),
+  role: z.enum(["Presenter", "Cameraman", "Technical Personnel"], { message: "Select the trainee's role" }),
+  email: z.string().trim().email("Enter a valid email address").max(254),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter a valid KingsChat username"),
+  phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Select a phone country code"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+};
+
+export const mediaTrainingRegistrationSchema = z.object({
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  group_name: z.string().trim().max(250).optional().default(""),
+  church_name: z.string().trim().max(250).optional().default(""),
+  ...mediaTrainingTraineeFields,
+});

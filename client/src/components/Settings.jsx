@@ -1,9 +1,8 @@
 import * as React from "react";
-import { LogOut, Trash2, UserPlus } from "lucide-react";
+import { ArrowUpRight, LogOut, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -20,6 +19,18 @@ const LANDING_PAGE_LABELS = {
   "/crusades": "Reports",
   "/dashboard/zone-links": "Zone links",
 };
+
+function SettingsSection({ title, description, children }) {
+  return (
+    <section className="grid gap-5 border-t border-slate-200 py-8 sm:grid-cols-[15rem_minmax(0,1fr)] sm:gap-10 sm:py-10">
+      <div>
+        <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-950">{title}</h3>
+        <p className="mt-2 max-w-xs text-sm leading-6 text-slate-600">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
 
 export function Settings() {
   const admin = useAdmin();
@@ -132,88 +143,77 @@ export function Settings() {
   }
 
   if (!admin?.is_super_admin) {
-    return <div className="mx-auto max-w-3xl"><Card><CardContent className="pt-6 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard accounts.</CardContent></Card></div>;
+    return <div className="mx-auto max-w-3xl border-y border-slate-200 py-8 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard settings.</div>;
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-5xl">
       <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Settings" }]} />
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Settings</h2>
-          <p className="text-sm text-muted-foreground">Signed in as {admin.name} (@{admin.username})</p>
+          <h2 className="text-3xl font-normal tracking-[-0.03em] text-slate-950 sm:text-4xl">Settings</h2>
+          <p className="mt-2 text-sm text-slate-600">Campaign controls and dashboard access for NOTC administrators.</p>
         </div>
-        <Button type="button" variant="outline" onClick={logout}><LogOut /> Sign out</Button>
+        <div className="flex items-center gap-4">
+          <p className="min-w-0 text-sm text-slate-500"><span className="block truncate font-medium text-slate-900">{admin.name}</span>@{admin.username}</p>
+          <Button type="button" variant="outline" onClick={logout} className="rounded-full"><LogOut /> Sign out</Button>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Reporting access</CardTitle>
-          <CardDescription>Controls the report form and Reports tab on every zone and network dashboard.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium">{reportingOpen === null ? "Loading reporting status…" : `Reporting is ${reportingOpen ? "open" : "closed"}`}</p>
-            <p className="text-xs text-muted-foreground">When closed, report links are hidden and submissions are rejected by the server.</p>
+      <SettingsSection title="Reporting access" description="Controls the public report form and the Reports tab on zone and network dashboards.">
+        <div className="flex items-center justify-between gap-6 border-b border-slate-200 pb-6">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-950">{reportingOpen === null ? "Checking reporting status…" : `Reporting is ${reportingOpen ? "open" : "closed"}`}</p>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">{reportingOpen ? "Reports can be submitted from public and private reporting links." : "Report links are hidden and new submissions are rejected by the server."}</p>
           </div>
           <button type="button" role="switch" aria-checked={Boolean(reportingOpen)} disabled={reportingOpen === null || savingReporting}
             onClick={toggleReporting}
-            className={`relative h-7 w-12 shrink-0 border transition-colors disabled:opacity-50 ${reportingOpen ? "border-emerald-700 bg-emerald-600" : "border-input bg-muted"}`}>
-            <span className={`absolute top-1 block size-4 bg-background transition-transform ${reportingOpen ? "translate-x-6" : "translate-x-1"}`} />
+            className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4 disabled:opacity-50 ${reportingOpen ? "border-slate-950 bg-slate-950" : "border-slate-300 bg-slate-200"}`}>
+            <span className={`absolute top-1 block size-4 rounded-full bg-white transition-transform ${reportingOpen ? "translate-x-6" : "translate-x-1"}`} />
             <span className="sr-only">{reportingOpen ? "Close reporting" : "Open reporting"}</span>
           </button>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Default landing page</CardTitle>
-          <CardDescription>Where signed-in admins land after login, after sign-out, and when visiting /admin.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <SettingsSection title="Default landing page" description="Choose where administrators arrive after KingsChat login, sign-out and the /admin shortcut.">
+        <div className="max-w-xl space-y-3">
           <Field label="Landing page">
             <Select value={landingPage} disabled={savingLanding || !landingOptions.length} onChange={(e) => saveLandingPage(e.target.value)}>
               {landingOptions.map((path) => <option key={path} value={path}>{LANDING_PAGE_LABELS[path] || path}</option>)}
             </Select>
           </Field>
-          <p className="text-xs text-muted-foreground">
-            Currently: <span className="font-medium text-foreground">{LANDING_PAGE_LABELS[landingPage] || landingPage || "—"}</span>
-            {" — "}applies to the KingsChat login callback, the sign-out redirect, and the /admin shortcut.
+          <p className="flex items-center gap-1.5 text-sm text-slate-500">
+            Current destination: <span className="font-semibold text-slate-900">{LANDING_PAGE_LABELS[landingPage] || landingPage || "Loading…"}</span>
+            <ArrowUpRight className="size-3.5" aria-hidden="true" />
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Dashboard access accounts</CardTitle>
-          <CardDescription>Add a KingsChat username to grant access to all main administration dashboards.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={addAccount} className="flex items-end gap-3 border-b pb-5">
-            <Field label="KingsChat username" className="flex-1">
+      <SettingsSection title="Dashboard accounts" description="Grant a KingsChat account access to the main administration dashboards.">
+          <form onSubmit={addAccount} className="grid items-start gap-3 border-b border-slate-200 pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Field label="KingsChat username" className="min-w-0">
               <Input name="username" required minLength={2} placeholder="@username" autoComplete="off" value={username} onChange={(event) => setUsername(event.target.value)} />
-              {lookup.message && <p className={`mt-1 text-xs ${lookup.state === "found" ? "text-emerald-700" : lookup.state === "missing" ? "text-destructive" : "text-muted-foreground"}`}>
+              {lookup.message && <p aria-live="polite" className={`mt-2 text-xs ${lookup.state === "found" ? "text-slate-900" : lookup.state === "missing" ? "text-destructive" : "text-muted-foreground"}`}>
                 {lookup.state === "found" ? `KingsChat user: ${lookup.message}` : lookup.message}
               </p>}
             </Field>
-            <Button type="submit" disabled={lookup.state !== "found"}><UserPlus /> Add account</Button>
+            <Button type="submit" disabled={lookup.state !== "found"} className="mt-6 rounded-full"><UserPlus /> Add account</Button>
           </form>
-          <div className="divide-y">
-            {loading ? <p className="py-6 text-sm text-muted-foreground">Loading accounts…</p> : accounts.map((account) => (
-              <div key={account.username} className="flex items-center justify-between gap-3 py-3">
-                <div>
-                  <p className="font-medium">@{account.username}</p>
-                  <p className="text-xs text-muted-foreground">Added {account.created_at?.slice(0, 10)}{account.created_by ? ` by ${account.created_by}` : ""}</p>
+          <div aria-live="polite">
+            {loading ? <p className="py-8 text-sm text-muted-foreground">Loading dashboard accounts…</p> : accounts.length ? accounts.map((account) => (
+              <div key={account.username} className="flex items-center justify-between gap-4 border-b border-slate-200 py-4">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-950">@{account.username}</p>
+                  <p className="mt-1 text-xs text-slate-500">Added {account.created_at?.slice(0, 10) || "by the system"}{account.created_by ? ` · ${account.created_by}` : ""}</p>
                 </div>
                 <Button type="button" variant="ghost" size="sm" disabled={account.username === admin.username}
-                  onClick={() => removeAccount(account.username)} aria-label={`Remove @${account.username}`}>
+                  onClick={() => removeAccount(account.username)} aria-label={`Remove @${account.username}`} className="shrink-0 text-slate-600 hover:text-red-700">
                   <Trash2 /> Remove
                 </Button>
               </div>
-            ))}
+            )) : <p className="py-8 text-sm text-slate-500">No dashboard accounts have been added.</p>}
           </div>
-        </CardContent>
-      </Card>
+      </SettingsSection>
     </div>
   );
 }

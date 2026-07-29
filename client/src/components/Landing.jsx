@@ -352,9 +352,9 @@ export function Landing() {
           </button>
           <nav className="nav" id="primary-nav">
             <div className="nav-pill">
-              <a href="https://rhapsodycrusades.org/resources" target="_blank" rel="noreferrer" className="nav-link resources-link" onClick={closeNav}>
+              <Link to="/resources" className="nav-link resources-link" onClick={closeNav}>
                 Resources <img src="/assets/icon-resources.svg" className="nav-icon" alt="" />
-              </a>
+              </Link>
               <span className="nav-divider" />
               <DonateLink onClick={closeNav} />
             </div>
@@ -433,7 +433,7 @@ export function Landing() {
               <div className="footer-col">
                 <h4>Explore</h4>
                 <Link to={REGISTER}>Register</Link>
-                <a href="https://rhapsodycrusades.org/resources" target="_blank" rel="noreferrer">Resources</a>
+                <Link to="/resources">Resources</Link>
                 <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer">Donate</a>
               </div>
               <div className="footer-col">

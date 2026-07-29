@@ -18,6 +18,12 @@ import { BlueEliteRegistrationForm } from "@/components/BlueEliteRegistrationFor
 import { BlueEliteDashboard } from "@/components/BlueEliteDashboard";
 import { BlueEliteRegistrationsTable } from "@/components/BlueEliteRegistrationsTable";
 import { Settings } from "@/components/Settings";
+import { ResourcesLibrary } from "@/components/ResourcesLibrary";
+import { ResourcesAdmin } from "@/components/ResourcesAdmin";
+import { MissionNationSelection } from "@/components/MissionNationSelection";
+import { MissionNationAdmin } from "@/components/MissionNationAdmin";
+import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistration";
+import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -32,6 +38,12 @@ const PAGE_TITLES = [
   [/^\/crusade-registration\/register/, "Register your crusades"],
   [/^\/crusade-registration/, "A Night of a Thousand Crusades"],
   [/^\/report/, "Report a crusade"],
+  [/^\/resources$/, "Resource library"],
+  [/^\/select-nation/, "Mission Nation Selection"],
+  [/^\/media-training$/, "Global Media Training"],
+  [/^\/dashboard\/media-training/, "Media training registrations"],
+  [/^\/dashboard\/mission-nations/, "Mission nation selections"],
+  [/^\/dashboard\/resources/, "Manage resources"],
   [/^\/dashboard\/zone-links/, "Zone links"],
   [/^\/dashboard\/settings/, "Settings"],
   [/^\/dashboard\/blue-elite/, "Blue Elite dashboard"],
@@ -166,6 +178,9 @@ export default function App() {
 
         {/* Reporting surface — standalone campaign-style page, same as registration */}
         <Route path="/report" element={<ReportForm />} />
+        <Route path="/resources" element={<ResourcesLibrary />} />
+        <Route path="/select-nation" element={<MissionNationSelection />} />
+        <Route path="/media-training" element={<MediaTrainingRegistration />} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />
@@ -176,7 +191,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
@@ -185,6 +200,9 @@ export default function App() {
           <Route path="/registrations/live" element={<RegistrationsLive />} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
           <Route path="/dashboard/settings" element={<SettingsRoute />} />
+          <Route path="/dashboard/resources" element={<SuperAdminRoute><ResourcesAdmin /></SuperAdminRoute>} />
+          <Route path="/dashboard/mission-nations" element={<SuperAdminRoute><MissionNationAdmin /></SuperAdminRoute>} />
+          <Route path="/dashboard/media-training" element={<SuperAdminRoute><MediaTrainingAdmin /></SuperAdminRoute>} />
           {/* Blue Elite admin surface — super-admin only */}
           <Route path="/dashboard/blue-elite" element={<SuperAdminRoute><BlueEliteDashboard /></SuperAdminRoute>} />
           <Route path="/registrations/blue-elite" element={<SuperAdminRoute><BlueEliteRegistrationsTable /></SuperAdminRoute>} />

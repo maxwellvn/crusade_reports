@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
-import { confirmationSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
+import { confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
@@ -13,6 +13,77 @@ import { deleteCrusadeReport } from "./routes/crusades.js";
 import { deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
+import { COUNTRIES } from "./routes/countries.js";
+import { adminSelectionQuery } from "./routes/missionNations.js";
+import { mediaTrainingRows } from "./routes/mediaTraining.js";
+
+test("media training accepts an individual trainee and supports admin filtering", () => {
+  const registration = {
+    zone_name: "Lagos Zone 1", group_name: "Lekki Group", church_name: "Christ Embassy Lekki", full_name: "Ada Example",
+    role: "Presenter", email: "ada@example.com", kingschat_username: "ada", phone_country_code: "+234", phone_number: "8012345678",
+  };
+  assert.equal(mediaTrainingRegistrationSchema.safeParse(registration).success, true);
+  assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, group_name: "", church_name: "" }).success, true);
+  assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, zone_name: "" }).success, false);
+  assert.equal(mediaTrainingRegistrationSchema.safeParse({ ...registration, full_name: "" }).success, false);
+  db.exec("BEGIN");
+  try {
+    const id = db.prepare("INSERT INTO media_training_registrations (reference_code, zone_name, group_name, church_name, organization_name, primary_timezone) VALUES ('GMT-TEST-1', ?, ?, ?, ?, '')").run(registration.zone_name, registration.group_name, registration.church_name, registration.church_name).lastInsertRowid;
+    const insert = db.prepare("INSERT INTO media_training_trainees (registration_id, full_name, role, email, kingschat_username, phone_country_code, phone_number) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    insert.run(id, registration.full_name, registration.role, registration.email, registration.kingschat_username, registration.phone_country_code, registration.phone_number);
+    assert.deepEqual(mediaTrainingRows({ role: "Presenter" }).map((row) => row.full_name), ["Ada Example"]);
+    assert.deepEqual(mediaTrainingRows({ zone: "Lagos Zone 1" }).map((row) => row.full_name), ["Ada Example"]);
+    assert.deepEqual(mediaTrainingRows({ q: "Ada Example" }).map((row) => row.role), ["Presenter"]);
+  } finally { db.exec("ROLLBACK"); }
+});
+
+test("mission nation catalogue contains 242 nations and rejects home-nation selection", () => {
+  assert.equal(COUNTRIES.length, 242);
+  assert.equal(COUNTRIES.some((country) => !country.continent || country.continent === "Other"), false);
+  assert.deepEqual([...new Set(COUNTRIES.map((country) => country.continent))].sort(), ["Africa", "Asia", "Europe", "North America", "Oceania", "South America"]);
+  const selection = {
+    pastor_name: "Pastor Test", zone_name: "Test Zone", home_country_code: "NG",
+    mission_country_code: "GH", contact_email: "pastor@example.com", phone_country_code: "+234",
+    phone_number: "8012345678", kingschat_username: "pastor.test",
+  };
+  assert.equal(missionNationSelectionSchema.safeParse(selection).success, true);
+  assert.equal(missionNationSelectionSchema.safeParse({ ...selection, mission_country_code: "NG" }).success, false);
+});
+
+test("each zone submits once while multiple zones may prefer the same nation", () => {
+  db.exec("BEGIN");
+  try {
+    const insert = db.prepare(`INSERT INTO mission_nation_selections
+      (receipt_code, pastor_name, zone_name, home_country_code, home_country_name, mission_country_code,
+       mission_country_name, contact_email, phone_country_code, phone_number, kingschat_username)
+      VALUES (?, 'Pastor Test', ?, 'NG', 'Nigeria', ?, ?, 'pastor@example.com', '+234', '8012345678', 'pastor.test')`);
+    insert.run("MN-TEST-1", "MISSION TEST ZONE", "GH", "Ghana");
+    assert.throws(() => insert.run("MN-TEST-2", "MISSION TEST ZONE", "KE", "Kenya"), /UNIQUE/);
+    assert.doesNotThrow(() => insert.run("MN-TEST-3", "ANOTHER TEST ZONE", "GH", "Ghana"));
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("mission nation admin filters and sorting are server constrained", () => {
+  db.exec("BEGIN");
+  try {
+    const insert = db.prepare(`INSERT INTO mission_nation_selections
+      (receipt_code, pastor_name, zone_name, home_country_code, home_country_name, mission_country_code,
+       mission_country_name, contact_email, phone_country_code, phone_number, kingschat_username, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '+234', '8012345678', ?, ?)`);
+    insert.run("MN-FILTER-1", "Pastor Alpha", "FILTER ZONE A", "NG", "Nigeria", "GH", "Ghana", "alpha@example.com", "alpha", "2026-07-01 10:00:00");
+    insert.run("MN-FILTER-2", "Pastor Beta", "FILTER ZONE B", "ZA", "South Africa", "KE", "Kenya", "beta@example.com", "beta", "2026-07-02 10:00:00");
+    db.prepare("UPDATE mission_nation_selections SET assigned_country_code = 'US', assigned_country_name = 'United States' WHERE receipt_code = 'MN-FILTER-1'").run();
+    assert.deepEqual(adminSelectionQuery({ mission_country: "GH" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
+    assert.deepEqual(adminSelectionQuery({ assigned_country: "US" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
+    assert.deepEqual(adminSelectionQuery({ q: "United States" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
+    assert.deepEqual(adminSelectionQuery({ zone: "FILTER ZONE B" }).map((row) => row.receipt_code), ["MN-FILTER-2"]);
+    assert.deepEqual(adminSelectionQuery({ q: "MN-FILTER", date_from: "2026-07-02", sort: "mission_nation", direction: "asc" }).map((row) => row.receipt_code), ["MN-FILTER-2"]);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
 
 test("not holding requires feedback while other statuses do not", () => {
   assert.equal(confirmationSchema.safeParse({ status: "not_holding", feedback: "" }).success, false);

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { wrap } from "../logger.js";
+import { continentForCode } from "../countryContinents.js";
 
 export const countries = Router();
 
@@ -11,7 +12,7 @@ const CODES =
   );
 
 const dn = new Intl.DisplayNames(["en"], { type: "region" });
-export const COUNTRIES = CODES.map((code) => ({ code, name: dn.of(code) || code }))
+export const COUNTRIES = CODES.map((code) => ({ code, name: dn.of(code) || code, continent: continentForCode(code) }))
   .filter((c) => c.name && c.name !== c.code)
   .sort((a, b) => a.name.localeCompare(b.name));
 

@@ -201,6 +201,64 @@ db.exec(`
   );
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('reporting_open', '1');
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('default_landing_page', '/registrations/live');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mission_nation_selection_open', '1');
+
+  CREATE TABLE IF NOT EXISTS mission_nation_selections (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_code        TEXT NOT NULL UNIQUE,
+    pastor_name         TEXT NOT NULL,
+    zone_name           TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    home_country_code   TEXT NOT NULL,
+    home_country_name   TEXT NOT NULL,
+    mission_country_code TEXT NOT NULL,
+    mission_country_name TEXT NOT NULL,
+    assigned_country_code TEXT,
+    assigned_country_name TEXT,
+    assignment_updated_at TEXT,
+    assigned_by           TEXT,
+    contact_email       TEXT NOT NULL,
+    phone_country_code  TEXT NOT NULL,
+    phone_number        TEXT NOT NULL,
+    kingschat_username  TEXT NOT NULL,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_mission_selections_created ON mission_nation_selections(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_mission_selections_pastor ON mission_nation_selections(pastor_name COLLATE NOCASE);
+  CREATE INDEX IF NOT EXISTS idx_mission_selections_preference ON mission_nation_selections(mission_country_code);
+
+  CREATE TABLE IF NOT EXISTS resource_categories (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  INSERT OR IGNORE INTO resource_categories (name) VALUES
+    ('Teaching'), ('Campaign Materials'), ('Training'), ('Music'), ('Media'), ('Documents'), ('Other');
+
+  -- Public NOTC resource library. Files live outside the client bundle and are
+  -- referenced by an unguessable stored filename; original names are metadata.
+  CREATE TABLE IF NOT EXISTS resources (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    title         TEXT NOT NULL,
+    description   TEXT,
+    category      TEXT NOT NULL DEFAULT 'other',
+    resource_type TEXT NOT NULL,
+    external_url  TEXT,
+    stored_name   TEXT,
+    original_name TEXT,
+    mime_type     TEXT,
+    file_size     INTEGER,
+    created_by    TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (resource_type IN ('link','image','video','document','audio','other')),
+    CHECK ((external_url IS NOT NULL AND stored_name IS NULL) OR
+           (external_url IS NULL AND stored_name IS NOT NULL))
+  );
+  CREATE INDEX IF NOT EXISTS idx_resources_type ON resources(resource_type);
+  CREATE INDEX IF NOT EXISTS idx_resources_category ON resources(category);
+  CREATE INDEX IF NOT EXISTS idx_resources_created ON resources(created_at DESC);
+  INSERT OR IGNORE INTO resource_categories (name)
+    SELECT DISTINCT category FROM resources WHERE trim(category) <> '';
 
   CREATE INDEX IF NOT EXISTS idx_reg_items_reg     ON registration_items(registration_id);
   CREATE INDEX IF NOT EXISTS idx_reg_items_type    ON registration_items(event_type);
@@ -208,6 +266,89 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reg_items_country ON registration_items(country);
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
 `);
+
+// Mission-nation preferences were initially exclusive per nation. Rebuild once
+// so many zones can express interest in the same nation while admins make a
+// separate final assignment decision.
+const missionSelectionSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'mission_nation_selections'").get()?.sql || "";
+if (/mission_country_code\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(missionSelectionSql)) {
+  db.transaction(() => {
+    db.exec(`
+      ALTER TABLE mission_nation_selections RENAME TO mission_nation_selections_exclusive;
+      CREATE TABLE mission_nation_selections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        receipt_code TEXT NOT NULL UNIQUE,
+        pastor_name TEXT NOT NULL,
+        zone_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        home_country_code TEXT NOT NULL,
+        home_country_name TEXT NOT NULL,
+        mission_country_code TEXT NOT NULL,
+        mission_country_name TEXT NOT NULL,
+        assigned_country_code TEXT,
+        assigned_country_name TEXT,
+        assignment_updated_at TEXT,
+        assigned_by TEXT,
+        contact_email TEXT NOT NULL,
+        phone_country_code TEXT NOT NULL,
+        phone_number TEXT NOT NULL,
+        kingschat_username TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO mission_nation_selections
+        (id, receipt_code, pastor_name, zone_name, home_country_code, home_country_name,
+         mission_country_code, mission_country_name, contact_email, phone_country_code,
+         phone_number, kingschat_username, created_at)
+      SELECT id, receipt_code, pastor_name, zone_name, home_country_code, home_country_name,
+         mission_country_code, mission_country_name, contact_email, phone_country_code,
+         phone_number, kingschat_username, created_at
+      FROM mission_nation_selections_exclusive;
+      DROP TABLE mission_nation_selections_exclusive;
+      CREATE INDEX idx_mission_selections_created ON mission_nation_selections(created_at DESC);
+      CREATE INDEX idx_mission_selections_pastor ON mission_nation_selections(pastor_name COLLATE NOCASE);
+      CREATE INDEX idx_mission_selections_preference ON mission_nation_selections(mission_country_code);
+      CREATE INDEX idx_mission_selections_assignment ON mission_nation_selections(assigned_country_code);
+    `);
+  })();
+} else {
+  const missionCols = new Set(db.prepare("PRAGMA table_info(mission_nation_selections)").all().map((column) => column.name));
+  for (const column of ["assigned_country_code", "assigned_country_name", "assignment_updated_at", "assigned_by"]) {
+    if (!missionCols.has(column)) db.exec(`ALTER TABLE mission_nation_selections ADD COLUMN ${column} TEXT`);
+  }
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_mission_selections_assignment ON mission_nation_selections(assigned_country_code)");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS media_training_registrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_code TEXT NOT NULL UNIQUE,
+    organization_name TEXT NOT NULL,
+    primary_timezone TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS media_training_trainees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    registration_id INTEGER NOT NULL REFERENCES media_training_registrations(id) ON DELETE CASCADE,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('Presenter', 'Cameraman', 'Technical Personnel')),
+    email TEXT NOT NULL,
+    kingschat_username TEXT NOT NULL,
+    phone_country_code TEXT NOT NULL,
+    phone_number TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_media_training_created ON media_training_registrations(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_media_training_trainees_registration ON media_training_trainees(registration_id);
+  CREATE INDEX IF NOT EXISTS idx_media_training_trainees_role ON media_training_trainees(role);
+`);
+const mediaTrainingColumns = new Set(db.prepare("PRAGMA table_info(media_training_registrations)").all().map((column) => column.name));
+if (!mediaTrainingColumns.has("zone_name")) {
+  db.exec("ALTER TABLE media_training_registrations ADD COLUMN zone_name TEXT");
+  db.exec("UPDATE media_training_registrations SET zone_name = organization_name WHERE zone_name IS NULL");
+}
+for (const column of ["group_name", "church_name"]) {
+  if (!mediaTrainingColumns.has(column)) db.exec(`ALTER TABLE media_training_registrations ADD COLUMN ${column} TEXT`);
+}
+db.exec("UPDATE media_training_registrations SET church_name = organization_name WHERE church_name IS NULL");
+db.exec("CREATE INDEX IF NOT EXISTS idx_media_training_zone ON media_training_registrations(zone_name COLLATE NOCASE)");
 
 // Older databases restricted this table to id=1. Rebuild it once so the Live
 // Registrations dashboard can persist its separate id=2 layout.
