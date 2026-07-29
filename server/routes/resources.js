@@ -141,7 +141,9 @@ resources.delete("/categories/:id", requireSuperAdmin, wrap((req, res) => {
   res.status(204).end();
 }));
 
-resources.post("/", requireSuperAdmin, upload.single("file"), wrap(async (req, res) => {
+resources.post("/", requireSuperAdmin, upload.fields([{ name: "file", maxCount: 1 }, { name: "thumbnail", maxCount: 1 }]), wrap(async (req, res) => {
+  const file = req.files?.file?.[0];
+  const thumbnailFile = req.files?.thumbnail?.[0];
   try {
     const title = clean(req.body.title, 160);
     const description = clean(req.body.description, 2000);
@@ -154,26 +156,51 @@ resources.post("/", requireSuperAdmin, upload.single("file"), wrap(async (req, r
       throw new ApiError(400, "INVALID_CATEGORY", "Choose one of the available resource categories.");
     }
     if (!ALLOWED_TYPES.has(type)) throw new ApiError(400, "INVALID_TYPE", "Choose a valid resource type.");
-    if (!req.file && !externalUrl) throw new ApiError(400, "RESOURCE_REQUIRED", "Upload a file or add a web link.");
-    if (req.file && externalUrl) throw new ApiError(400, "ONE_SOURCE_ONLY", "Use either a file or a web link, not both.");
+    if (!file && !externalUrl) throw new ApiError(400, "RESOURCE_REQUIRED", "Upload a file or add a web link.");
+    if (file && externalUrl) throw new ApiError(400, "ONE_SOURCE_ONLY", "Use either a file or a web link, not both.");
+    if (thumbnailFile && (!thumbnailFile.mimetype.startsWith("image/") || thumbnailFile.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a thumbnail image no larger than 8 MB.");
     if (externalUrl && !validHttpUrl(externalUrl)) throw new ApiError(400, "INVALID_URL", "The link must start with http:// or https://.");
     if (suppliedThumbnail && (!externalUrl || !validHttpUrl(suppliedThumbnail))) throw new ApiError(400, "INVALID_THUMBNAIL", "The thumbnail must be a valid web image URL.");
     let thumbnailUrl = externalUrl ? await discoverThumbnail(externalUrl) : null;
-    if (suppliedThumbnail) {
+    if (thumbnailFile) thumbnailUrl = `/resource-files/${encodeURIComponent(thumbnailFile.filename)}`;
+    if (suppliedThumbnail && !thumbnailFile) {
       try { thumbnailUrl = (await assertPublicUrl(suppliedThumbnail)).href; }
       catch { throw new ApiError(400, "INVALID_THUMBNAIL", "Use a publicly accessible thumbnail image URL."); }
     }
     const result = db.prepare(`INSERT INTO resources
       (title, description, category, resource_type, external_url, thumbnail_url, stored_name, original_name, mime_type, file_size, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(title, description || null, category, type, externalUrl || null, thumbnailUrl, req.file?.filename || null,
-        req.file?.originalname || null, req.file?.mimetype || null, req.file?.size || null, req.admin.username);
+      .run(title, description || null, category, type, externalUrl || null, thumbnailUrl, file?.filename || null,
+        file?.originalname || null, file?.mimetype || null, file?.size || null, req.admin.username);
     res.status(201).json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ?").get(result.lastInsertRowid)));
   } catch (error) {
     // Multer writes before field validation; remove rejected uploads immediately.
-    if (req.file?.filename) { try { unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); } catch { /* best effort */ } }
+    for (const uploaded of [file, thumbnailFile]) if (uploaded?.filename) { try { unlinkSync(join(RESOURCE_FILES_DIR, uploaded.filename)); } catch { /* best effort */ } }
     throw error;
   }
+}));
+
+resources.put("/:id", requireSuperAdmin, upload.single("thumbnail"), wrap(async (req, res) => {
+  const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
+  if (!row) { if (req.file?.filename) unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); throw new ApiError(404, "NOT_FOUND", "Resource not found."); }
+  try {
+    const title = clean(req.body.title, 160); const description = clean(req.body.description, 2000); const category = clean(req.body.category, 80);
+    const type = clean(req.body.resource_type, 20).toLowerCase(); const requestedUrl = clean(req.body.external_url, 2000); const suppliedThumbnail = clean(req.body.thumbnail_url, 2000);
+    if (!title) throw new ApiError(400, "TITLE_REQUIRED", "Please enter a resource title.");
+    if (!ALLOWED_TYPES.has(type)) throw new ApiError(400, "INVALID_TYPE", "Choose a valid resource type.");
+    if (!db.prepare("SELECT 1 FROM resource_categories WHERE name = ? COLLATE NOCASE").get(category)) throw new ApiError(400, "INVALID_CATEGORY", "Choose one of the available resource categories.");
+    if (row.external_url && !validHttpUrl(requestedUrl)) throw new ApiError(400, "INVALID_URL", "The link must start with http:// or https://.");
+    if (!row.external_url && requestedUrl) throw new ApiError(400, "SOURCE_LOCKED", "An uploaded resource cannot be changed into a link.");
+    if (req.file && (!req.file.mimetype.startsWith("image/") || req.file.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a thumbnail image no larger than 8 MB.");
+    let thumbnailUrl = row.thumbnail_url;
+    if (row.external_url && requestedUrl !== row.external_url && !req.file && !suppliedThumbnail) thumbnailUrl = await discoverThumbnail(requestedUrl);
+    if (suppliedThumbnail && !req.file) { try { thumbnailUrl = (await assertPublicUrl(suppliedThumbnail)).href; } catch { throw new ApiError(400, "INVALID_THUMBNAIL", "Use a publicly accessible thumbnail image URL."); } }
+    if (req.file) thumbnailUrl = `/resource-files/${encodeURIComponent(req.file.filename)}`;
+    db.prepare("UPDATE resources SET title = ?, description = ?, category = ?, resource_type = ?, external_url = ?, thumbnail_url = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(title, description || null, category, type, row.external_url ? requestedUrl : null, thumbnailUrl, row.id);
+    if (thumbnailUrl !== row.thumbnail_url && row.thumbnail_url?.startsWith("/resource-files/")) { try { unlinkSync(join(RESOURCE_FILES_DIR, decodeURIComponent(row.thumbnail_url.slice(16)))); } catch { /* best effort */ } }
+    res.json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ?").get(row.id)));
+  } catch (error) { if (req.file?.filename) { try { unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); } catch { /* best effort */ } } throw error; }
 }));
 
 resources.post("/:id/thumbnail", requireSuperAdmin, wrap(async (req, res) => {
@@ -192,6 +219,10 @@ resources.delete("/:id", requireSuperAdmin, wrap((req, res) => {
   db.prepare("DELETE FROM resources WHERE id = ?").run(row.id);
   if (row.stored_name) {
     try { unlinkSync(join(RESOURCE_FILES_DIR, row.stored_name)); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  if (row.thumbnail_url?.startsWith("/resource-files/")) {
+    const thumbnailName = decodeURIComponent(row.thumbnail_url.slice("/resource-files/".length));
+    try { unlinkSync(join(RESOURCE_FILES_DIR, thumbnailName)); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   res.status(204).end();
 }));
