@@ -42,10 +42,10 @@ const PAGE_META = [
   [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register confirmed crusades for the Loveworld Blue Elite team.", true, "/blue-elite/register"],
   [/^\/blue-elite/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", true, "/blue-elite"],
   [/^\/report/, "Report a Crusade", "Submit the verified outcome of a completed A Night of a Thousand Crusades event.", true, "/report"],
-  [/^\/resources$/, "NOTC Resource Library", "Find approved NOTC documents, media, songs, videos, images, and ministry resources.", true, "/resources"],
-  [/^\/select-nation/, "NOTC National Missions Leadership Initiative", "Zonal Pastors can state their preferred mission nation and proposed commitment of at least 1,000 crusades.", true, "/select-nation"],
-  [/^\/media-training$/, "NOTC Global Media Training Mobilisation", "Register individually for the Night of a Thousand Crusades Global Media Training Mobilisation.", true, "/media-training", "/media-training-mobilisation.png"],
-  [/^\/mission-trips$/, "NOTC Mission Trip Volunteers", "Volunteer for international NOTC mission trips and identify the nations where you can serve.", true, "/mission-trips"],
+  [/^\/resources$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) Approved Resources Hub", "Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.", true, "/resources"],
+  [/^\/select-nation$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Zonal Pastors can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", true, "/select-nation", "/national-missions-leadership.png"],
+  [/^\/media-training$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", true, "/media-training", "/media-training-mobilisation.png"],
+  [/^\/mission-trips$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", true, "/mission-trips", "/global-missions-trip-volunteer.png"],
   [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
@@ -76,7 +76,7 @@ function TitleManager() {
     setMeta('meta[property="og:url"]', { property: "og:url" }, canonicalUrl);
     setMeta('meta[property="og:site_name"]', { property: "og:site_name" }, BRAND);
     setMeta('meta[property="og:image"]', { property: "og:image" }, socialImage);
-    setMeta('meta[name="twitter:card"]', { name: "twitter:card" }, "summary");
+    setMeta('meta[name="twitter:card"]', { name: "twitter:card" }, match?.[5] ? "summary_large_image" : "summary");
     setMeta('meta[name="twitter:title"]', { name: "twitter:title" }, document.title);
     setMeta('meta[name="twitter:description"]', { name: "twitter:description" }, description);
     setMeta('meta[name="twitter:image"]', { name: "twitter:image" }, socialImage);

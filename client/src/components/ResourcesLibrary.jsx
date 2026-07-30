@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { ArrowDownToLine, ArrowUpRight, BookOpen, FileText, Headphones, Image, Link2, Search, Video, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, BookOpen, Check, FileText, Headphones, Image, Link2, Search, Video, X } from "lucide-react";
 import { getJSON } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -85,14 +85,16 @@ export function ResourcesLibrary() {
       <main className="bg-white">
         <section className="border-b border-slate-200">
           <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-20">
-            <p className="text-sm font-semibold text-blue-700">NOTC resources</p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-normal leading-[1.02] tracking-[-0.035em] text-slate-950 sm:text-6xl">Materials for teaching, outreach and crusades.</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">Find approved documents, campaign media, songs, videos and links shared for A Night of a Thousand Crusades.</p>
+            <p className="text-sm font-semibold text-blue-700">Night of a Thousand Crusades (NOTC)</p>
+            <h1 className="mt-4 max-w-3xl text-4xl font-normal leading-[1.02] tracking-[-0.035em] text-slate-950 sm:text-6xl">Approved Resources Hub</h1>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.</p>
+            <ul className="mt-8 grid max-w-4xl gap-x-10 gap-y-3 border-y border-slate-200 py-6 text-sm text-slate-700 sm:grid-cols-2">{["Approved teaching materials", "Outreach resources", "Crusade guides and operational documents", "Campaign media assets", "Approved songs and videos", "Promotional materials", "Official NOTC links and resources", "Other approved resources"].map((item) => <li key={item} className="flex items-start gap-3"><Check className="mt-0.5 size-4 shrink-0 text-blue-700" /><span>{item}</span></li>)}</ul>
+            <p className="mt-8 max-w-3xl border-l-2 border-blue-600 pl-4 text-sm font-medium leading-6 text-slate-700">All teams are encouraged to access and utilise only approved resources from this platform to ensure consistency, excellence, and alignment across all nations.</p>
           </div>
         </section>
         <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
           <div className="grid border-y border-slate-200 lg:grid-cols-[minmax(0,1fr)_15rem]">
-            <label className="relative flex items-center border-b border-slate-200 lg:border-b-0 lg:border-r"><span className="sr-only">Search resources</span><Search className="absolute left-0 size-5 text-slate-500" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the library" className="h-14 rounded-none border-0 bg-transparent pl-8 pr-10 text-base shadow-none focus-visible:ring-0" />{query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 grid size-10 place-items-center text-slate-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" aria-label="Clear search"><X className="size-4" /></button>}</label>
+            <label className="relative flex items-center border-b border-slate-200 lg:border-b-0 lg:border-r"><span className="sr-only">Search resources</span><Search className="absolute left-0 size-5 text-slate-500" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search approved resources" className="h-14 rounded-none border-0 bg-transparent pl-8 pr-10 text-base shadow-none focus-visible:ring-0" />{query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 grid size-10 place-items-center text-slate-500 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" aria-label="Clear search"><X className="size-4" /></button>}</label>
             <Select aria-label="Filter by category" value={category} onChange={(e) => setCategory(e.target.value)} className="h-14 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 lg:pl-5"><option value="all">Every category</option>{data.categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}</Select>
           </div>
           <div className="mt-6 flex gap-1 overflow-x-auto border-b border-slate-200" aria-label="Resource type" role="tablist">{TYPES.map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={type === value} onClick={() => setType(value)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${type === value ? "border-slate-950 text-slate-950" : "border-transparent text-slate-500 hover:text-slate-900"}`}>{label}</button>)}</div>
@@ -100,7 +102,7 @@ export function ResourcesLibrary() {
           {error && <div role="alert" className="border-y border-red-300 py-4 text-sm text-red-800">The library could not be loaded. Check your connection and try again.</div>}
           {loading ? <div className="border-t border-slate-200 py-6"><div className="grid gap-5 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-8"><Skeleton className="aspect-[16/10] rounded-lg" /><div className="space-y-3 py-2"><Skeleton className="h-3 w-36" /><Skeleton className="h-7 w-3/4" /><Skeleton className="h-4 w-full max-w-xl" /><Skeleton className="h-4 w-2/3" /></div></div></div> : data.resources.length ? (
             <div>{data.resources.map((r) => <ResourceRow key={r.id} resource={r} />)}</div>
-          ) : <div className="border-t border-slate-200 py-16 sm:py-24"><h2 className="text-2xl font-medium tracking-[-0.02em] text-slate-950">{hasFilters ? "No matching resources" : "The library is being prepared"}</h2><p className="mt-2 max-w-md text-sm leading-6 text-slate-600">{hasFilters ? "Change the search term or reset the filters to see the full library." : "Approved NOTC materials will appear here as they are published."}</p>{hasFilters && <button className="mt-5 text-sm font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4" onClick={() => { setQuery(""); setType("all"); setCategory("all"); }}>Show all resources</button>}</div>}
+          ) : <div className="border-t border-slate-200 py-16 sm:py-24"><h2 className="text-2xl font-medium tracking-[-0.02em] text-slate-950">{hasFilters ? "No matching resources" : "The hub is being prepared"}</h2><p className="mt-2 max-w-md text-sm leading-6 text-slate-600">{hasFilters ? "Change the search term or reset the filters to see the full hub." : "Approved NOTC resources will appear here as they are published."}</p>{hasFilters && <button className="mt-5 text-sm font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4" onClick={() => { setQuery(""); setType("all"); setCategory("all"); }}>Show all resources</button>}</div>}
         </section>
       </main>
     </div>

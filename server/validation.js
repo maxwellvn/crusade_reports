@@ -233,7 +233,7 @@ export const missionTripVolunteerSchema = z.object({
   preferred_destination_code: z.string().length(2, "Select a preferred destination").toUpperCase(),
   ready_for_any_destination: z.boolean().default(false),
   valid_passport: z.literal(true, { errorMap: () => ({ message: "Confirm that your passport is valid" }) }),
-  covers_travel_expenses: z.literal(true, { errorMap: () => ({ message: "Confirm that you can cover the travel expenses" }) }),
+  covers_travel_expenses: z.literal(true, { errorMap: () => ({ message: "Confirm your independent travel access and expenses" }) }),
   medically_fit: z.literal(true, { errorMap: () => ({ message: "Confirm your medical readiness" }) }),
   sponsor_interest: z.boolean().default(false),
   partnership_acknowledged: z.literal(true, { errorMap: () => ({ message: "Acknowledge the partnership information" }) }),
