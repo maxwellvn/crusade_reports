@@ -78,7 +78,7 @@ export function ResourcesLibrary() {
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <Link to="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4"><img src="/logo.png" alt="" className="h-10 w-auto" /><span className="hidden truncate text-sm font-semibold sm:block">Rhapsody End-Time Teaching Crusades</span></Link>
+          <Link to="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4"><img src="/logo.png" alt="" className="h-10 w-auto" /><span className="hidden truncate text-sm font-semibold sm:block">Approved Resources Hub</span></Link>
           <Link to="/" className="ml-auto text-sm font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">Return home</Link>
         </div>
       </header>
