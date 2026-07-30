@@ -31,9 +31,9 @@ function ResourceRow({ resource }) {
   const action = resource.is_external ? "Visit link" : "Open resource";
   return (
     <article className="group grid gap-5 border-t border-slate-200 py-6 first:border-t-0 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-8 sm:py-8 lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <div className="relative grid aspect-[16/10] place-items-center overflow-hidden rounded-lg bg-slate-100">
+      <a href={resource.url} target="_blank" rel="noreferrer" aria-label={`Open ${resource.title}`} className="relative grid aspect-[16/10] place-items-center overflow-hidden rounded-lg bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">
         <ResourcePreview resource={resource} Icon={Icon} />
-      </div>
+      </a>
       <div className="flex min-w-0 flex-col py-0.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
           <span className="font-semibold text-slate-900">{resource.category}</span>
@@ -41,7 +41,7 @@ function ResourceRow({ resource }) {
           <span className="capitalize">{resource.resource_type}</span>
           {resource.file_size ? <><span aria-hidden="true">/</span><span>{formatSize(resource.file_size)}</span></> : null}
         </div>
-        <h2 className="mt-3 text-xl font-medium leading-tight tracking-[-0.02em] text-slate-950 sm:text-2xl">{resource.title}</h2>
+        <h2 className="mt-3 text-xl font-medium leading-tight tracking-[-0.02em] text-slate-950 sm:text-2xl"><a href={resource.url} target="_blank" rel="noreferrer" className="underline decoration-transparent underline-offset-4 transition-colors hover:decoration-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">{resource.title}</a></h2>
         {resource.description && <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base sm:leading-7">{resource.description}</p>}
         {resource.resource_type === "audio" && <audio controls preload="none" src={resource.url} className="mt-5 h-10 w-full max-w-xl" />}
         <a href={resource.url} target="_blank" rel="noreferrer" className="mt-5 inline-flex w-fit items-center gap-2 text-sm font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4 transition-colors hover:decoration-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">
