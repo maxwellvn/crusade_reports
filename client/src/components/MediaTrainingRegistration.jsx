@@ -3,7 +3,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarDays, Check, UserRound, X } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Check, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -43,7 +43,8 @@ function Confirmation({ result }) {
     <header className="border-b border-slate-200"><div className="mx-auto flex max-w-5xl items-center px-4 py-4 sm:px-6"><img src="/logo.png" alt="" className="h-11" /><Link to="/" className="ml-auto text-sm font-semibold text-slate-700">Return home</Link></div></header>
     <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24"><span className="grid size-12 place-items-center rounded-full bg-slate-950 text-white"><Check /></span><p className="mt-8 text-sm font-semibold text-blue-700">Registration received</p><h1 className="mt-3 text-4xl font-normal tracking-[-0.03em] text-slate-950 sm:text-5xl">You are registered.</h1><p className="mt-5 max-w-2xl leading-7 text-slate-600">{result.full_name}, your place in the Global Media Training on August 24, 2026 has been recorded.</p>
       <dl className="mt-10 border-y border-slate-200">{[["Zone", result.zone_name], result.group_name && ["Group", result.group_name], result.church_name && ["Church", result.church_name], ["Reference number", result.reference_code]].filter(Boolean).map(([label, value]) => <div key={label} className="grid gap-1 border-b border-slate-200 py-4 last:border-0 sm:grid-cols-[12rem_1fr]"><dt className="text-sm text-slate-500">{label}</dt><dd className="text-sm font-semibold">{value}</dd></div>)}</dl>
-      <Button className="mt-8 rounded-full" onClick={() => window.location.reload()}>Register another person</Button>
+      <div className="mt-8 border-y border-blue-200 bg-blue-50 px-5 py-6"><p className="text-sm font-semibold text-blue-950">Join the NOTC 2026 Media Network</p><p className="mt-2 max-w-xl text-sm leading-6 text-blue-900">Continue with the media team on KingsChat for training updates and coordination.</p><Button asChild className="mt-5 rounded-full"><a href="https://www.kingsch.at/jl/SitIMT" target="_blank" rel="noreferrer">Join the KingsChat group <ArrowUpRight /></a></Button></div>
+      <Button variant="outline" className="mt-8 rounded-full" onClick={() => window.location.reload()}>Register another person</Button>
     </main>
   </div>;
 }
