@@ -17,6 +17,15 @@ import { COUNTRIES } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
+import { renderPageMetadata } from "./pageMeta.js";
+
+test("public forms render route-specific metadata before JavaScript loads", () => {
+  const template = '<html><head><title>Generic</title><meta name="description" content="Generic"><meta property="og:title" content="Generic"><meta property="og:description" content="Generic"><meta property="og:image" content="/logo.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Generic"><meta name="twitter:description" content="Generic"><meta name="twitter:image" content="/logo.png"></head></html>';
+  const html = renderPageMetadata(template, "/mission-trips", "https://notc.rhapsodycrusades.org");
+  assert.match(html, /GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION/);
+  assert.match(html, /property="og:image" content="https:\/\/notc\.rhapsodycrusades\.org\/global-missions-trip-volunteer\.png"/);
+  assert.match(html, /property="og:url" content="https:\/\/notc\.rhapsodycrusades\.org\/mission-trips"/);
+});
 
 test("resource links discover safe media thumbnails", () => {
   assert.equal(youtubeThumbnail(new URL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")), "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");

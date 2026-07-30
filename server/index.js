@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { logger, errorHandler } from "./logger.js";
 import { auth, requireAdmin } from "./auth.js";
@@ -24,6 +24,7 @@ import { missionNations } from "./routes/missionNations.js";
 import { mediaTraining } from "./routes/mediaTraining.js";
 import { missionTrips } from "./routes/missionTrips.js";
 import { translation } from "./routes/translation.js";
+import { renderPageMetadata } from "./pageMeta.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -63,8 +64,12 @@ app.use("/api", (_req, res) => res.status(404).json({ error: { code: "NOT_FOUND"
 // Serve the built client in production; the SPA handles routing.
 const dist = join(__dirname, "..", "client", "dist");
 if (existsSync(dist)) {
-  app.use(express.static(dist));
-  app.get("*", (_req, res) => res.sendFile(join(dist, "index.html")));
+  const indexTemplate = readFileSync(join(dist, "index.html"), "utf8");
+  app.use(express.static(dist, { index: false }));
+  app.get("*", (req, res) => {
+    const origin = `${req.protocol}://${req.get("host")}`;
+    res.type("html").send(renderPageMetadata(indexTemplate, req.path, origin));
+  });
 }
 
 app.use(errorHandler);
