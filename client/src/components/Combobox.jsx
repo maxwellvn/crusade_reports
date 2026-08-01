@@ -22,6 +22,7 @@ export function Combobox({
   minChars = 0,
   caps = false, // ponytail: display-only uppercase; stored values keep original case
   allowCreate = false,
+  createDescription = "Use this as typed",
   disabled = false,
   invalid = false,
   id,
@@ -116,7 +117,7 @@ export function Combobox({
                       onSelect={() => choose({ value: query.trim(), label: query.trim(), created: true })}
                     >
                       <Plus className="mr-2 size-4 text-primary" />
-                      <div><div className="font-medium">Add “{query.trim()}”</div><div className="text-xs text-muted-foreground">Use this city as typed</div></div>
+                      <div><div className="font-medium">Add “{query.trim()}”</div><div className="text-xs text-muted-foreground">{createDescription}</div></div>
                     </CommandItem>
                   )}
                 </CommandGroup>

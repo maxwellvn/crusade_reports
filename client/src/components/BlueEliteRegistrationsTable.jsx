@@ -236,7 +236,7 @@ function CrusadeDetails({ crusade, onClose }) {
     ["Country", crusade.country],
     ["Registered", crusade.registered_at?.slice(0, 10)],
     ["Staff name", crusade.contact_name],
-    ["Report", crusade.report_submitted ? "Submitted" : "Awaiting report"],
+    ["Report", crusade.report_submitted ? "Submitted" : "Submit report"],
     ["Email", crusade.contact_email],
     ["Phone", [crusade.phone_country_code, crusade.phone_number].filter(Boolean).join(" ")],
     ["KingsChat", crusade.kingschat_username],

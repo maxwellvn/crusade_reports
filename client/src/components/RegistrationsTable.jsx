@@ -222,7 +222,7 @@ export function RegistrationsTable() {
                       {r.report_submitted ? (
                         <span className="inline-flex whitespace-nowrap border border-green-300 bg-green-50 px-2 py-1 text-xs font-medium text-green-700">Submitted</span>
                       ) : (
-                        <Button type="button" variant="outline" size="sm" onClick={() => setReporting(r)}>Awaiting report</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setReporting(r)}>Submit report</Button>
                       )}
                     </td>
                     <td className="min-w-64 max-w-80 py-2 pr-3 text-xs">{orgHierarchy(r)}</td>
@@ -327,7 +327,7 @@ function CrusadeDetails({ crusade, onClose }) {
     ["Country", crusade.country],
     ["Registered", crusade.registered_at?.slice(0, 10)],
     ["Registered by", crusade.contact_name],
-    ["Report", crusade.report_submitted ? "Submitted" : "Awaiting report"],
+    ["Report", crusade.report_submitted ? "Submitted" : "Submit report"],
     ["Email", crusade.contact_email],
     ["Phone", [crusade.phone_country_code, crusade.phone_number].filter(Boolean).join(" ")],
     ["KingsChat", crusade.kingschat_username],

@@ -129,6 +129,44 @@ const INITIATIVES = [
   },
 ];
 
+const EVENT_CALENDAR = [
+  {
+    date: "01",
+    dateTime: "2026-08-01",
+    title: "Join the Prayer March",
+    copy: "Join the Prayer March on the road to NOTC.",
+    status: "Started",
+    tone: "gold",
+  },
+  {
+    date: "14–27",
+    dateTime: "2026-08-14",
+    title: "Road to NOTC Live Show",
+    copy: "A two-week showcase of ongoing crusade activities leading up to the main event.",
+    tone: "cyan",
+  },
+  {
+    date: "24",
+    dateTime: "2026-08-24",
+    title: "Global Media Training",
+    copy: "Specialised training for media personnel involved in the planning and execution of crusades.",
+    tone: "blue",
+  },
+  {
+    date: "24",
+    dateTime: "2026-08-24",
+    title: "Global Town Hall Meeting",
+    tone: "rose",
+  },
+  {
+    date: "28",
+    dateTime: "2026-08-28",
+    title: "NOTC Main Event",
+    copy: "The 48-hour global broadcast begins, climaxing across all time zones.",
+    tone: "main",
+  },
+];
+
 function ResourcesPreview() {
   const [resources, setResources] = React.useState([]);
   const [status, setStatus] = React.useState("loading");
@@ -378,6 +416,7 @@ export function Landing() {
             });
 
         reveal(".resources-preview-intro > *, .resource-preview-grid, .resources-preview-action", { trigger: ".resources-preview", start: "top 82%", y: 38, blur: 10, stagger: 0.12, duration: 0.85 });
+        reveal(".event-calendar-head > *, .event-calendar-item", { trigger: ".event-calendar", start: "top 82%", y: 38, blur: 10, stagger: 0.1, duration: 0.8 });
         gsap.utils.toArray(".initiative-feature").forEach((feature) => {
           reveal(feature, { trigger: feature, start: "top 84%", y: 48, blur: 12, duration: 0.95 });
         });
@@ -467,7 +506,7 @@ export function Landing() {
           <h1>Rhapsody End-Time Teaching<br /><em aria-live="polite">{heroWord}<span className="type-caret" aria-hidden="true" /></em></h1>
           <div className="hero-sub">
             <h2>A Night of a Thousand Crusades</h2>
-            <p>One night. Thousands of crusades, held simultaneously across cities and nations of the world.</p>
+            <p>A night when <strong>thousands of crusades</strong> are held simultaneously across the <strong>cities, continents, and nations</strong> of our great world—in <strong>a race to reach the last lost soul</strong> through the evangelical work of <strong>Rhapsody of Realities</strong>, <strong className="last-man-locator">the Last Man Locator.</strong></p>
           </div>
         </div>
 
@@ -477,6 +516,29 @@ export function Landing() {
           <img src="/assets/crusade-4.webp" alt="Crusade worship" className="collage-c" />
           <img src="/assets/crusade-2.webp" alt="Crusade crowd" className="collage-d" />
         </div>
+      </section>
+
+      {/* ===== Road to NOTC event calendar ===== */}
+      <section className="event-calendar" aria-labelledby="event-calendar-title">
+        <div className="event-calendar-head">
+          <h2 id="event-calendar-title">The road to A Night of a Thousand Crusades</h2>
+        </div>
+        <ol className="event-calendar-list">
+          {EVENT_CALENDAR.map((event, index) => (
+            <li className={`event-calendar-item calendar-${event.tone}`} key={`${event.date}-${event.title}`}>
+              <time dateTime={event.dateTime}>
+                <span>{event.date}</span>
+                <small>Aug</small>
+              </time>
+              <span className="event-calendar-marker" aria-hidden="true" />
+              <div>
+                <h3>{event.title}</h3>
+                {event.copy && <p>{event.copy}</p>}
+              </div>
+              {event.status && <span className="event-calendar-status">{event.status}</span>}
+            </li>
+          ))}
+        </ol>
       </section>
 
       {/* ===== Countdown (right after the hero) ===== */}

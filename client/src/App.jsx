@@ -29,6 +29,7 @@ import { MissionTripAdmin } from "@/components/MissionTripAdmin";
 import { PublicTranslator } from "@/components/PublicTranslator";
 import { CrusadeCoverage } from "@/components/CrusadeCoverage";
 import { DatabaseProtection } from "@/components/DatabaseProtection";
+import { ManualOrganizations } from "@/components/ManualOrganizations";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -218,13 +219,14 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/mission-trips", "Mission trips", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/database-protection", "Backups", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations", false, true], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/mission-trips", "Mission trips", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/database-protection", "Backups", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
           <Route path="/crusades/:id/edit" element={<SuperAdminRoute><EditCrusadePage /></SuperAdminRoute>} />
           <Route path="/registrations" element={<RegistrationsTable />} />
           <Route path="/registrations/live" element={<RegistrationsLive />} />
+          <Route path="/registrations/manual-organizations" element={<SuperAdminRoute><ManualOrganizations /></SuperAdminRoute>} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
           <Route path="/dashboard/coverage" element={<CrusadeCoverage />} />
           <Route path="/dashboard/settings" element={<SettingsRoute />} />

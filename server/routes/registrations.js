@@ -41,12 +41,12 @@ export function deleteRegistrationCrusade(id) {
 }
 
 const insertRegStmt = db.prepare(`
-  INSERT INTO registrations (organization_type, zone, group_name, church_name, cell_name, network_name, country, plan_date,
+  INSERT INTO registrations (organization_type, zone, group_name, zone_manual, group_manual, church_name, cell_name, network_name, country, plan_date,
     contact_name, contact_email, phone_country_code, phone_number, kingschat_username)
-  VALUES (@organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @country, @plan_date,
+  VALUES (@organization_type, @zone, @group_name, @zone_manual, @group_manual, @church_name, @cell_name, @network_name, @country, @plan_date,
     @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username)
 `);
-const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "plan_date",
+const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "zone_manual", "group_manual", "church_name", "cell_name", "network_name", "country", "plan_date",
   "event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id",
   "crusade_collaborators", "zone_contribution", "estimated_budget", "rhapsody_copies_confirmed", "permits_obtained", "media_coverage_plan",
   "readiness_status"];
@@ -65,6 +65,8 @@ const insertRegistration = db.transaction((d) => {
     organization_type: d.organization_type,
     zone: d.zone || null,
     group_name: d.group_name || null,
+    zone_manual: d.zone_manual ? 1 : 0,
+    group_manual: d.group_manual ? 1 : 0,
     church_name: d.church_name || null,
     cell_name: d.cell_name || null,
     network_name: d.network_name || null,
@@ -83,6 +85,8 @@ const insertRegistration = db.transaction((d) => {
     insertItemStmt.run({
       ...base,
       registration_id: regId,
+      zone_manual: d.zone_manual ? 1 : 0,
+      group_manual: d.group_manual ? 1 : 0,
       country: it.country,
       event_type: it.event_type,
       planned_count: 1,
@@ -115,6 +119,23 @@ registrations.post("/", wrap((req, res) => {
   backfillCityCoords().catch(() => {});
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed"));
   res.status(201).json({ id });
+}));
+
+// Directory gaps are intentionally visible to admins for reconciliation. These
+// rows remain ordinary registrations; the flags only identify names typed by a
+// registrant instead of selected from the directory.
+registrations.get("/manual-organizations", requireSuperAdmin, wrap((_req, res) => {
+  const rows = db.prepare(`
+    SELECT i.id, i.registration_id, i.created_at, i.zone, i.group_name,
+           i.zone_manual, i.group_manual, i.event_name, i.event_date, i.city, i.country,
+           r.organization_type, r.contact_name, r.contact_email
+    FROM registration_items i
+    JOIN registrations r ON r.id = i.registration_id
+    WHERE (i.program = 'public' OR i.program IS NULL)
+      AND (i.zone_manual = 1 OR i.group_manual = 1)
+    ORDER BY i.created_at DESC, i.id DESC
+  `).all();
+  res.json({ rows });
 }));
 
 // A crusade's network planning details (collaborators, contribution, budget,

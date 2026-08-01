@@ -112,6 +112,8 @@ export const registrationSchema = z
     organization_type: z.enum(["zone", "group", "church", "cell", "network"]),
     zone: z.string().trim().optional().default(""),
     group_name: z.string().trim().optional().default(""),
+    zone_manual: z.boolean().optional().default(false),
+    group_manual: z.boolean().optional().default(false),
     church_name: z.string().trim().optional().default(""),
     cell_name: z.string().trim().optional().default(""),
     network_name: z.string().trim().optional().default(""),

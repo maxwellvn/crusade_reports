@@ -492,6 +492,12 @@ for (const table of ["reports", "registrations"]) {
 }
 
 const registrationCols = new Set(db.prepare("PRAGMA table_info(registrations)").all().map((c) => c.name));
+// Manual organisation names are retained separately from directory-backed
+// selections so admins can review and reconcile them later.
+for (const [table, cols] of [["registrations", ["zone_manual", "group_manual"]], ["registration_items", ["zone_manual", "group_manual"]]]) {
+  const existing = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+  for (const col of cols) if (!existing.has(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
+}
 if (!registrationCols.has("confirmation_status")) {
   db.exec(`
     ALTER TABLE registrations ADD COLUMN confirmation_status TEXT NOT NULL DEFAULT 'pending';
