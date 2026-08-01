@@ -304,7 +304,7 @@ function Countdown() {
       <div className="countdown-glow" aria-hidden="true" />
       <span className="eyebrow">Save the date · 28 August</span>
       <h2 className="countdown-title">A Night of a Thousand Crusades</h2>
-      <p className="countdown-edition">The Continents &amp; Nations Edition</p>
+      <p className="countdown-edition">The Nation &amp; Continents Edition</p>
       <div className="countdown-grid" ref={gridRef}>
         {units.map(([label, value]) => (
           <div className="cd-box" key={label}>
@@ -502,11 +502,11 @@ export function Landing() {
         </header>
 
         <div className="hero-content">
-          <span className="edition-badge">Continents &amp; Nations Edition</span>
+          <span className="edition-badge">Nation &amp; Continents Edition</span>
           <h1>Rhapsody End-Time Teaching<br /><em aria-live="polite">{heroWord}<span className="type-caret" aria-hidden="true" /></em></h1>
           <div className="hero-sub">
             <h2>A Night of a Thousand Crusades</h2>
-            <p>A night when <strong>thousands of crusades</strong> are held simultaneously across the <strong>cities, continents, and nations</strong> of our great world—in <strong>a race to reach the last lost soul</strong> through the evangelical work of <strong>Rhapsody of Realities</strong>, <strong className="last-man-locator">the Last Man Locator.</strong></p>
+            <p>A night when <strong>thousands of crusades</strong> are held simultaneously across the <strong>cities, nations, and continents</strong> of our great world—in <strong>a race to reach the last lost soul</strong> through the evangelical work of <strong>Rhapsody of Realities</strong>, <strong className="last-man-locator">the Last Man Locator.</strong></p>
           </div>
         </div>
 
@@ -589,7 +589,7 @@ export function Landing() {
       {/* ===== Footer ===== */}
       <footer className="site-footer">
         <div className="footer-cta">
-          <span className="eyebrow">Continents &amp; Nations Edition</span>
+          <span className="eyebrow">Nation &amp; Continents Edition</span>
           <h2 className="footer-tagline">Reaching the whole world in one night.</h2>
           <p className="footer-cta-sub">Register your crusade and join the global tally — appear on the live map across nations and continents of the world.</p>
           <RegisterButton className="btn-lg">Register your crusades</RegisterButton>
