@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -20,6 +20,68 @@ import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/reso
 import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
+import {
+  assertPersistentDatabasePath,
+  createVerifiedBackup,
+  pruneBackups,
+  verifyDatabaseFile,
+} from "./databaseProtection.js";
+
+test("database protection creates an atomic, verified SQLite backup", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "crusade-backup-"));
+  const sourcePath = join(dir, "source.sqlite");
+  const backupDir = join(dir, "backups");
+  const source = new Database(sourcePath);
+  try {
+    source.exec("CREATE TABLE irreplaceable_data (value TEXT NOT NULL); INSERT INTO irreplaceable_data VALUES ('preserved')");
+    const result = await createVerifiedBackup({ database: source, backupDir, reason: "test" });
+    assert.equal(existsSync(result.path), true);
+    assert.equal(existsSync(`${result.path}.tmp`), false);
+    assert.deepEqual(verifyDatabaseFile(result.path), { ok: true, result: "ok" });
+    const restored = new Database(result.path, { readonly: true });
+    assert.equal(restored.prepare("SELECT value FROM irreplaceable_data").pluck().get(), "preserved");
+    restored.close();
+  } finally {
+    source.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("database protection rejects corrupt snapshots", () => {
+  const dir = mkdtempSync(join(tmpdir(), "crusade-corrupt-backup-"));
+  try {
+    const path = join(dir, "corrupt.sqlite");
+    writeFileSync(path, "not a sqlite database");
+    assert.throws(() => verifyDatabaseFile(path), /integrity|database|SQLite/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("database protection keeps recent and long-term recovery points", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "crusade-retention-"));
+  try {
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const names = [
+      "reports-2026-08-01T11-00-00-000Z-a.sqlite",
+      "reports-2026-08-01T10-00-00-000Z-b.sqlite",
+      "reports-2026-07-31T11-00-00-000Z-c.sqlite",
+      "reports-2026-07-24T11-00-00-000Z-d.sqlite",
+      "reports-2026-05-01T11-00-00-000Z-e.sqlite",
+    ];
+    for (const name of names) writeFileSync(join(dir, name), "placeholder");
+    const result = await pruneBackups(dir, { now, hourly: 2, daily: 2, weekly: 2 });
+    assert.deepEqual(result.kept.sort(), names.slice(0, 4).sort());
+    assert.equal(existsSync(join(dir, names[4])), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("production database protection enforces the persistent root", () => {
+  assert.doesNotThrow(() => assertPersistentDatabasePath("/app/data/reports.sqlite", "/app/data"));
+  assert.throws(() => assertPersistentDatabasePath("/app/reports.sqlite", "/app/data"), /persistent/i);
+});
 
 test("coverage compares the complete ministry directory with registered crusades", () => {
   const directory = [
