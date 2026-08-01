@@ -2,10 +2,11 @@
 // can toast a user-safe message; the HTTP-only KingsChat cookie is sent by the
 // browser automatically and never exposed to client JavaScript.
 export async function api(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...options.headers,
     },
   });

@@ -25,6 +25,8 @@ import { mediaTraining } from "./routes/mediaTraining.js";
 import { missionTrips } from "./routes/missionTrips.js";
 import { translation } from "./routes/translation.js";
 import { coverage } from "./routes/coverage.js";
+import { databaseProtection } from "./routes/databaseProtection.js";
+import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -58,6 +60,7 @@ app.use("/api/media-training", mediaTraining);
 app.use("/api/mission-trips", missionTrips);
 app.use("/api/translation", translation);
 app.use("/api/coverage", coverage);
+app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 
 // 404 for unknown API routes (before the SPA catch-all).
@@ -76,7 +79,15 @@ if (existsSync(dist)) {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => logger.info(`crusade_reports listening on http://localhost:${PORT}`));
+await startDatabaseProtection();
+const server = app.listen(PORT, () => logger.info(`crusade_reports listening on http://localhost:${PORT}`));
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, () => {
+    stopDatabaseProtection();
+    server.close(() => process.exit(0));
+  });
+}
 
 // Catch up any crusades still missing city coordinates (pre-migration rows,
 // or geocodes that failed at submit time).

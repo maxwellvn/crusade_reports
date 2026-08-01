@@ -1,9 +1,31 @@
 import Database from "better-sqlite3";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
+
+// A restore upload is staged first and applied only during a clean process
+// restart, before any connection opens. Preserve the displaced database beside
+// normal backups as a final rollback point.
+const pendingRestore = join(dirname(DB_PATH), ".restore-pending.sqlite");
+if (existsSync(pendingRestore)) {
+  const candidate = new Database(pendingRestore, { readonly: true, fileMustExist: true });
+  const integrity = candidate.pragma("quick_check", { simple: true });
+  candidate.close();
+  if (integrity !== "ok") throw new Error(`Pending database restore failed integrity verification: ${integrity}`);
+  const backupDir = process.env.DB_BACKUP_DIR || join(dirname(DB_PATH), "backups");
+  mkdirSync(backupDir, { recursive: true });
+  if (existsSync(DB_PATH)) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    renameSync(DB_PATH, join(backupDir, `pre-restore-${stamp}.sqlite`));
+  }
+  for (const sidecar of [`${DB_PATH}-wal`, `${DB_PATH}-shm`]) {
+    if (existsSync(sidecar)) unlinkSync(sidecar);
+  }
+  renameSync(pendingRestore, DB_PATH);
+}
 
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL"); // crash-safe; survives power loss mid-write

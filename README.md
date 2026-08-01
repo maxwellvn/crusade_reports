@@ -2,7 +2,7 @@
 
 Single Node app (Express) serving a React + shadcn form that captures crusade reports.
 
-- **DB:** SQLite (`better-sqlite3`) — file at `data/reports.sqlite`, WAL mode. Back it up by copying the file.
+- **DB:** SQLite (`better-sqlite3`) — file at `data/reports.sqlite`, WAL mode, with automatic verified snapshots and guarded restores.
 - **Data model:** `reports` (submitter/context) + `crusades` **fact table** (one row per crusade, the single source of truth). Every metric is stored once, per crusade; all dashboards aggregate from `crusades` with `GROUP BY` — no derived columns to drift. Attribution (zone/group/church/network) is denormalized onto each crusade so any hierarchy level rolls up with a plain `SUM` (reported once → rolls up).
 - **Form:** a 3-step stepper (Reporting → Crusades → Review). Countries browse-on-open from a static list; cities via Google Places; one row = one crusade (no bulk multiplier); soft plausibility warnings.
 - **Import:** app-generated `.xlsx` template (category dropdown, instructions) → upload → preview + row errors → commit. Template and validator share `client/src/lib/constants.js` so they never drift.
@@ -71,3 +71,11 @@ Dockerfile-based. In Coolify:
 2. Env vars: `GOOGLE_PLACES_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`, `ZONES_URL`, `KINGSCHAT_CLIENT_ID`, and `KINGSCHAT_REDIRECT_URI` (see `.env.example`).
 3. **Persistent storage**: mount a volume at `/app/data` — the SQLite database lives there; without it, data resets on every deploy.
 4. Health check: `GET /api/health` (already declared in the Dockerfile).
+
+### Database protection and recovery
+
+- The production container refuses to start if the configured database is outside `/app/data`.
+- A consistency-checked backup is created at startup, every hour, and after registrations. Retention keeps 48 recent snapshots, 30 daily points, and 12 weekly points.
+- Super admins can create, download, upload, and restore backups at `/dashboard/database-protection`.
+- Restore uploads are checked with SQLite `PRAGMA quick_check`. Before replacement, the current live database is backed up; the verified restore is then applied during a clean application restart.
+- Configure `DB_BACKUP_MIRROR_DIR` to a second mounted disk or remote filesystem. Backups stored only under `/app/data` protect against bad changes, but not loss of the server or its persistent volume. Also enable Coolify volume backups to external object storage.

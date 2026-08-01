@@ -1,8 +1,6 @@
 import { Router } from "express";
-import { mkdir, readdir, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { db } from "../db.js";
+import { backupDatabase } from "../databaseProtection.js";
 import { registrationCrusadeEditSchema, registrationSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
 import { requireAdmin, requireSuperAdmin } from "../auth.js";
@@ -15,27 +13,7 @@ import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../l
 
 export const registrations = Router();
 
-// Rolling database snapshots. Every new registration triggers a full, consistent
-// backup of the database; only the most recent MAX_BACKUPS are kept, so when a new
-// one is made the oldest is deleted. Lets a bad import or accidental deletion be
-// rolled back to a very recent point. Backups live in data/backups (gitignored).
-const MAX_BACKUPS = 3;
-
-export async function backupDatabaseRolling() {
-  const backupsDir = join(dirname(db.name), "backups");
-  await mkdir(backupsDir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  await db.backup(join(backupsDir, `reports-${stamp}-${randomBytes(3).toString("hex")}.sqlite`));
-  // Filenames start with an ISO timestamp, so a lexical sort is chronological
-  // (oldest first); drop everything past the newest MAX_BACKUPS.
-  const backups = (await readdir(backupsDir))
-    .filter((name) => name.startsWith("reports-") && name.endsWith(".sqlite"))
-    .sort();
-  await Promise.all(
-    backups.slice(0, Math.max(0, backups.length - MAX_BACKUPS))
-      .map((name) => unlink(join(backupsDir, name)).catch(() => {}))
-  );
-}
+export const backupDatabaseRolling = () => backupDatabase("registration");
 
 export function deleteRegistrationCrusade(id) {
   const item = db.prepare(`

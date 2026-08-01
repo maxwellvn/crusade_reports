@@ -14,6 +14,10 @@ RUN npm run build && npm prune --omit=dev
 FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
+ENV DB_PERSISTENT_ROOT=/app/data \
+    DB_REQUIRE_PERSISTENT_STORAGE=1 \
+    DB_BACKUP_DIR=/app/data/backups \
+    DB_BACKUP_INTERVAL_MINUTES=60
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/client/dist ./client/dist
 COPY server ./server

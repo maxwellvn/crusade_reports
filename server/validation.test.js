@@ -68,11 +68,13 @@ test("database protection keeps recent and long-term recovery points", async () 
       "reports-2026-07-31T11-00-00-000Z-c.sqlite",
       "reports-2026-07-24T11-00-00-000Z-d.sqlite",
       "reports-2026-05-01T11-00-00-000Z-e.sqlite",
+      "reports-2026-04-01T11-00-00-000Z-f.sqlite",
+      "reports-2026-01-01T11-00-00-000Z-g.sqlite",
     ];
     for (const name of names) writeFileSync(join(dir, name), "placeholder");
     const result = await pruneBackups(dir, { now, hourly: 2, daily: 2, weekly: 2 });
-    assert.deepEqual(result.kept.sort(), names.slice(0, 4).sort());
-    assert.equal(existsSync(join(dir, names[4])), false);
+    assert.deepEqual(result.kept.sort(), names.slice(0, 6).sort());
+    assert.equal(existsSync(join(dir, names[6])), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
