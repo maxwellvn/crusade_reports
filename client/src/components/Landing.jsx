@@ -100,6 +100,46 @@ const CONTACTS = [
   ["Nigeria", ["+234 201 8888 186"]],
 ];
 
+// ponytail: summaries only; the linked public pages remain the source of truth.
+const INITIATIVES = [
+  {
+    to: "/resources",
+    label: "Approved resources",
+    title: "Everything your crusade team needs.",
+    copy: "Teaching materials, outreach resources, operational guides, campaign media, songs, videos and official NOTC links.",
+    action: "Open resources hub",
+    image: "/campaign/DSC_6044.jpg",
+    tone: "blue",
+  },
+  {
+    to: "/select-nation",
+    label: "National missions",
+    title: "Select a mission nation.",
+    copy: "Zonal Pastors can choose a nation outside their home nation and propose a commitment of at least 1,000 crusades.",
+    action: "Select a nation",
+    image: "/national-missions-leadership.png",
+    tone: "gold",
+  },
+  {
+    to: "/media-training",
+    label: "24 August 2026",
+    title: "Join the global media training.",
+    copy: "For presenters, camera teams, creatives, media volunteers and everyone serving crusade coverage and digital content.",
+    action: "Register for training",
+    image: "/media-training-mobilisation.png",
+    tone: "cyan",
+  },
+  {
+    to: "/mission-trips",
+    label: "Global missions",
+    title: "Volunteer for a mission trip.",
+    copy: "Apply if you hold a valid passport, can independently access a destination and can cover your approved travel expenses.",
+    action: "Apply to volunteer",
+    image: "/global-missions-trip-volunteer.png",
+    tone: "rose",
+  },
+];
+
 // Cookie consent — shows once, remembers the choice in localStorage.
 function CookiePrompt() {
   const [show, setShow] = React.useState(false);
@@ -382,6 +422,32 @@ export function Landing() {
       {/* ===== Countdown (right after the hero) ===== */}
       <Countdown />
 
+      {/* ===== Important public initiatives ===== */}
+      <section className="initiatives" aria-labelledby="initiatives-title">
+        <div className="initiatives-head">
+          <div>
+            <span className="eyebrow">Take part</span>
+            <h2 id="initiatives-title">Important NOTC initiatives</h2>
+          </div>
+          <p>Resources, leadership opportunities and specialist mobilisation for reaching every nation.</p>
+        </div>
+        <div className="initiative-grid">
+          {INITIATIVES.map((item) => (
+            <article className={`initiative-card initiative-${item.tone}`} key={item.to}>
+              <Link to={item.to} className="initiative-image" aria-label={item.action}>
+                <img src={item.image} alt="" loading="lazy" />
+              </Link>
+              <div className="initiative-copy">
+                <span>{item.label}</span>
+                <h3>{item.title}</h3>
+                <p>{item.copy}</p>
+                <Link to={item.to}>{item.action}<span aria-hidden="true">↗</span></Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       {/* ===== How to Register ===== */}
       <section id="register" className="how-to">
         <h2>How to register</h2>
@@ -434,6 +500,9 @@ export function Landing() {
                 <h4>Explore</h4>
                 <Link to={REGISTER}>Register</Link>
                 <Link to="/resources">Resources</Link>
+                <Link to="/select-nation">Select a nation</Link>
+                <Link to="/media-training">Media training</Link>
+                <Link to="/mission-trips">Mission trips</Link>
                 <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer">Donate</a>
               </div>
               <div className="footer-col">
