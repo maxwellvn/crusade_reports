@@ -8,8 +8,11 @@ COPY package.json package-lock.json ./
 # dependencies because Vite/Tailwind are build tools, then prune them below.
 # Avoid a shared BuildKit npm cache here. Coolify can leave that cache in a
 # partial state after a slow/interrupted registry download, which makes npm
-# terminate with "Exit handler never called" on the next build.
-RUN npm ci --include=dev --no-audit --no-fund
+# terminate with "Exit handler never called" on the next build. npm 10.8.2+
+# also has a known Docker exit-handler regression, so use the last unaffected
+# npm 10 release for the deterministic install.
+RUN npm install --global npm@10.8.1 --no-audit --no-fund \
+    && npm ci --include=dev --no-audit --no-fund
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
