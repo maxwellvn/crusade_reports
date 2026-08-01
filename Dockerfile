@@ -1,17 +1,20 @@
 # Debian/glibc lets better-sqlite3 use its published Node 22 prebuilt binary.
 # Alpine/musl fell back to downloading a full C++ toolchain, which made Coolify
 # builds take 25+ minutes and hit the deployment command timeout.
-FROM node:22-bookworm-slim AS build
+FROM node:22.14.0-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # Coolify may inject NODE_ENV=production at build time. Explicitly include dev
 # dependencies because Vite/Tailwind are build tools, then prune them below.
-RUN --mount=type=cache,target=/root/.npm npm ci --include=dev
+# Avoid a shared BuildKit npm cache here. Coolify can leave that cache in a
+# partial state after a slow/interrupted registry download, which makes npm
+# terminate with "Exit handler never called" on the next build.
+RUN npm ci --include=dev --no-audit --no-fund
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
 # Runtime stage: server + built client + prod deps only.
-FROM node:22-bookworm-slim
+FROM node:22.14.0-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 ENV DB_PERSISTENT_ROOT=/app/data \
