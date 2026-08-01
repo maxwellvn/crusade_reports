@@ -36,4 +36,3 @@ export function buildCoverageRows(directory, reportedRows) {
 
   return { summary: { zones: summaryFor(zones), groups: summaryFor(groups) }, zones, groups };
 }
-

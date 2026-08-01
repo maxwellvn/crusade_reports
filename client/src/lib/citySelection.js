@@ -4,4 +4,3 @@ export function citySelectionFields(option) {
     city_place_id: option?.created ? "" : String(option?.value || ""),
   };
 }
-
