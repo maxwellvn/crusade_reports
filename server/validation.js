@@ -184,17 +184,20 @@ export const blueEliteRegistrationSchema = z
 // ---- Mission nation selection ----------------------------------------------
 
 export const missionNationSelectionSchema = z.object({
-  pastor_name: z.string().trim().min(2, "Zonal Pastor name is required").max(200),
-  zone_name: z.string().trim().min(2, "Zone is required").max(200),
-  home_country_code: z.string().trim().length(2, "Zone home nation is required").toUpperCase(),
+  minister_type: z.enum(["zonal_pastor", "ism_minister", "reon_minister", "other"]).default("zonal_pastor"),
+  pastor_name: z.string().trim().min(2, "Minister name is required").max(200),
+  zone_name: z.string().trim().optional().default(""),
+  ministry_name: z.string().trim().max(200).optional().default(""),
+  home_country_code: z.string().trim().length(2, "Home nation is required").toUpperCase(),
   mission_country_code: z.string().trim().length(2, "Select a mission nation").toUpperCase(),
   contact_email: z.string().trim().email("Enter a valid email address").max(254),
   phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
   phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
   kingschat_username: z.string().trim().max(100).optional().default(""),
-}).refine((data) => data.home_country_code !== data.mission_country_code, {
-  path: ["mission_country_code"],
-  message: "Choose a nation outside your zone's home nation",
+}).superRefine((data, ctx) => {
+  if (data.minister_type === "zonal_pastor" && data.zone_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zone_name"], message: "Select a zone" });
+  if (data.minister_type === "other" && data.ministry_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ministry_name"], message: "Enter your ministry or network" });
+  if (data.home_country_code === data.mission_country_code) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mission_country_code"], message: "Choose a nation outside your home nation" });
 });
 
 const mediaTrainingTraineeFields = {

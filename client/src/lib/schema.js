@@ -127,20 +127,24 @@ export const registrationDefaults = {
 };
 
 export const missionNationSelectionSchema = z.object({
-  pastor_name: z.string().trim().min(2, "Enter the Zonal Pastor's name"),
-  zone_name: z.string().trim().min(2, "Select a zone"),
-  home_country_code: z.string().length(2, "Select the zone's home nation"),
+  minister_type: z.enum(["zonal_pastor", "ism_minister", "reon_minister", "other"], { message: "Select your minister type" }).default("zonal_pastor"),
+  pastor_name: z.string().trim().min(2, "Enter the minister's name"),
+  zone_name: z.string().optional().default(""),
+  ministry_name: z.string().trim().max(200).optional().default(""),
+  home_country_code: z.string().length(2, "Select the home nation"),
   mission_country_code: z.string().length(2, "Select one available mission nation"),
   contact_email: z.string().trim().email("Enter a valid email address"),
   phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a phone country code"),
   phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
   kingschat_username: z.string().trim().max(100).optional().default(""),
-}).refine((data) => data.home_country_code !== data.mission_country_code, {
-  path: ["mission_country_code"], message: "Your zone cannot select its home nation",
+}).superRefine((data, ctx) => {
+  if (data.minister_type === "zonal_pastor" && data.zone_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zone_name"], message: "Select a zone" });
+  if (data.minister_type === "other" && data.ministry_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ministry_name"], message: "Enter your ministry or network" });
+  if (data.home_country_code === data.mission_country_code) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mission_country_code"], message: "You cannot select your home nation" });
 });
 
 export const mediaTrainingRegistrationSchema = z.object({
-  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  zone_name: z.string().trim().min(2, "Select your zone or network").max(250),
   group_name: z.string().trim().max(250).optional().default(""),
   church_name: z.string().trim().max(250).optional().default(""),
   church_country_code: z.string().length(2, "Select a country"),

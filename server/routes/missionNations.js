@@ -40,23 +40,29 @@ missionNations.post("/", wrap(async (req, res) => {
   const home = countryByCode.get(data.home_country_code);
   const mission = countryByCode.get(data.mission_country_code);
   if (!home || !mission) throw new ApiError(400, "INVALID_NATION", "Choose nations from the mission nation directory.");
-  if (home.code === mission.code) throw new ApiError(400, "HOME_NATION", "Your zone cannot select its home nation.");
-  const canonicalZone = (await loadZones()).find((row) => row.zone.toLowerCase() === data.zone_name.toLowerCase())?.zone;
-  if (!canonicalZone) throw new ApiError(400, "INVALID_ZONE", "Choose a zone from the official zone directory.");
+  if (home.code === mission.code) throw new ApiError(400, "HOME_NATION", "You cannot select your home nation.");
+  let canonicalOrganization = data.ministry_name || data.zone_name;
+  if (data.minister_type === "zonal_pastor") {
+    canonicalOrganization = (await loadZones()).find((row) => row.zone.toLowerCase() === data.zone_name.toLowerCase())?.zone;
+    if (!canonicalOrganization) throw new ApiError(400, "INVALID_ZONE", "Choose a zone from the official zone directory.");
+  } else if (data.minister_type === "ism_minister") canonicalOrganization = `ISM Minister · ${data.contact_email}`;
+  else if (data.minister_type === "reon_minister") canonicalOrganization = `REON Minister · ${data.contact_email}`;
+  else canonicalOrganization = `${data.ministry_name} · ${data.contact_email}`;
+  const displayMinistry = data.ministry_name || (data.minister_type === "ism_minister" ? "ISM Minister" : data.minister_type === "reon_minister" ? "REON Minister" : null);
 
   const receiptCode = `MN-${new Date().getUTCFullYear()}-${randomBytes(4).toString("hex").toUpperCase()}`;
   try {
     const result = db.prepare(`INSERT INTO mission_nation_selections
-      (receipt_code, pastor_name, zone_name, home_country_code, home_country_name,
+      (receipt_code, pastor_name, zone_name, minister_type, ministry_name, home_country_code, home_country_name,
        mission_country_code, mission_country_name, contact_email, phone_country_code, phone_number, kingschat_username)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(receiptCode, data.pastor_name, canonicalZone, home.code, home.name, mission.code, mission.name,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(receiptCode, data.pastor_name, canonicalOrganization, data.minister_type, displayMinistry, home.code, home.name, mission.code, mission.name,
         data.contact_email, data.phone_country_code, data.phone_number, data.kingschat_username.replace(/^@/, ""));
     const row = db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json({
       receipt_code: row.receipt_code,
       pastor_name: row.pastor_name,
-      zone_name: row.zone_name,
+      zone_name: row.ministry_name || row.zone_name,
       home_nation: row.home_country_name,
       mission_nation: row.mission_country_name,
       minimum_crusades: 1000,
@@ -64,8 +70,8 @@ missionNations.post("/", wrap(async (req, res) => {
     });
   } catch (error) {
     if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
-      if (db.prepare("SELECT 1 FROM mission_nation_selections WHERE zone_name = ? COLLATE NOCASE").get(canonicalZone)) {
-        throw new ApiError(409, "ZONE_ALREADY_SELECTED", "This zone has already selected a mission nation.");
+      if (db.prepare("SELECT 1 FROM mission_nation_selections WHERE zone_name = ? COLLATE NOCASE").get(canonicalOrganization)) {
+        throw new ApiError(409, "ZONE_ALREADY_SELECTED", "This zone or network has already selected a mission nation.");
       }
     }
     throw error;
@@ -109,8 +115,8 @@ const exportColumns = [
   { header: "Preferred Mission Nation", value: (row) => row.mission_country_name },
   { header: "Assigned Mission Nation", value: (row) => row.assigned_country_name || "Not assigned" },
   { header: "Zone", value: (row) => row.zone_name },
-  { header: "Zonal Pastor", value: (row) => row.pastor_name },
-  { header: "Zone Home Nation", value: (row) => row.home_country_name },
+  { header: "Minister", value: (row) => row.pastor_name },
+  { header: "Home Nation", value: (row) => row.home_country_name },
   { header: "Minimum Crusades", value: () => 1000 },
   { header: "Email", value: (row) => row.contact_email },
   { header: "Phone", value: (row) => `${row.phone_country_code} ${row.phone_number}` },
@@ -140,7 +146,7 @@ missionNations.put("/admin/:id/assignment", requireSuperAdmin, wrap((req, res) =
   const code = String(req.body.country_code || "").trim().toUpperCase();
   const country = code ? countryByCode.get(code) : null;
   if (code && !country) throw new ApiError(400, "INVALID_NATION", "Choose a nation from the mission nation directory.");
-  if (country?.code === row.home_country_code) throw new ApiError(400, "HOME_NATION", "This zone cannot be assigned its home nation.");
+  if (country?.code === row.home_country_code) throw new ApiError(400, "HOME_NATION", "This ministry cannot be assigned its home nation.");
   db.prepare(`UPDATE mission_nation_selections SET assigned_country_code = ?, assigned_country_name = ?,
     assignment_updated_at = datetime('now'), assigned_by = ? WHERE id = ?`)
     .run(country?.code || null, country?.name || null, req.admin.username, row.id);
