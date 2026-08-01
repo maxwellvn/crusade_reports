@@ -18,6 +18,7 @@ import { getJSON, postJSON } from "@/lib/api";
 import { reportSchema, defaultValues } from "@/lib/schema";
 import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES, RABAH_OUTCOMES, PHONE_CODES, emptyCrusade } from "@/lib/constants";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
+import { citySelectionFields } from "@/lib/citySelection";
 import { nfull } from "@/lib/dashboardWidgets";
 import "../landing.css"; // campaign fonts; report theme lives in the .reg-page block
 
@@ -605,7 +606,7 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, o
           <Controller control={control} name={p("city")} render={({ field }) => (
             <Combobox value={field.value} invalid={!!rowErr.city} disabled={!rowCountry}
               placeholder={rowCountry ? "Search city" : "Pick a country first"} searchPlaceholder="Type a city…" minChars={1} emptyText="No cities found"
-              fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { field.onChange(o.label); setValue(p("city_place_id"), o.value); }} />
+              allowCreate fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { const city = citySelectionFields(o); field.onChange(city.city); setValue(p("city_place_id"), city.city_place_id); }} />
           )} />
         </Field>
         {!isOnline && (

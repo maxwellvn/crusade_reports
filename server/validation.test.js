@@ -21,7 +21,7 @@ import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
 
-test("coverage compares the complete ministry directory with reported crusades", () => {
+test("coverage compares the complete ministry directory with registered crusades", () => {
   const directory = [
     { region: "Region 1", zone: "ZONE ALPHA", groups: [{ id: "g1", name: "GROUP ONE" }, { id: "g2", name: "GROUP TWO" }] },
     { region: "Region 2", zone: "ZONE BETA", groups: [{ id: "g3", name: "GROUP THREE" }] },

@@ -18,6 +18,7 @@ import { registrationSchema, registrationDefaults } from "@/lib/schema";
 import { CRUSADE_TYPES, PERMIT_OPTIONS, PHONE_CODES } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
+import { citySelectionFields } from "@/lib/citySelection";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
 
 // Public crusade registration — the intent-side twin of the report form.
@@ -486,7 +487,7 @@ export function RegistrationForm() {
                               <Controller control={control} name={`items.${i}.city`} render={({ field }) => (
                                 <Combobox value={field.value} disabled={!rowCountry}
                                   placeholder={rowCountry ? "Search city" : "Pick a country first"} searchPlaceholder="Type a city…" minChars={1} emptyText="No cities found"
-                                  fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { field.onChange(o.label); setValue(`items.${i}.city_place_id`, o.value); }} />
+                                  allowCreate fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { const city = citySelectionFields(o); field.onChange(city.city); setValue(`items.${i}.city_place_id`, city.city_place_id); }} />
                               )} />
                             </Field>
                             <Field label="Venue / address" required error={rowErr.venue?.message} className="sm:col-span-2"

@@ -13,6 +13,7 @@ import { Combobox } from "@/components/Combobox";
 import { CollaboratorPicker, ContributionChecklist, splitCollaboration } from "@/components/CollaborationFields";
 import { getJSON, postJSON, putJSON } from "@/lib/api";
 import { useOrgData } from "@/lib/orgForm";
+import { citySelectionFields } from "@/lib/citySelection";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
 
@@ -478,8 +479,8 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
             <Input value={crusade.country || "—"} readOnly aria-readonly="true" className="cursor-not-allowed text-muted-foreground" />
           </Field>
           <Field label="City" required>
-            <Combobox value={report.city} fetcher={fetchCities} minChars={2} placeholder="Search city" searchPlaceholder="Search city…"
-              emptyText="No cities found" onSelect={(city) => setReport((current) => ({ ...current, city: city.label, city_place_id: city.value }))} />
+            <Combobox value={report.city} fetcher={fetchCities} minChars={2} allowCreate ariaLabel="City" placeholder="Search city" searchPlaceholder="Search city…"
+              emptyText="No cities found" onSelect={(option) => setReport((current) => ({ ...current, ...citySelectionFields(option) }))} />
           </Field>
           <Field label="Venue / address" required className="lg:col-span-2">
             <Input value={report.venue} onChange={(event) => setField("venue", event.target.value)} />
@@ -631,9 +632,9 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
           <Input value={crusade.country || "—"} readOnly aria-readonly="true" className="cursor-not-allowed text-muted-foreground" />
         </Field>
         <Field label="City" required>
-          <Combobox value={details.city} fetcher={fetchCities} minChars={2} placeholder="Search city"
+          <Combobox value={details.city} fetcher={fetchCities} minChars={2} allowCreate ariaLabel="City" placeholder="Search city"
             searchPlaceholder="Search city…" emptyText="No cities found"
-            onSelect={(city) => setDetails((current) => ({ ...current, city: city.label, city_place_id: city.value }))} />
+            onSelect={(option) => setDetails((current) => ({ ...current, ...citySelectionFields(option) }))} />
         </Field>
         <Field label="Venue / address" required className="lg:col-span-2">
           <Input value={details.venue} onChange={(event) => setDetails((current) => ({ ...current, venue: event.target.value }))} />

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  * @param fetcher    (query) => Promise<[{ value, label, sublabel?, raw? }]>
  * @param value      current selected label (string) shown on the trigger
  * @param onSelect   (option) => void
- * @param allowCreate if set, offers "Use '<query>'" -> onSelect({value:query,label:query,created:true})
+ * @param allowCreate if set, offers "+ Add '<query>'" -> onSelect({value:query,label:query,created:true})
  */
 export function Combobox({
   fetcher,
@@ -25,6 +25,7 @@ export function Combobox({
   disabled = false,
   invalid = false,
   id,
+  ariaLabel,
 }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -72,6 +73,7 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           aria-invalid={invalid}
+          aria-label={ariaLabel || placeholder}
           disabled={disabled}
           className={cn(
             // field, not button: bottom-rule styling to match Input/Select
@@ -113,8 +115,8 @@ export function Combobox({
                       value={`__create__${query}`}
                       onSelect={() => choose({ value: query.trim(), label: query.trim(), created: true })}
                     >
-                      <Check className="mr-2 size-4 opacity-0" />
-                      Use “{query.trim()}”
+                      <Plus className="mr-2 size-4 text-primary" />
+                      <div><div className="font-medium">Add “{query.trim()}”</div><div className="text-xs text-muted-foreground">Use this city as typed</div></div>
                     </CommandItem>
                   )}
                 </CommandGroup>

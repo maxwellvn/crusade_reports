@@ -27,6 +27,7 @@ import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
 import { MissionTripRegistration } from "@/components/MissionTripRegistration";
 import { MissionTripAdmin } from "@/components/MissionTripAdmin";
 import { PublicTranslator } from "@/components/PublicTranslator";
+import { CrusadeCoverage } from "@/components/CrusadeCoverage";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -216,7 +217,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/mission-trips", "Mission trips", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/zone-links", "Zone links"], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/mission-trips", "Mission trips", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
           <Route path="/crusades" element={<CrusadesTable />} />
@@ -224,6 +225,7 @@ export default function App() {
           <Route path="/registrations" element={<RegistrationsTable />} />
           <Route path="/registrations/live" element={<RegistrationsLive />} />
           <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
+          <Route path="/dashboard/coverage" element={<CrusadeCoverage />} />
           <Route path="/dashboard/settings" element={<SettingsRoute />} />
           <Route path="/dashboard/resources" element={<SuperAdminRoute><ResourcesAdmin /></SuperAdminRoute>} />
           <Route path="/dashboard/mission-nations" element={<SuperAdminRoute><MissionNationAdmin /></SuperAdminRoute>} />
