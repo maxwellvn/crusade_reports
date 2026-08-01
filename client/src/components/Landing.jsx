@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import anime from "animejs/lib/anime.es.js";
+import { getJSON } from "@/lib/api";
 import "../landing.css";
 
 // Public campaign page — A Night of a Thousand Crusades.
@@ -103,42 +104,91 @@ const CONTACTS = [
 // ponytail: summaries only; the linked public pages remain the source of truth.
 const INITIATIVES = [
   {
-    to: "/resources",
-    label: "Approved resources",
-    title: "Everything your crusade team needs.",
-    copy: "Teaching materials, outreach resources, operational guides, campaign media, songs, videos and official NOTC links.",
-    action: "Open resources hub",
-    image: "/campaign/DSC_6044.jpg",
-    tone: "blue",
-  },
-  {
     to: "/select-nation",
-    label: "National missions",
-    title: "Select a mission nation.",
-    copy: "Zonal Pastors can choose a nation outside their home nation and propose a commitment of at least 1,000 crusades.",
+    title: "National Missions Leadership Initiative",
+    copy: "Each Zonal Pastor may express interest in a mission nation outside their zone's home nation. Where multiple zones share works or interests, the NOTC administration will appoint the Lead Regional or Zonal Pastor.",
     action: "Select a nation",
     image: "/national-missions-leadership.png",
     tone: "gold",
   },
   {
     to: "/media-training",
-    label: "24 August 2026",
-    title: "Join the global media training.",
-    copy: "For presenters, camera teams, creatives, media volunteers and everyone serving crusade coverage and digital content.",
+    title: "Global Media Training Mobilisation",
+    copy: "We are mobilising a global media workforce to ensure excellence, consistency, and maximum impact across all nations.",
     action: "Register for training",
     image: "/media-training-mobilisation.png",
     tone: "cyan",
   },
   {
     to: "/mission-trips",
-    label: "Global missions",
-    title: "Volunteer for a mission trip.",
-    copy: "Apply if you hold a valid passport, can independently access a destination and can cover your approved travel expenses.",
-    action: "Apply to volunteer",
+    title: "Global Missions Trip Volunteer Mobilisation",
+    copy: "We are mobilising volunteers from across our churches, zones, and networks to participate in missions trips and support the global outreach efforts.",
+    action: "Apply Now",
     image: "/global-missions-trip-volunteer.png",
     tone: "rose",
   },
 ];
+
+function ResourcesPreview() {
+  const [resources, setResources] = React.useState([]);
+  const [status, setStatus] = React.useState("loading");
+
+  React.useEffect(() => {
+    let active = true;
+    getJSON("/resources")
+      .then((data) => {
+        if (!active) return;
+        setResources((data.resources || []).slice(0, 3));
+        setStatus("ready");
+      })
+      .catch(() => active && setStatus("error"));
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <section className="resources-preview" aria-labelledby="resources-preview-title">
+      <div className="resources-preview-intro">
+        <div>
+          <h2 id="resources-preview-title">Approved Resources Hub</h2>
+        </div>
+        <p>Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.</p>
+      </div>
+
+      {status === "loading" ? (
+        <div className="resource-preview-grid" aria-label="Loading resources">
+          {[0, 1, 2].map((item) => <div className="resource-preview-skeleton" key={item} />)}
+        </div>
+      ) : resources.length ? (
+        <div className="resource-preview-grid">
+          {resources.map((resource) => (
+            <article className="resource-preview-item" key={resource.id}>
+              <a href={resource.url} target="_blank" rel="noreferrer" aria-label={`Open ${resource.title}`}>
+                <div className="resource-preview-media">
+                  {resource.thumbnail_url || resource.resource_type === "image" ? (
+                    <img src={resource.thumbnail_url || resource.url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                  ) : resource.resource_type === "video" ? (
+                    <video src={resource.url} preload="metadata" muted />
+                  ) : (
+                    <span aria-hidden="true">{resource.resource_type?.slice(0, 1)?.toUpperCase() || "R"}</span>
+                  )}
+                </div>
+                <div className="resource-preview-copy">
+                  <span>{resource.category || "Approved resource"} · {resource.resource_type || "resource"}</span>
+                  <h3>{resource.title}</h3>
+                  {resource.description && <p>{resource.description}</p>}
+                </div>
+              </a>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="resources-preview-empty">{status === "error" ? "The latest resources could not be loaded right now." : "Approved resources will appear here as they are published."}</p>
+      )}
+
+      <Link to="/resources" className="resources-preview-action">View more resources</Link>
+    </section>
+  );
+}
 
 // Cookie consent — shows once, remembers the choice in localStorage.
 function CookiePrompt() {
@@ -164,13 +214,13 @@ function CookiePrompt() {
   );
 }
 
-// Countdown to A Night of a Thousand Crusades — 29 August (the next one; rolls to
+// Countdown to A Night of a Thousand Crusades — 28 August (the next one; rolls to
 // next year once this year's has passed). anime.js staggers the boxes in and
 // pulses the seconds each tick. Static under reduced-motion.
-function nextAug29() {
+function nextAug28() {
   const now = new Date();
-  const thisYear = new Date(now.getFullYear(), 7, 29, 0, 0, 0); // month 7 = August
-  return thisYear.getTime() > now.getTime() ? thisYear : new Date(now.getFullYear() + 1, 7, 29, 0, 0, 0);
+  const thisYear = new Date(now.getFullYear(), 7, 28, 0, 0, 0); // month 7 = August
+  return thisYear.getTime() > now.getTime() ? thisYear : new Date(now.getFullYear() + 1, 7, 28, 0, 0, 0);
 }
 
 function timeLeft(target) {
@@ -184,7 +234,7 @@ function timeLeft(target) {
 }
 
 function Countdown() {
-  const target = React.useRef(nextAug29()).current;
+  const target = React.useRef(nextAug28()).current;
   const [t, setT] = React.useState(() => timeLeft(target));
   const gridRef = React.useRef(null);
   const secondsRef = React.useRef(null);
@@ -214,7 +264,7 @@ function Countdown() {
   return (
     <section className="countdown" aria-label="Countdown to A Night of a Thousand Crusades">
       <div className="countdown-glow" aria-hidden="true" />
-      <span className="eyebrow">Save the date · 29 August</span>
+      <span className="eyebrow">Save the date · 28 August</span>
       <h2 className="countdown-title">A Night of a Thousand Crusades</h2>
       <p className="countdown-edition">The Continents &amp; Nations Edition</p>
       <div className="countdown-grid" ref={gridRef}>
@@ -326,6 +376,10 @@ export function Landing() {
               clearProps: "transform,filter",   // clear transform so CSS :hover works
             });
 
+        reveal(".resources-preview-intro > *, .resource-preview-grid, .resources-preview-action", { trigger: ".resources-preview", start: "top 82%", y: 38, blur: 10, stagger: 0.12, duration: 0.85 });
+        gsap.utils.toArray(".initiative-feature").forEach((feature) => {
+          reveal(feature, { trigger: feature, start: "top 84%", y: 48, blur: 12, duration: 0.95 });
+        });
         reveal(".how-to h2, .how-to .section-sub", { trigger: ".how-to", start: "top 80%", stagger: 0.12, duration: 0.8 });
         reveal(".step", { trigger: ".steps", start: "top 84%", y: 54, blur: 12, stagger: 0.16, duration: 0.9 });
         reveal(".how-to .btn-primary", { trigger: ".steps", start: "top 66%", y: 24, blur: 6, duration: 0.7, delay: 0.15 });
@@ -391,6 +445,11 @@ export function Landing() {
             <span /><span /><span />
           </button>
           <nav className="nav" id="primary-nav">
+            <div className="mobile-initiative-links" aria-label="NOTC initiatives">
+              <Link to="/select-nation" onClick={closeNav}>Select a Nation</Link>
+              <Link to="/media-training" onClick={closeNav}>Media Training</Link>
+              <Link to="/mission-trips" onClick={closeNav}>Mission Trips</Link>
+            </div>
             <div className="nav-pill">
               <Link to="/resources" className="nav-link resources-link" onClick={closeNav}>
                 Resources <img src="/assets/icon-resources.svg" className="nav-icon" alt="" />
@@ -422,31 +481,25 @@ export function Landing() {
       {/* ===== Countdown (right after the hero) ===== */}
       <Countdown />
 
-      {/* ===== Important public initiatives ===== */}
-      <section className="initiatives" aria-labelledby="initiatives-title">
-        <div className="initiatives-head">
-          <div>
-            <span className="eyebrow">Take part</span>
-            <h2 id="initiatives-title">Important NOTC initiatives</h2>
-          </div>
-          <p>Resources, leadership opportunities and specialist mobilisation for reaching every nation.</p>
-        </div>
-        <div className="initiative-grid">
-          {INITIATIVES.map((item) => (
-            <article className={`initiative-card initiative-${item.tone}`} key={item.to}>
-              <Link to={item.to} className="initiative-image" aria-label={item.action}>
-                <img src={item.image} alt="" loading="lazy" />
-              </Link>
-              <div className="initiative-copy">
-                <span>{item.label}</span>
-                <h3>{item.title}</h3>
-                <p>{item.copy}</p>
-                <Link to={item.to}>{item.action}<span aria-hidden="true">↗</span></Link>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {/* ===== Approved resources preview ===== */}
+      <ResourcesPreview />
+
+      {/* ===== Public initiatives ===== */}
+      <div className="initiatives" aria-label="NOTC initiatives">
+        {INITIATIVES.map((item, index) => (
+          <section className={`initiative-feature initiative-${item.tone}${index % 2 ? " initiative-reverse" : ""}`} key={item.to} aria-labelledby={`initiative-${index}`}>
+            <Link to={item.to} className="initiative-image" aria-label={item.action}>
+              <img src={item.image} alt="" loading="lazy" />
+            </Link>
+            <div className="initiative-copy">
+              {item.label && <span>{item.label}</span>}
+              <h2 id={`initiative-${index}`}>{item.title}</h2>
+              <p>{item.copy}</p>
+              <Link to={item.to}>{item.action}</Link>
+            </div>
+          </section>
+        ))}
+      </div>
 
       {/* ===== How to Register ===== */}
       <section id="register" className="how-to">
