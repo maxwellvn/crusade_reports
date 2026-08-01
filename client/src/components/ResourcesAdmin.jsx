@@ -60,14 +60,19 @@ export function ResourcesAdmin() {
     if (thumbnailFile) body.append("thumbnail", thumbnailFile);
     setSaving(true);
     try {
-      const response = await fetch(editing ? `/api/resources/${editing.id}` : "/api/resources", { method: editing ? "PUT" : "POST", body });
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 180000);
+      const response = await fetch(editing ? `/api/resources/${editing.id}` : "/api/resources", { method: editing ? "PUT" : "POST", body, signal: controller.signal });
+      window.clearTimeout(timeout);
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.error?.message || "Upload failed.");
       await load(); setForm({ ...EMPTY, category: categories[0]?.name || "Teaching" }); setFile(null); setThumbnailFile(null); setEditing(null);
       if (fileRef.current) fileRef.current.value = "";
       if (thumbnailRef.current) thumbnailRef.current.value = "";
       toast.success(editing ? "Resource updated." : "Resource published.");
-    } catch (error) { toast.error(error.message); } finally { setSaving(false); }
+    } catch (error) {
+      toast.error(error.name === "AbortError" ? "Upload timed out. Check the file size or connection and try again." : error.message);
+    } finally { setSaving(false); }
   }
 
   async function remove(resource) {

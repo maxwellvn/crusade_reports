@@ -161,7 +161,11 @@ resources.post("/", requireSuperAdmin, upload.fields([{ name: "file", maxCount: 
     if (thumbnailFile && (!thumbnailFile.mimetype.startsWith("image/") || thumbnailFile.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a thumbnail image no larger than 8 MB.");
     if (externalUrl && !validHttpUrl(externalUrl)) throw new ApiError(400, "INVALID_URL", "The link must start with http:// or https://.");
     if (suppliedThumbnail && (!externalUrl || !validHttpUrl(suppliedThumbnail))) throw new ApiError(400, "INVALID_THUMBNAIL", "The thumbnail must be a valid web image URL.");
-    let thumbnailUrl = externalUrl ? await discoverThumbnail(externalUrl) : null;
+    // Documents and generic files do not need a remote preview lookup. Avoid
+    // making an upload wait on a third-party site (or a slow DNS response).
+    let thumbnailUrl = externalUrl && !["document", "audio", "other"].includes(type)
+      ? await discoverThumbnail(externalUrl)
+      : null;
     if (thumbnailFile) thumbnailUrl = `/resource-files/${encodeURIComponent(thumbnailFile.filename)}`;
     if (suppliedThumbnail && !thumbnailFile) {
       try { thumbnailUrl = (await assertPublicUrl(suppliedThumbnail)).href; }
