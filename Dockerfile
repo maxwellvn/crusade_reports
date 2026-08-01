@@ -1,16 +1,17 @@
-# Build stage: install deps (better-sqlite3 needs a toolchain) and build the client.
-FROM node:22-alpine AS build
-RUN apk add --no-cache python3 make g++
+# Debian/glibc lets better-sqlite3 use its published Node 22 prebuilt binary.
+# Alpine/musl fell back to downloading a full C++ toolchain, which made Coolify
+# builds take 25+ minutes and hit the deployment command timeout.
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # Coolify may inject NODE_ENV=production at build time. Explicitly include dev
 # dependencies because Vite/Tailwind are build tools, then prune them below.
-RUN npm ci --include=dev
+RUN --mount=type=cache,target=/root/.npm npm ci --include=dev
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
 # Runtime stage: server + built client + prod deps only.
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
@@ -22,5 +23,5 @@ COPY package.json ./
 # SQLite lives here — mount a persistent volume at /app/data in Coolify.
 RUN mkdir -p data
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://localhost:4000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT || 4000}/api/health`).then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
 CMD ["node", "server/index.js"]
