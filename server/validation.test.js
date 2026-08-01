@@ -18,6 +18,40 @@ import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
 import { renderPageMetadata } from "./pageMeta.js";
+import { buildCoverageRows } from "./coverage.js";
+import { citySelectionFields } from "../client/src/lib/citySelection.js";
+
+test("coverage compares the complete ministry directory with reported crusades", () => {
+  const directory = [
+    { region: "Region 1", zone: "ZONE ALPHA", groups: [{ id: "g1", name: "GROUP ONE" }, { id: "g2", name: "GROUP TWO" }] },
+    { region: "Region 2", zone: "ZONE BETA", groups: [{ id: "g3", name: "GROUP THREE" }] },
+  ];
+  const reported = [
+    { zone: "zone alpha", group_name: "group one", crusades: 3, attendance: 120 },
+    { zone: "ZONE ALPHA", group_name: "GROUP ONE", crusades: 2, attendance: 80 },
+    { zone: "ZONE BETA", group_name: "", crusades: 1, attendance: 40 },
+  ];
+
+  const coverage = buildCoverageRows(directory, reported);
+  assert.deepEqual(coverage.summary, {
+    zones: { total: 2, registered: 2, not_registered: 0 },
+    groups: { total: 3, registered: 1, not_registered: 2 },
+  });
+  assert.deepEqual(coverage.zones.map(({ name, status, crusades, attendance }) => ({ name, status, crusades, attendance })), [
+    { name: "ZONE ALPHA", status: "registered", crusades: 5, attendance: 200 },
+    { name: "ZONE BETA", status: "registered", crusades: 1, attendance: 40 },
+  ]);
+  assert.deepEqual(coverage.groups.map(({ name, zone, status, crusades }) => ({ name, zone, status, crusades })), [
+    { name: "GROUP ONE", zone: "ZONE ALPHA", status: "registered", crusades: 5 },
+    { name: "GROUP TWO", zone: "ZONE ALPHA", status: "not_registered", crusades: 0 },
+    { name: "GROUP THREE", zone: "ZONE BETA", status: "not_registered", crusades: 0 },
+  ]);
+});
+
+test("city selection keeps place ids for suggestions and clears them for manual cities", () => {
+  assert.deepEqual(citySelectionFields({ label: "Lagos", value: "places/lagos" }), { city: "Lagos", city_place_id: "places/lagos" });
+  assert.deepEqual(citySelectionFields({ label: "Ijebu-Itele", value: "Ijebu-Itele", created: true }), { city: "Ijebu-Itele", city_place_id: "" });
+});
 
 test("public forms render route-specific metadata before JavaScript loads", () => {
   const template = '<html><head><title>Generic</title><meta name="description" content="Generic"><meta property="og:title" content="Generic"><meta property="og:description" content="Generic"><meta property="og:image" content="/logo.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Generic"><meta name="twitter:description" content="Generic"><meta name="twitter:image" content="/logo.png"></head></html>';
