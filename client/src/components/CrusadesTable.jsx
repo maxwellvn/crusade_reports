@@ -133,13 +133,13 @@ export function CrusadesTable() {
             <Input value={q} onChange={(e) => setQ(e.target.value)} className="h-11 pl-9"
               placeholder="Search crusade, venue, reporter, email, phone, KingsChat…" aria-label="Search crusades" />
           </div>
-          <Button type="button" variant="outline" className="h-11 justify-between sm:min-w-40" aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)}>
+          <Button type="button" variant="outline" className="h-11 justify-between sm:min-w-40" aria-expanded={showFilters} aria-controls="report-filters" onClick={() => setShowFilters((value) => !value)}>
             <span className="flex items-center gap-2"><SlidersHorizontal /> Filters</span>
             {activeFilters.length > 0 && <span className="grid size-5 place-items-center rounded-full bg-blue-600 text-[11px] text-white">{activeFilters.length}</span>}
             <ChevronDown className={`size-4 transition-transform ${showFilters ? "rotate-180" : ""}`} />
           </Button>
         </div>
-        {showFilters && <div className="grid gap-x-5 gap-y-4 border-t border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-3 lg:grid-cols-4">
+        {showFilters && <div id="report-filters" className="grid gap-x-5 gap-y-4 border-t border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-3 lg:grid-cols-4">
           {FILTERS.map(([key, label, kind, options]) => (
             <Field key={key} label={label}>
               {kind === "select" ? (

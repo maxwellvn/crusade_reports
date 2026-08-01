@@ -150,10 +150,10 @@ export function RegistrationsLive() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div><h2 className="text-2xl font-semibold tracking-tight text-slate-900">Live registrations</h2><span className="flex items-center gap-1.5 text-xs text-emerald-700 print:hidden"><Radio className="size-3.5 animate-pulse" /> Live · updates every 10s</span></div>
-        <div className="flex items-center gap-2 print:hidden">
+    <div className="mx-auto max-w-6xl space-y-8">
+      <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl"><div className="flex flex-wrap items-center gap-3"><h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Live registrations</h2><span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 print:hidden"><Radio className="size-3.5 animate-pulse" /> Live</span></div><p className="mt-2 text-sm leading-6 text-slate-600">Crusade plans, geographic coverage and readiness as registrations arrive. Updates every 10 seconds.</p></div>
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
           {hidden.length > 0 && <details className="relative">
             <summary className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent [&::-webkit-details-marker]:hidden"><Plus /> Add widget</summary>
             <div className="absolute right-0 z-20 mt-1 max-h-80 w-64 overflow-y-auto border bg-popover p-1">
@@ -165,25 +165,31 @@ export function RegistrationsLive() {
         </div>
       </div>
 
-      {layout.some((widget) => KPI_IDS.has(widget.id)) && <Card className="grid grid-cols-2 gap-px overflow-hidden bg-border lg:grid-cols-4">
-        {layout.filter((widget) => KPI_IDS.has(widget.id)).map(({ id }) => <div key={id} className={`group relative bg-card ${KPI_TONES[id] || ""}`} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
-          <button type="button" className="w-full p-4 text-left" onClick={() => goFilters(LIVE_WIDGETS[id].filter)}>{LIVE_WIDGETS[id].render(data)}</button>
+      {layout.some((widget) => KPI_IDS.has(widget.id)) && <section aria-labelledby="registration-pulse-heading" className="overflow-hidden border-y border-blue-200 bg-white shadow-[0_18px_45px_-34px_rgba(37,99,235,0.35)] print:shadow-none">
+        <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50/70 px-5 py-3"><h3 id="registration-pulse-heading" className="text-xs font-semibold text-blue-900">Registration pulse</h3><p className="text-xs text-slate-500">Live planning totals</p></div>
+        <div className="grid grid-cols-2 lg:grid-cols-4">
+        {layout.filter((widget) => KPI_IDS.has(widget.id)).map(({ id }, index) => <div key={id} className={`group relative min-h-32 border-blue-100 ${KPI_TONES[id] || "bg-white [&_.stat-value]:!text-blue-700"} ${index % 2 ? "border-l" : ""} ${index >= 2 ? "border-t" : ""} ${index >= 4 ? "lg:border-t" : "lg:border-t-0"} ${index % 4 ? "lg:border-l" : "lg:border-l-0"}`} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
+          <button type="button" className="h-full w-full p-5 text-left" onClick={() => goFilters(LIVE_WIDGETS[id].filter)}>{LIVE_WIDGETS[id].render(data)}</button>
           <div className="absolute right-1.5 top-1.5 flex opacity-0 group-hover:opacity-100 print:hidden"><span draggable title="Drag to rearrange" className="cursor-grab p-1 text-muted-foreground" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><button type="button" title="Remove widget" aria-label={`Remove ${LIVE_WIDGETS[id].title}`} className="p-1 text-muted-foreground hover:text-destructive" onClick={() => setLayout((current) => current.filter((widget) => widget.id !== id))}><X /></button></div>
         </div>)}
-      </Card>}
+        </div>
+      </section>}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <section aria-labelledby="registration-breakdowns-heading" className="space-y-4">
+        <div className="flex items-end justify-between gap-4"><div><h3 id="registration-breakdowns-heading" className="text-lg font-semibold text-slate-950">Registration breakdowns</h3><p className="mt-1 text-sm text-slate-500">Select a row or location to open matching registrations.</p></div><span className="text-xs tabular-nums text-slate-500">{layout.filter((widget) => !KPI_IDS.has(widget.id)).length} visible</span></div>
+      <div className="grid gap-5 sm:grid-cols-2">
         {layout.filter((widget) => !KPI_IDS.has(widget.id)).map(({ id, expanded }) => {
           const widget = LIVE_WIDGETS[id];
-          return <Card key={id} className={expanded || widget.size === 2 ? "sm:col-span-2" : ""} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
-            <CardHeader className="flex-row items-center justify-between space-y-0 py-4">
+          return <Card key={id} className={`rounded-none border-x-0 border-slate-200 shadow-none ${expanded || widget.size === 2 ? "sm:col-span-2" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
+            <CardHeader className="flex-row items-center justify-between space-y-0 bg-slate-50/70 px-4 py-3">
               <div className="flex min-w-0 items-center gap-1.5"><span draggable title="Drag to rearrange" className="cursor-grab text-muted-foreground print:hidden" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><div><CardTitle className="text-sm">{widget.title}</CardTitle>{id === "coverage" && <CardDescription>Click a location to open matching registrations.</CardDescription>}</div></div>
               <div className="flex text-muted-foreground print:hidden">{widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}<button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button></div>
             </CardHeader>
-            <CardContent>{widget.render(data, expanded, go)}</CardContent>
+            <CardContent className="px-4 py-5">{widget.render(data, expanded, go)}</CardContent>
           </Card>;
         })}
       </div>
+      </section>
     </div>
   );
 }
