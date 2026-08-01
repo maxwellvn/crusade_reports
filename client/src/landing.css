@@ -476,6 +476,18 @@
     width: min(760px, 100%);
     margin: clamp(24px, 3vw, 40px) auto 0;
 }
+.landing-page .countdown-register {
+    position: relative;
+    width: fit-content;
+    min-width: 180px;
+    margin: clamp(24px, 3vw, 38px) auto 0;
+    background: #fff;
+    color: #23266f;
+    line-height: 1.15;
+    box-shadow: 0 10px 28px rgba(5, 7, 35, 0.3);
+}
+.landing-page .countdown-register.igniting { min-width: 0; }
+.landing-page .countdown-register:hover { background: #efe89a; color: #17193d; }
 .landing-page .cd-box {
     display: flex;
     flex-direction: column;

@@ -275,6 +275,7 @@ function Countdown() {
           </div>
         ))}
       </div>
+      <RegisterButton className="countdown-register">Register Now</RegisterButton>
     </section>
   );
 }
