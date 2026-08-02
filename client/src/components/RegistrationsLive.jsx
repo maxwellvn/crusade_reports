@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { FileDown, FileText, GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
+import { ChevronDown, FileDown, FileText, GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -43,8 +43,61 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function downloadWordDoc(filename, html) {
-  const blob = new Blob([`\ufeff${html}`], { type: "application/msword;charset=utf-8" });
+const textEncoder = new TextEncoder();
+let crcTable;
+function crc32(bytes) {
+  crcTable ||= Array.from({ length: 256 }, (_, index) => {
+    let crc = index;
+    for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+    return crc >>> 0;
+  });
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+const bytesOf = (value) => textEncoder.encode(value);
+const u16 = (value) => Uint8Array.of(value & 0xff, (value >>> 8) & 0xff);
+const u32 = (value) => Uint8Array.of(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+const concatBytes = (parts) => {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+  return output;
+};
+
+function buildZip(files) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = bytesOf(file.name);
+    const content = bytesOf(file.content);
+    const crc = crc32(content);
+    const local = concatBytes([
+      u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(content.length), u32(content.length), u16(name.length), u16(0), name, content,
+    ]);
+    const central = concatBytes([
+      u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(content.length), u32(content.length),
+      u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), name,
+    ]);
+    locals.push(local);
+    centrals.push(central);
+    offset += local.length;
+  }
+  const centralDirectory = concatBytes(centrals);
+  return concatBytes([
+    ...locals,
+    centralDirectory,
+    u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(centralDirectory.length), u32(offset), u16(0),
+  ]);
+}
+
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const link = Object.assign(document.createElement("a"), { href: url, download: filename });
   document.body.appendChild(link);
@@ -53,11 +106,18 @@ function downloadWordDoc(filename, html) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function downloadCountryRegistrationsReport(data) {
+function countryReportData(data) {
   const rows = [...(data.by_country || [])].sort((a, b) => (b.planned || 0) - (a.planned || 0));
-  const totalCrusades = rows.reduce((sum, row) => sum + (row.planned || 0), 0);
-  const totalRegistrations = rows.reduce((sum, row) => sum + (row.registrations || 0), 0);
-  const generatedAt = docDate.format(new Date());
+  return {
+    rows,
+    totalCrusades: rows.reduce((sum, row) => sum + (row.planned || 0), 0),
+    totalRegistrations: rows.reduce((sum, row) => sum + (row.registrations || 0), 0),
+    generatedAt: docDate.format(new Date()),
+  };
+}
+
+function buildCountryRegistrationsReportHtml(data) {
+  const { rows, totalCrusades, totalRegistrations, generatedAt } = countryReportData(data);
   const tableRows = rows.map((row, index) => `
     <tr>
       <td>${index + 1}</td>
@@ -66,7 +126,7 @@ function downloadCountryRegistrationsReport(data) {
       <td class="num">${nfull.format(row.registrations || 0)}</td>
     </tr>
   `).join("");
-  downloadWordDoc(`registrations-by-country-${new Date().toISOString().slice(0, 10)}.doc`, `
+  return `
     <!doctype html>
     <html>
       <head>
@@ -78,10 +138,11 @@ function downloadCountryRegistrationsReport(data) {
           .eyebrow { color: #1d4ed8; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
           h1 { margin: 6px 0 4px; font-size: 24px; color: #0f172a; }
           .meta { margin: 0 0 22px; color: #475569; font-size: 12px; }
-          .summary { width: 100%; border-collapse: collapse; margin: 0 0 22px; }
-          .summary td { border: 1px solid #cbd5e1; padding: 10px 12px; }
-          .summary .label { color: #475569; font-size: 11px; text-transform: uppercase; }
-          .summary .value { display: block; margin-top: 4px; font-size: 18px; font-weight: 700; color: #1d4ed8; }
+          .summary { width: 100%; border-collapse: collapse; margin: 0 0 22px; border: 1px solid #475569; border-bottom: 6px solid #1d4ed8; }
+          .summary td { width: 33.333%; background: #262626; border-right: 1px solid #475569; padding: 11px 13px 28px; vertical-align: top; }
+          .summary td:last-child { border-right: 0; }
+          .summary .label { display: block; color: #cbd5e1; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+          .summary .value { display: block; margin-top: 1px; font-size: 18px; line-height: 1; font-weight: 700; color: #93c5fd; }
           table.report { width: 100%; border-collapse: collapse; font-size: 12px; }
           .report th { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 9px 10px; text-align: left; }
           .report td { border: 1px solid #dbe4ef; padding: 8px 10px; }
@@ -96,9 +157,9 @@ function downloadCountryRegistrationsReport(data) {
         <p class="meta">Generated ${escapeHtml(generatedAt)} from the live registrations dashboard.</p>
         <table class="summary">
           <tr>
-            <td><span class="label">Countries represented</span><span class="value">${nfull.format(rows.length)}</span></td>
-            <td><span class="label">Registered crusades</span><span class="value">${nfull.format(totalCrusades)}</span></td>
-            <td><span class="label">Registration entries</span><span class="value">${nfull.format(totalRegistrations)}</span></td>
+            <td><span class="label">Countries represented:</span><span class="value">${nfull.format(rows.length)}</span></td>
+            <td><span class="label">Registered crusades:</span><span class="value">${nfull.format(totalCrusades)}</span></td>
+            <td><span class="label">Registration entries:</span><span class="value">${nfull.format(totalRegistrations)}</span></td>
           </tr>
         </table>
         <table class="report">
@@ -108,7 +169,85 @@ function downloadCountryRegistrationsReport(data) {
         <p class="footer">Prepared for internal campaign tracking and operational reporting.</p>
       </body>
     </html>
-  `);
+  `;
+}
+
+const wText = (value, props = "") => `<w:r>${props}<w:t>${escapeHtml(value)}</w:t></w:r>`;
+const wParagraph = (runs, props = "") => `<w:p>${props}${runs}</w:p>`;
+const wCell = (content, { width = 2400, fill, color, bold, size = 22, align = "left" } = {}) => `
+  <w:tc>
+    <w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${fill ? `<w:shd w:fill="${fill}"/>` : ""}</w:tcPr>
+    ${wParagraph(wText(content, `<w:rPr>${bold ? "<w:b/>" : ""}${color ? `<w:color w:val="${color}"/>` : ""}<w:sz w:val="${size}"/></w:rPr>`), `<w:pPr><w:jc w:val="${align}"/></w:pPr>`)}
+  </w:tc>
+`;
+const wRow = (cells) => `<w:tr>${cells.join("")}</w:tr>`;
+
+function buildCountryRegistrationsDocxXml(data) {
+  const { rows, totalCrusades, totalRegistrations, generatedAt } = countryReportData(data);
+  const reportRows = rows.length ? rows.map((row, index) => wRow([
+    wCell(String(index + 1), { width: 700 }),
+    wCell(row.key || "Unspecified", { width: 4600 }),
+    wCell(nfull.format(row.planned || 0), { width: 2200, align: "right" }),
+    wCell(nfull.format(row.registrations || 0), { width: 2200, align: "right" }),
+  ])).join("") : wRow([wCell("No country registrations available.", { width: 9700 })]);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body>
+        ${wParagraph(wText("CRUSADE REGISTRATIONS REPORT", '<w:rPr><w:b/><w:color w:val="1D4ED8"/><w:sz w:val="22"/></w:rPr>'))}
+        ${wParagraph(wText("Registrations by Country", '<w:rPr><w:b/><w:color w:val="0F172A"/><w:sz w:val="48"/></w:rPr>'))}
+        ${wParagraph(wText(`Generated ${generatedAt} from the live registrations dashboard.`, '<w:rPr><w:color w:val="475569"/><w:sz w:val="22"/></w:rPr>'))}
+        <w:tbl>
+          <w:tblPr><w:tblW w:w="9700" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="475569"/><w:left w:val="single" w:sz="4" w:color="475569"/><w:bottom w:val="single" w:sz="18" w:color="1D4ED8"/><w:right w:val="single" w:sz="4" w:color="475569"/><w:insideH w:val="single" w:sz="4" w:color="475569"/><w:insideV w:val="single" w:sz="4" w:color="475569"/></w:tblBorders></w:tblPr>
+          ${wRow([
+            wCell(`COUNTRIES REPRESENTED:\n${nfull.format(rows.length)}`, { width: 3233, fill: "262626", color: "93C5FD", bold: true, size: 24 }),
+            wCell(`REGISTERED CRUSADES:\n${nfull.format(totalCrusades)}`, { width: 3233, fill: "262626", color: "93C5FD", bold: true, size: 24 }),
+            wCell(`REGISTRATION ENTRIES:\n${nfull.format(totalRegistrations)}`, { width: 3233, fill: "262626", color: "93C5FD", bold: true, size: 24 }),
+          ])}
+        </w:tbl>
+        ${wParagraph("")}
+        <w:tbl>
+          <w:tblPr><w:tblW w:w="9700" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="BFDBFE"/><w:left w:val="single" w:sz="4" w:color="BFDBFE"/><w:bottom w:val="single" w:sz="4" w:color="BFDBFE"/><w:right w:val="single" w:sz="4" w:color="BFDBFE"/><w:insideH w:val="single" w:sz="4" w:color="DBE4EF"/><w:insideV w:val="single" w:sz="4" w:color="DBE4EF"/></w:tblBorders></w:tblPr>
+          ${wRow([
+            wCell("#", { width: 700, fill: "EFF6FF", color: "1E3A8A", bold: true }),
+            wCell("Country", { width: 4600, fill: "EFF6FF", color: "1E3A8A", bold: true }),
+            wCell("Registered crusades", { width: 2200, fill: "EFF6FF", color: "1E3A8A", bold: true, align: "right" }),
+            wCell("Registration entries", { width: 2200, fill: "EFF6FF", color: "1E3A8A", bold: true, align: "right" }),
+          ])}
+          ${reportRows}
+        </w:tbl>
+        ${wParagraph(wText("Prepared for internal campaign tracking and operational reporting.", '<w:rPr><w:color w:val="64748B"/><w:sz w:val="20"/></w:rPr>'))}
+        <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="936" w:right="936" w:bottom="936" w:left="936" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
+      </w:body>
+    </w:document>`;
+}
+
+function downloadCountryRegistrationsDocx(data, filename) {
+  const zip = buildZip([
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>` },
+    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>` },
+    { name: "word/document.xml", content: buildCountryRegistrationsDocxXml(data) },
+  ]);
+  downloadBlob(filename, new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+}
+
+function downloadCountryRegistrationsReport(data, format = "word") {
+  const date = new Date().toISOString().slice(0, 10);
+  const html = buildCountryRegistrationsReportHtml(data);
+  if (format === "pdf") {
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=720");
+    if (!printWindow) {
+      toast.error("Allow pop-ups to export this report as PDF.");
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+    return;
+  }
+  downloadCountryRegistrationsDocx(data, `registrations-by-country-${date}.docx`);
 }
 
 function timeAgo(sqliteUtc) {
@@ -259,7 +398,22 @@ export function RegistrationsLive() {
             <CardHeader className="flex-row items-center justify-between space-y-0 bg-slate-50/70 px-4 py-3">
               <div className="flex min-w-0 items-center gap-1.5"><span draggable title="Drag to rearrange" className="cursor-grab text-muted-foreground print:hidden" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><div><CardTitle className="text-sm">{widget.title}</CardTitle>{id === "coverage" && <CardDescription>Click a location to open matching registrations.</CardDescription>}</div></div>
               <div className="flex text-muted-foreground print:hidden">
-                {id === "countries" && <button type="button" title="Download Word report" aria-label="Download registrations by country report" className="p-1.5 hover:text-foreground" onClick={() => downloadCountryRegistrationsReport(data)}><FileText /></button>}
+                {id === "countries" && (
+                  <details className="relative">
+                    <summary title="Download report" aria-label="Download registrations by country report" className="flex cursor-pointer list-none items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 [&::-webkit-details-marker]:hidden">
+                      <FileDown className="size-3.5" />
+                      <ChevronDown className="ml-1 size-3" />
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg">
+                      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50 hover:text-blue-700" onClick={(event) => { downloadCountryRegistrationsReport(data, "pdf"); event.currentTarget.closest("details").open = false; }}>
+                        <FileDown className="size-4" /> PDF
+                      </button>
+                      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50 hover:text-blue-700" onClick={(event) => { downloadCountryRegistrationsReport(data, "word"); event.currentTarget.closest("details").open = false; }}>
+                        <FileText className="size-4" /> Word
+                      </button>
+                    </div>
+                  </details>
+                )}
                 {widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}
                 <button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button>
               </div>
