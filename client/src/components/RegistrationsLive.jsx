@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { FileDown, GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
+import { FileDown, FileText, GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -35,6 +35,81 @@ const titleCase = (value) => value ? value[0].toUpperCase() + value.slice(1) : "
 const bars = (rows, label = (value) => value) => (rows || []).map((row) => ({
   key: row.key, label: label(row.key), value: row.planned || 0, sub: `${row.planned || 0} crusade${(row.planned || 0) === 1 ? "" : "s"}`,
 }));
+const docDate = new Intl.DateTimeFormat("en", { dateStyle: "long", timeStyle: "short" });
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[char]));
+}
+
+function downloadWordDoc(filename, html) {
+  const blob = new Blob([`\ufeff${html}`], { type: "application/msword;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadCountryRegistrationsReport(data) {
+  const rows = [...(data.by_country || [])].sort((a, b) => (b.planned || 0) - (a.planned || 0));
+  const totalCrusades = rows.reduce((sum, row) => sum + (row.planned || 0), 0);
+  const totalRegistrations = rows.reduce((sum, row) => sum + (row.registrations || 0), 0);
+  const generatedAt = docDate.format(new Date());
+  const tableRows = rows.map((row, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(row.key || "Unspecified")}</td>
+      <td class="num">${nfull.format(row.planned || 0)}</td>
+      <td class="num">${nfull.format(row.registrations || 0)}</td>
+    </tr>
+  `).join("");
+  downloadWordDoc(`registrations-by-country-${new Date().toISOString().slice(0, 10)}.doc`, `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Registrations by Country</title>
+        <style>
+          @page { margin: 0.65in; }
+          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; line-height: 1.45; }
+          .eyebrow { color: #1d4ed8; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+          h1 { margin: 6px 0 4px; font-size: 24px; color: #0f172a; }
+          .meta { margin: 0 0 22px; color: #475569; font-size: 12px; }
+          .summary { width: 100%; border-collapse: collapse; margin: 0 0 22px; }
+          .summary td { border: 1px solid #cbd5e1; padding: 10px 12px; }
+          .summary .label { color: #475569; font-size: 11px; text-transform: uppercase; }
+          .summary .value { display: block; margin-top: 4px; font-size: 18px; font-weight: 700; color: #1d4ed8; }
+          table.report { width: 100%; border-collapse: collapse; font-size: 12px; }
+          .report th { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 9px 10px; text-align: left; }
+          .report td { border: 1px solid #dbe4ef; padding: 8px 10px; }
+          .report tr:nth-child(even) td { background: #f8fafc; }
+          .num { text-align: right; font-variant-numeric: tabular-nums; }
+          .footer { margin-top: 20px; color: #64748b; font-size: 11px; }
+        </style>
+      </head>
+      <body>
+        <div class="eyebrow">Crusade registrations report</div>
+        <h1>Registrations by Country</h1>
+        <p class="meta">Generated ${escapeHtml(generatedAt)} from the live registrations dashboard.</p>
+        <table class="summary">
+          <tr>
+            <td><span class="label">Countries represented</span><span class="value">${nfull.format(rows.length)}</span></td>
+            <td><span class="label">Registered crusades</span><span class="value">${nfull.format(totalCrusades)}</span></td>
+            <td><span class="label">Registration entries</span><span class="value">${nfull.format(totalRegistrations)}</span></td>
+          </tr>
+        </table>
+        <table class="report">
+          <thead><tr><th style="width: 48px;">#</th><th>Country</th><th class="num">Registered crusades</th><th class="num">Registration entries</th></tr></thead>
+          <tbody>${tableRows || `<tr><td colspan="4">No country registrations available.</td></tr>`}</tbody>
+        </table>
+        <p class="footer">Prepared for internal campaign tracking and operational reporting.</p>
+      </body>
+    </html>
+  `);
+}
 
 function timeAgo(sqliteUtc) {
   const s = Math.max(0, (Date.now() - new Date(sqliteUtc.replace(" ", "T") + "Z")) / 1000);
@@ -183,7 +258,11 @@ export function RegistrationsLive() {
           return <Card key={id} className={`rounded-none border-x-0 border-slate-200 shadow-none ${expanded || widget.size === 2 ? "sm:col-span-2" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
             <CardHeader className="flex-row items-center justify-between space-y-0 bg-slate-50/70 px-4 py-3">
               <div className="flex min-w-0 items-center gap-1.5"><span draggable title="Drag to rearrange" className="cursor-grab text-muted-foreground print:hidden" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><div><CardTitle className="text-sm">{widget.title}</CardTitle>{id === "coverage" && <CardDescription>Click a location to open matching registrations.</CardDescription>}</div></div>
-              <div className="flex text-muted-foreground print:hidden">{widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}<button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button></div>
+              <div className="flex text-muted-foreground print:hidden">
+                {id === "countries" && <button type="button" title="Download Word report" aria-label="Download registrations by country report" className="p-1.5 hover:text-foreground" onClick={() => downloadCountryRegistrationsReport(data)}><FileText /></button>}
+                {widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}
+                <button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button>
+              </div>
             </CardHeader>
             <CardContent className="px-4 py-5">{widget.render(data, expanded, go)}</CardContent>
           </Card>;
