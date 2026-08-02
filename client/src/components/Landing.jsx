@@ -106,7 +106,7 @@ const INITIATIVES = [
   {
     to: "/select-nation",
     title: "National Missions Leadership Initiative",
-    copy: "Each Zonal Pastor may express interest in a mission nation outside their zone's home nation. Where multiple zones share works or interests, the NOTC administration will appoint the Lead Regional or Zonal Pastor.",
+    copy: "Each minister may express interest in a mission nation outside their home nation. Where multiple ministers share works or interests, the NOTC administration will appoint the lead minister.",
     action: "Select a nation",
     image: "/national-missions-leadership.png",
     tone: "gold",

@@ -47,8 +47,9 @@ missionNations.post("/", wrap(async (req, res) => {
     if (!canonicalOrganization) throw new ApiError(400, "INVALID_ZONE", "Choose a zone from the official zone directory.");
   } else if (data.minister_type === "ism_minister") canonicalOrganization = `ISM Minister · ${data.contact_email}`;
   else if (data.minister_type === "reon_minister") canonicalOrganization = `REON Minister · ${data.contact_email}`;
+  else if (data.minister_type === "rim_minister") canonicalOrganization = `RIM Minister · ${data.contact_email}`;
   else canonicalOrganization = `${data.ministry_name} · ${data.contact_email}`;
-  const displayMinistry = data.ministry_name || (data.minister_type === "ism_minister" ? "ISM Minister" : data.minister_type === "reon_minister" ? "REON Minister" : null);
+  const displayMinistry = data.ministry_name || (data.minister_type === "ism_minister" ? "ISM Minister" : data.minister_type === "reon_minister" ? "REON Minister" : data.minister_type === "rim_minister" ? "RIM Minister" : null);
 
   const receiptCode = `MN-${new Date().getUTCFullYear()}-${randomBytes(4).toString("hex").toUpperCase()}`;
   try {

@@ -24,6 +24,7 @@ const crusade = z
     city_place_id: z.string().optional().default(""),
     event_date: z.string().min(1, "Date is required"),
     attendance: nonNegInt,
+    crusade_expense: z.coerce.number().finite().min(0, "Expense cannot be negative").default(0),
     minister_name: z.string().min(1, "Minister is required"),
     venue: z.string().min(1, "Venue is required"),
     ...perCrusadeMetrics,
@@ -127,19 +128,20 @@ export const registrationDefaults = {
 };
 
 export const missionNationSelectionSchema = z.object({
-  minister_type: z.enum(["zonal_pastor", "ism_minister", "reon_minister", "other"], { message: "Select your minister type" }).default("zonal_pastor"),
+  minister_type: z.enum(["zonal_pastor", "ism_minister", "reon_minister", "rim_minister", "other"], { message: "Select your minister type" }).default("zonal_pastor"),
   pastor_name: z.string().trim().min(2, "Enter the minister's name"),
   zone_name: z.string().optional().default(""),
   ministry_name: z.string().trim().max(200).optional().default(""),
   home_country_code: z.string().length(2, "Select the home nation"),
   mission_country_code: z.string().length(2, "Select one available mission nation"),
   contact_email: z.string().trim().email("Enter a valid email address"),
-  phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a phone country code"),
-  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  phone_country_code: z.string().trim().refine((value) => value === "" || /^\+\d{1,4}$/.test(value), "Select a phone country code").optional().default(""),
+  phone_number: z.string().trim().refine((value) => value === "" || /^[\d ()-]{6,24}$/.test(value), "Enter a valid phone number").optional().default(""),
   kingschat_username: z.string().trim().max(100).optional().default(""),
 }).superRefine((data, ctx) => {
   if (data.minister_type === "zonal_pastor" && data.zone_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zone_name"], message: "Select a zone" });
   if (data.minister_type === "other" && data.ministry_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ministry_name"], message: "Enter your ministry or network" });
+  if (Boolean(data.phone_number) !== Boolean(data.phone_country_code)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [data.phone_number ? "phone_country_code" : "phone_number"], message: "Enter both phone number and country code, or leave both blank" });
   if (data.home_country_code === data.mission_country_code) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mission_country_code"], message: "You cannot select your home nation" });
 });
 

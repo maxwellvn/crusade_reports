@@ -188,6 +188,7 @@ export function CrusadesTable() {
                   <th className="py-2 pr-3 font-medium">Reporting type</th>
                   <th className="py-2 pr-3 font-medium">Reporter contact</th>
                   <Th col="attendance" label="Onsite" right />
+                  <Th col="crusade_expense" label="Expense" right />
                   {METRIC_COLS.map(([k, label]) => (
                     <Th key={k} col={k} label={label} right />
                   ))}
@@ -211,6 +212,7 @@ export function CrusadesTable() {
                       <div className="text-xs text-muted-foreground">{[r.phone_country_code, r.phone_number].filter(Boolean).join(" ") || "—"} · {r.kingschat_username ? `@${r.kingschat_username.replace(/^@/, "")}` : "—"}</div>
                     </td>
                     <td className="py-2 pr-3 text-right">{n0(r.attendance)}</td>
+                    <td className="py-2 pr-3 text-right">{n0(r.crusade_expense)}</td>
                     {METRIC_COLS.map(([k]) => (
                       <td key={k} className="py-2 pr-3 text-right">{n0(r[k])}</td>
                     ))}

@@ -57,7 +57,7 @@ const CRUSADE_FROM = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id"
 const CRUSADE_EXPORT_SELECT =
   `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
           c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
-          c.attendance, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
+          c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
           r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username`;
 
 // One column per field a report can carry, in a readable order — attribution,
@@ -78,6 +78,7 @@ const CRUSADE_EXPORT_COLUMNS = [
   { header: "Cell", value: (row) => row.cell_name },
   { header: "Network", value: (row) => row.network_name },
   { header: "Onsite attendance", value: (row) => row.attendance },
+  { header: "Crusade expense", value: (row) => row.crusade_expense },
   ...METRIC_FIELDS.map((field) => ({ header: METRIC_LABELS[field] || field, value: (row) => row[field] })),
   { header: "Contact name", value: (row) => row.contact_name },
   { header: "Contact email", value: (row) => row.contact_email },
@@ -99,7 +100,7 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
   // Sorting: whitelisted column names only (never interpolate raw query input).
-  const NUMERIC_SORT = new Set(["attendance", ...METRIC_FIELDS]);
+    const NUMERIC_SORT = new Set(["attendance", "crusade_expense", ...METRIC_FIELDS]);
   const TEXT_SORT = new Set(["event_date", "event_name", "event_type", "format", "city", "country", "organization_type", "minister_name", "venue"]);
   const sortCol = NUMERIC_SORT.has(req.query.sort) || TEXT_SORT.has(req.query.sort) ? req.query.sort : "event_date";
   const dir = req.query.dir === "asc" ? "ASC" : "DESC";
@@ -111,7 +112,7 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
   const rows = db.prepare(
     `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
             c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
-            c.attendance, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
+            c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
             r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
      ${from} ${clause} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
@@ -127,7 +128,7 @@ crusades.delete("/:id", requireSuperAdmin, wrap((req, res) => {
 
 const CRUSADE_EDIT_COLS = [
   "format", "event_type", "other_event_type", "event_name", "city", "city_place_id",
-  "country", "event_date", "attendance", "minister_name", "venue",
+  "country", "event_date", "attendance", "crusade_expense", "minister_name", "venue",
   "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
   ...METRIC_FIELDS,
 ];

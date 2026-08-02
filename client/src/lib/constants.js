@@ -97,6 +97,7 @@ export const emptyCrusade = () => ({
   city_place_id: "",
   event_date: "",
   attendance: 0,
+  crusade_expense: 0,
   minister_name: "",
   venue: "",
   ...Object.fromEntries(METRIC_KEYS.map((k) => [k, 0])),

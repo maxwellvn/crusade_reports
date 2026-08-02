@@ -18,7 +18,7 @@ const insertReportStmt = db.prepare(`
 
 const CRUSADE_COLS = [
   "report_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country",
-  "format", "event_type", "other_event_type", "event_name", "city", "city_place_id", "event_date", "attendance",
+  "format", "event_type", "other_event_type", "event_name", "city", "city_place_id", "event_date", "attendance", "crusade_expense",
   ...METRIC_FIELDS, "minister_name", "venue", "registration_item_id",
 ];
 const insertCrusadeStmt = db.prepare(
@@ -67,6 +67,7 @@ export const insertReport = db.transaction((d) => {
       city_place_id: c.city_place_id || null,
       event_date: c.event_date,
       attendance: c.attendance,
+      crusade_expense: c.crusade_expense,
       minister_name: c.minister_name || null,
       venue: c.venue || null,
       registration_item_id: c.registration_item_id || null,
@@ -102,7 +103,7 @@ export function submitRegisteredCrusadeReport(item, body) {
     crusades: [{ ...parsed.data.crusade, registration_item_id: item.id }],
   });
   const report = db.prepare(`SELECT id AS report_crusade_id, report_id, created_at AS reported_at,
-    attendance AS reported_attendance, online_participation AS reported_online_participation,
+    attendance AS reported_attendance, crusade_expense AS reported_expense, online_participation AS reported_online_participation,
     salvation AS reported_salvation FROM crusades WHERE registration_item_id = ?`).get(item.id);
   backfillCityCoords().catch(() => {});
   return { ...report, report_id: reportId };

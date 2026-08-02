@@ -43,13 +43,14 @@ export function EditCrusadePage() {
       const payload = {};
       // Crusade fields
       for (const f of ["format", "event_type", "other_event_type", "event_name", "city", "city_place_id",
-        "country", "event_date", "attendance", "minister_name", "venue",
+        "country", "event_date", "attendance", "crusade_expense", "minister_name", "venue",
         "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name"]) {
         payload[f] = data[f] ?? "";
       }
       // Numeric metrics
       for (const [key] of ALL_METRICS) payload[key] = parseInt(data[key] || 0, 10) || 0;
       payload.attendance = parseInt(data.attendance || 0, 10) || 0;
+      payload.crusade_expense = Number(data.crusade_expense || 0) || 0;
       // Report fields
       for (const f of ["contact_name", "contact_email", "phone_country_code", "phone_number",
         "kingschat_username", "highlights", "media_links"]) {
@@ -114,6 +115,9 @@ export function EditCrusadePage() {
             </Field>
             <Field label="Onsite attendance">
               <Input type="number" min="0" value={data.attendance ?? 0} onChange={(e) => set("attendance", e.target.value)} />
+            </Field>
+            <Field label="Crusade expense">
+              <Input type="number" min="0" step="0.01" value={data.crusade_expense ?? 0} onChange={(e) => set("crusade_expense", e.target.value)} />
             </Field>
           </CardContent>
         </Card>

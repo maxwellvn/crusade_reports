@@ -88,6 +88,7 @@ db.exec(`
     city_place_id     TEXT,
     event_date        TEXT NOT NULL,
     attendance        INTEGER NOT NULL DEFAULT 0, -- ONSITE attendance; online attendance lives in online_participation
+    crusade_expense   REAL NOT NULL DEFAULT 0,
 
     salvation                INTEGER NOT NULL DEFAULT 0,
     holy_spirit_filled       INTEGER NOT NULL DEFAULT 0,
@@ -580,6 +581,9 @@ if (!crusadeCols.includes("rabah_crusades")) {
     ALTER TABLE crusades ADD COLUMN rabah_crusades INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE crusades ADD COLUMN rabah_people_reached INTEGER NOT NULL DEFAULT 0;
   `);
+}
+if (!db.prepare("PRAGMA table_info(crusades)").all().some((column) => column.name === "crusade_expense")) {
+  db.exec("ALTER TABLE crusades ADD COLUMN crusade_expense REAL NOT NULL DEFAULT 0");
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
 // This backfill must run after the registration_item_id migration above so

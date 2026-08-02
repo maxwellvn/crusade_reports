@@ -41,7 +41,7 @@ const typeLabel = (v) => CRUSADE_TYPES.find(([c]) => c === v)?.[1] || v;
 
 // A crusade row is "untouched" when none of its detail fields have been filled.
 // Stops a distracted user from stacking blank rows by clicking "Add" repeatedly.
-const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "attendance", "country", "city", "minister_name"];
+const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "attendance", "crusade_expense", "country", "city", "minister_name"];
 const isCrusadeUntouched = (item) => !!item && CRUSADE_DETAIL_FIELDS.every((key) => !String(item[key] ?? "").trim());
 
 export function ReportForm() {
@@ -623,6 +623,9 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, o
         </Field>
         <Field label="Venue" required error={rowErr.venue?.message} hint="Where it held. For online/TV/radio, put 'Online' or 'N/A'">
           <Input {...register(p("venue"))} aria-invalid={!!rowErr.venue} placeholder="e.g. City Stadium" />
+        </Field>
+        <Field label="Crusade expense" hint="Optional — enter the amount spent on this crusade">
+          <Input type="number" min="0" step="0.01" {...register(p("crusade_expense"))} aria-invalid={!!rowErr.crusade_expense} placeholder="0.00" />
         </Field>
       </div>
 

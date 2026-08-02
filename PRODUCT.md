@@ -9,7 +9,7 @@ web
 ## Users
 
 - Public campaign participants register and report individual Rhapsody End-Time Teaching Crusades.
-- Zonal Pastors use the Mission Nation Selection Portal to state one preferred mission nation outside their zone's home nation.
+- Ministers use the Mission Nation Selection Portal to state one preferred mission nation outside their home nation.
 - Zone, Group, and Church teams register presenters, cameramen, and technical personnel for the August 24 Global Media Training.
 - Approved administrators review campaign operations. Super administrators manage restricted settings and destructive actions.
 
@@ -19,12 +19,12 @@ The portal coordinates crusade planning, reporting, and mission-nation responsib
 
 ## Operating Context
 
-Zonal Pastors identify their zone, contact details, KingsChat username, and zone home nation before choosing a preferred mission nation. The zone home nation is self-declared because the upstream zone directory does not provide country data. Multiple zones may prefer the same nation. Pastors who do not submit during the open window may later have a nation designated to them.
+Ministers identify their ministry details, contact details, KingsChat username, and home nation before choosing a preferred mission nation. Ministers selecting the Zonal Pastor role also identify their zone; the zone home nation is self-declared because the upstream zone directory does not provide country data. Multiple ministers may prefer the same nation. Ministers who do not submit during the open window may later have a nation designated to them.
 
 ## Capabilities and Constraints
 
 - The mission-nation catalogue uses the existing geolocation-compatible 242-country inventory.
-- A Zonal Pastor cannot select the nation they declare as their zone's home nation.
+- A minister cannot select the nation they declare as their home nation.
 - Each zone can submit one active preference; multiple zones may prefer the same mission nation.
 - Administrators can assign, reassign, or clear a zone's final mission nation independently of its submitted preference.
 - Every selected nation carries a minimum commitment of 1,000 crusades.

@@ -8,7 +8,7 @@ const PAGES = [
   [/^\/blue-elite\/?$/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", "/blue-elite", "/logo.png"],
   [/^\/report\/?$/, "Report a Crusade", "Submit the verified outcome of a completed A Night of a Thousand Crusades event.", "/report", "/logo.png"],
   [/^\/resources\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) Approved Resources Hub", "Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.", "/resources", "/logo.png"],
-  [/^\/select-nation\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Zonal Pastors can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", "/select-nation", "/national-missions-leadership.png"],
+  [/^\/select-nation\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Ministers can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", "/select-nation", "/national-missions-leadership.png"],
   [/^\/media-training\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", "/media-training", "/media-training-mobilisation.png"],
   [/^\/mission-trips\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", "/mission-trips", "/global-missions-trip-volunteer.png"],
 ];

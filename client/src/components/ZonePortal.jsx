@@ -348,6 +348,7 @@ function VisitorCrusadeDialog({ crusade, onClose }) {
         {crusade.report_id && <div>
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Reported outcomes</p>
           {row("Attendance", nfull.format((crusade.reported_attendance || 0) + (crusade.reported_online_participation || 0)))}
+          {row("Crusade expense", crusade.reported_expense ? nfull.format(crusade.reported_expense) : "0")}
           {row("Souls won", nfull.format(crusade.reported_salvation || 0))}
         </div>}
         <p className="text-xs text-muted-foreground">This crusade is managed and reported by the organization that registered it.</p>
@@ -407,7 +408,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
     format: ONLINE_TYPES.includes(crusade.event_type) ? "online" : "physical",
     event_type: crusade.event_type || "", other_event_type: "", event_name: crusade.event_name || "",
     country: crusade.country || "", city: crusade.city || "", city_place_id: crusade.city_place_id || "", event_date: crusade.event_date || "",
-    attendance: 0, minister_name: crusade.minister_name || "", venue: crusade.venue || "",
+    attendance: 0, crusade_expense: 0, minister_name: crusade.minister_name || "", venue: crusade.venue || "",
     ...Object.fromEntries(METRIC_KEYS.map((key) => [key, 0])),
   });
   const [highlights, setHighlights] = React.useState("");
@@ -425,7 +426,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
     }
     setSaving(true);
     try {
-      const numericReport = { ...report, attendance: Number(report.attendance) || 0 };
+      const numericReport = { ...report, attendance: Number(report.attendance) || 0, crusade_expense: Number(report.crusade_expense) || 0 };
       METRIC_KEYS.forEach((key) => { numericReport[key] = Number(report[key]) || 0; });
       const submitted = await postJSON(savePath || `/zone-portal/${token}/crusades/${crusade.id}/report`, {
         crusade: numericReport, highlights, media_links: mediaLinks,
@@ -495,6 +496,9 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
           )}
           <Field label="Online attendance">
             <Input type="number" min="0" value={report.online_participation} onChange={(event) => setField("online_participation", event.target.value)} />
+          </Field>
+          <Field label="Crusade expense" hint="Optional — amount spent on this crusade">
+            <Input type="number" min="0" step="0.01" value={report.crusade_expense} onChange={(event) => setField("crusade_expense", event.target.value)} />
           </Field>
         </div>
 
