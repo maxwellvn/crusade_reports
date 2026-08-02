@@ -218,6 +218,12 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS dashboard_permissions (
+    username  TEXT NOT NULL COLLATE NOCASE,
+    page_key  TEXT NOT NULL,
+    PRIMARY KEY (username, page_key)
+  );
+
   CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL

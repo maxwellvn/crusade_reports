@@ -186,7 +186,7 @@ export const blueEliteRegistrationSchema = z
     contact_email: z.string().trim().email("Enter a valid email address").max(254),
     phone_country_code: z.string().trim().regex(/^\+\d{1,4}$/, "Use a country code like +234"),
     phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
-    kingschat_username: z.string().trim().max(100).optional().default(""),
+    kingschat_username: z.string().trim().min(2, "KingsChat username is required").max(100),
     department: z.string().trim().min(2, "Department is required").max(200),
     items: z.array(registrationItem).min(1, "Register at least one individual crusade"),
   });

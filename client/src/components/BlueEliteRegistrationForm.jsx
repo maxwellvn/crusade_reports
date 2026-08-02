@@ -13,7 +13,7 @@ import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
 import { getJSON, postJSON } from "@/lib/api";
 import { blueEliteRegistrationSchema, blueEliteRegistrationDefaults } from "@/lib/schema";
-import { CRUSADE_TYPES, PHONE_CODES } from "@/lib/constants";
+import { CRUSADE_TYPES, PHONE_CODES, BLUE_ELITE_DEPARTMENTS } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
@@ -99,6 +99,16 @@ export function BlueEliteRegistrationForm() {
   const items = watch("items");
 
   const { fetchCountries, countryCodeOf, fetchZones, fetchGroups, clearGroupCache } = useOrgData(zone);
+  // Department picker is a static list (BLUE_ELITE_DEPARTMENTS), but the Combobox
+  // expects an async fetcher — wrap a synchronous filter in a resolved promise.
+  const fetchDepartments = React.useCallback(
+    (query) => {
+      const q = query.trim().toLowerCase();
+      const matches = !q ? BLUE_ELITE_DEPARTMENTS : BLUE_ELITE_DEPARTMENTS.filter((d) => d.toLowerCase().includes(q));
+      return Promise.resolve(matches.map((d) => ({ value: d, label: d })));
+    },
+    [],
+  );
   const cityFetcherFor = React.useCallback((countryName) => {
     const code = countryCodeOf(countryName);
     return async (query) => {
@@ -243,7 +253,7 @@ export function BlueEliteRegistrationForm() {
             <span className="mx-auto grid size-16 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="size-8" /></span>
             <h1 className="reg-title text-4xl tracking-[-0.9px]">You’re registered.</h1>
             <p className="mx-auto max-w-md text-muted-foreground">
-              <span className="font-semibold text-foreground">{nfull.format(done.planned)} individual crusade{done.planned === 1 ? "" : "s"}</span> from your Blue Elite team have been logged.
+              <span className="font-semibold text-foreground">{nfull.format(done.planned)} individual crusade{done.planned === 1 ? "" : "s"}</span> have been logged.
               Thank you — now go make them happen.
             </p>
             <div className="flex flex-wrap justify-center gap-3 pt-2">
@@ -255,7 +265,7 @@ export function BlueEliteRegistrationForm() {
           <form onSubmit={handleSubmit(onSubmit, () => toast.error("Please fix the highlighted fields."))} onKeyDown={onFormKeyDown} className="space-y-6 pb-24">
             <div className="space-y-2">
               <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Blue Elite Staff Registration</p>
-              <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your team’s crusades.</h1>
+              <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your crusades.</h1>
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <p>Your progress is saved automatically in this browser, even while offline.</p>
                 <button type="button" onClick={discardDraft} className="font-medium text-foreground underline underline-offset-4">Discard saved draft</button>
@@ -270,7 +280,7 @@ export function BlueEliteRegistrationForm() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Who is registering?</CardTitle>
-                    <CardDescription>Tell us which Blue Elite team these crusades belong to.</CardDescription>
+                    <CardDescription>Tell us who is registering these crusades.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -299,16 +309,16 @@ export function BlueEliteRegistrationForm() {
                           <Input autoComplete="name" {...register("contact_name")} aria-invalid={!!errors.contact_name} placeholder="Your full name" />
                         </Field>
                         <Field label="Department" required error={errors.department?.message}>
-                          <Select {...register("department")} aria-invalid={!!errors.department}>
-                            <option value="">Select…</option>
-                            <option value="Rhapsody of Realities">Rhapsody of Realities</option>
-                            <option value="Ministry of Publishing">Ministry of Publishing</option>
-                          </Select>
+                          <Controller control={control} name="department" render={({ field }) => (
+                            <Combobox value={field.value} invalid={!!errors.department}
+                              placeholder="Select department" searchPlaceholder="Search departments…" emptyText="No matching department"
+                              fetcher={fetchDepartments} onSelect={(o) => field.onChange(o.value)} />
+                          )} />
                         </Field>
                         <Field label="Email address" required error={errors.contact_email?.message}>
                           <Input type="email" autoComplete="email" {...register("contact_email")} aria-invalid={!!errors.contact_email} placeholder="you@example.com" />
                         </Field>
-                        <Field label="KingsChat username" hint="Optional" error={errors.kingschat_username?.message}>
+                        <Field label="KingsChat username" required error={errors.kingschat_username?.message}>
                           <Input {...register("kingschat_username")} aria-invalid={!!errors.kingschat_username} placeholder="@username" />
                         </Field>
                         <div className="grid gap-3 sm:col-span-2 sm:grid-cols-[120px_1fr]">
@@ -448,7 +458,7 @@ export function BlueEliteRegistrationForm() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Review your registration</CardTitle>
-                    <CardDescription>Check the details, then submit to log your team’s crusades.</CardDescription>
+                    <CardDescription>Check the details, then submit to log your crusades.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-5 text-sm">
                     <div className="grid grid-cols-2 gap-3">

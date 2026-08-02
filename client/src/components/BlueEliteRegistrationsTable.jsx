@@ -1,9 +1,8 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Eye, X, Search, Download, FileSpreadsheet } from "lucide-react";
+import { Eye, X, Search, Download, FileSpreadsheet, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useTableSort, Pagination } from "@/lib/tableTools";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -51,6 +50,7 @@ export function BlueEliteRegistrationsTable() {
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
   const [selected, setSelected] = React.useState(null);
+  const [showFilters, setShowFilters] = React.useState(() => FILTERS.some(([key]) => params.has(key)));
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 
   const [q, setQ] = React.useState(params.get("q") || "");
@@ -92,12 +92,12 @@ export function BlueEliteRegistrationsTable() {
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
   const activeFilters = FILTERS.filter(([key]) => params.get(key));
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="mx-auto max-w-7xl space-y-6">
       <Breadcrumbs items={[{ label: "Blue Elite dashboard", to: "/dashboard/blue-elite" }, { label: "Registered crusades" }]} />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">Blue Elite — registered crusades</h2>
-        <div className="flex items-center gap-2">
-          {data && <p className="text-sm text-muted-foreground">{nfull.format(data.total)} matching</p>}
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div><h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Blue Elite — registered crusades</h2><p className="mt-2 text-sm text-slate-600">Plans, readiness, reporting status and departmental ownership in one record.</p></div>
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {data && <p className="mr-1 text-sm tabular-nums text-slate-500">{nfull.format(data.total)} matching</p>}
           <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total} title="Export matching rows as CSV">
             <Download /> CSV
           </Button>
@@ -107,15 +107,16 @@ export function BlueEliteRegistrationsTable() {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} className="pl-6"
+      <section aria-label="Search and filter Blue Elite registrations" className="border-y border-slate-200 bg-white print:hidden">
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} className="h-11 pl-9"
               placeholder="Search crusade, venue, department, staff or contact…" aria-label="Search Blue Elite registrations" />
           </div>
-        </CardContent>
-        <CardContent className="grid gap-3 pt-0 sm:grid-cols-3 lg:grid-cols-6">
+          <Button type="button" variant="outline" className="h-11 justify-between sm:min-w-40" aria-expanded={showFilters} aria-controls="blue-elite-filters" onClick={() => setShowFilters((value) => !value)}><span className="flex items-center gap-2"><SlidersHorizontal /> Filters</span>{activeFilters.length > 0 && <span className="grid size-5 place-items-center rounded-full bg-blue-600 text-[11px] text-white">{activeFilters.length}</span>}<ChevronDown className={`size-4 transition-transform ${showFilters ? "rotate-180" : ""}`} /></Button>
+        </div>
+        {showFilters && <div id="blue-elite-filters" className="grid gap-x-5 gap-y-4 border-t border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-3 lg:grid-cols-4">
           {FILTERS.map(([key, label, kind, options]) => (
             <Field key={key} label={label}>
               {kind === "select" ? (
@@ -129,9 +130,9 @@ export function BlueEliteRegistrationsTable() {
               )}
             </Field>
           ))}
-        </CardContent>
+        </div>}
         {activeFilters.length > 0 && (
-          <CardContent className="flex flex-wrap gap-2 pt-0">
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-4 py-3"><span className="mr-1 text-xs font-medium text-slate-500">Applied</span>
             {activeFilters.map(([key, label]) => (
               <button key={key} type="button" onClick={() => setFilter(key, "")}
                 className="flex items-center gap-1 rounded-full border bg-muted px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent">
@@ -141,20 +142,20 @@ export function BlueEliteRegistrationsTable() {
             <button type="button" onClick={() => setParams({})} className="text-xs font-medium text-muted-foreground hover:text-foreground">
               Clear all
             </button>
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </section>
 
-      <Card>
-        <CardContent className="overflow-x-auto pt-6">
+      <section aria-label="Blue Elite crusade records" className="border-y border-slate-200 bg-white">
+        <div className="overflow-x-auto">
           {!data ? (
             <LoadingRows rows={8} />
           ) : !data.rows.length ? (
             <p className="py-16 text-center text-sm text-muted-foreground">No Blue Elite registrations match these filters.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-max text-sm">
               <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
+                <tr className="border-b border-blue-200 bg-blue-50/80 text-left text-xs text-slate-600">
                   <Th col="event_date" label="Date" />
                   <Th col="event_name" label="Crusade" />
                   <Th col="event_type" label="Type" />
@@ -164,14 +165,14 @@ export function BlueEliteRegistrationsTable() {
                   <th className="py-2 pr-3 font-medium">Readiness</th>
                   <th className="py-2 pr-3 font-medium">Report</th>
                   <th className="py-2 pr-3 font-medium">Department</th>
-                  <th className="py-2 pr-3 font-medium">Team</th>
+                  <th className="py-2 pr-3 font-medium">Organisation</th>
                   <th className="py-2 pr-3 font-medium">Staff</th>
                   <th className="py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
                 {data.rows.map((r) => (
-                  <tr key={r.id} className="border-b last:border-0">
+                  <tr key={r.id} className="border-b border-slate-100 last:border-0">
                     <td className="py-2 pr-3 whitespace-nowrap">{r.event_date || "—"}</td>
                     <td className="max-w-52 py-2 pr-3">
                       <div className="font-medium">{r.event_name || typeLabel(r.event_type)}</div>
@@ -205,8 +206,8 @@ export function BlueEliteRegistrationsTable() {
               </tbody>
             </table>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {data && data.total > PAGE_SIZE && <Pagination page={page} totalPages={totalPages} onPage={setPage} />}
       {selected && <CrusadeDetails crusade={selected} onClose={() => setSelected(null)} />}

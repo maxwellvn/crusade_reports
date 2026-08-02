@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowUpRight, LogOut, Trash2, UserPlus } from "lucide-react";
+import { ArrowUpRight, LogOut, Trash2, UserPlus, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,26 @@ const LANDING_PAGE_LABELS = {
   "/crusades": "Reports",
   "/dashboard/zone-links": "Zone links",
 };
+
+// Page keys for the per-user access editor. Must match the server's
+// ASSIGNABLE_PAGES list.
+const ASSIGNABLE_PAGES = [
+  { key: "dashboard", label: "Reports dashboard" },
+  { key: "crusades", label: "Reports" },
+  { key: "registrations", label: "Registered crusades" },
+  { key: "registrations/live", label: "Live registrations" },
+  { key: "dashboard/zone-links", label: "Zone links" },
+  { key: "dashboard/coverage", label: "Coverage map" },
+  { key: "crusades/edit", label: "Edit reports" },
+  { key: "registrations/manual-organizations", label: "Manual organisations" },
+  { key: "dashboard/mission-nations", label: "Mission nations" },
+  { key: "dashboard/media-training", label: "Media training" },
+  { key: "dashboard/mission-trips", label: "Mission trips" },
+  { key: "dashboard/resources", label: "Resources admin" },
+  { key: "dashboard/blue-elite", label: "Blue Elite" },
+  { key: "registrations/blue-elite", label: "Blue Elite registrations" },
+  { key: "dashboard/database-protection", label: "Backups" },
+];
 
 function SettingsSection({ title, description, children }) {
   return (
@@ -43,6 +63,9 @@ export function Settings() {
   const [landingPage, setLandingPage] = React.useState("");
   const [landingOptions, setLandingOptions] = React.useState([]);
   const [savingLanding, setSavingLanding] = React.useState(false);
+  const [editingPermissions, setEditingPermissions] = React.useState(null);
+  const [permissionDraft, setPermissionDraft] = React.useState([]);
+  const [savingPermissions, setSavingPermissions] = React.useState(false);
 
   React.useEffect(() => {
     if (!admin?.is_super_admin) { setLoading(false); return; }
@@ -104,6 +127,35 @@ export function Settings() {
       toast.success(`@${username} removed.`);
     } catch (error) {
       toast.error(error.message);
+    }
+  }
+
+  async function openPermissions(account) {
+    try {
+      const result = await getJSON(`/auth/permissions/${encodeURIComponent(account.username)}`);
+      setEditingPermissions(account.username);
+      setPermissionDraft(result.permissions);
+    } catch (error) {
+      toast.error(error.message);
+    }
+  }
+
+  function togglePermission(key) {
+    setPermissionDraft((current) =>
+      current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
+    );
+  }
+
+  async function savePermissions() {
+    setSavingPermissions(true);
+    try {
+      await putJSON(`/auth/permissions/${encodeURIComponent(editingPermissions)}`, { permissions: permissionDraft });
+      toast.success(`Access updated for @${editingPermissions}.`);
+      setEditingPermissions(null);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingPermissions(false);
     }
   }
 
@@ -189,7 +241,7 @@ export function Settings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Dashboard accounts" description="Grant a KingsChat account access to the main administration dashboards.">
+      <SettingsSection title="Dashboard accounts" description="Grant a KingsChat account access to the main administration dashboards. Use the access button to choose which pages each account can open.">
           <form onSubmit={addAccount} className="grid items-start gap-3 border-b border-slate-200 pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Field label="KingsChat username" className="min-w-0">
               <Input name="username" required minLength={2} placeholder="@username" autoComplete="off" value={username} onChange={(event) => setUsername(event.target.value)} />
@@ -200,18 +252,49 @@ export function Settings() {
             <Button type="submit" disabled={lookup.state !== "found"} className="mt-6 rounded-full"><UserPlus /> Add account</Button>
           </form>
           <div aria-live="polite">
-            {loading ? <p className="py-8 text-sm text-muted-foreground">Loading dashboard accounts…</p> : accounts.length ? accounts.map((account) => (
-              <div key={account.username} className="flex items-center justify-between gap-4 border-b border-slate-200 py-4">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-950">@{account.username}</p>
-                  <p className="mt-1 text-xs text-slate-500">Added {account.created_at?.slice(0, 10) || "by the system"}{account.created_by ? ` · ${account.created_by}` : ""}</p>
+            {loading ? <p className="py-8 text-sm text-muted-foreground">Loading dashboard accounts…</p> : accounts.length ? accounts.map((account) => {
+              const isSuper = account.username === admin.username;
+              const isEditing = editingPermissions === account.username;
+              return (
+              <div key={account.username}>
+                <div className="flex items-center justify-between gap-4 border-b border-slate-200 py-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-950">@{account.username}{isSuper && <span className="ml-2 text-xs font-normal text-slate-400">(super admin)</span>}</p>
+                    <p className="mt-1 text-xs text-slate-500">Added {account.created_at?.slice(0, 10) || "by the system"}{account.created_by ? ` · ${account.created_by}` : ""}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {!isSuper && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => isEditing ? setEditingPermissions(null) : openPermissions(account)} aria-label={`Manage access for @${account.username}`} className="text-slate-600 hover:text-blue-700">
+                        <Lock /> {isEditing ? "Close" : "Access"}
+                      </Button>
+                    )}
+                    <Button type="button" variant="ghost" size="sm" disabled={isSuper}
+                      onClick={() => removeAccount(account.username)} aria-label={`Remove @${account.username}`} className="text-slate-600 hover:text-red-700">
+                      <Trash2 /> Remove
+                    </Button>
+                  </div>
                 </div>
-                <Button type="button" variant="ghost" size="sm" disabled={account.username === admin.username}
-                  onClick={() => removeAccount(account.username)} aria-label={`Remove @${account.username}`} className="shrink-0 text-slate-600 hover:text-red-700">
-                  <Trash2 /> Remove
-                </Button>
+                {isEditing && (
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-5">
+                    <p className="mb-3 text-sm font-medium text-slate-700">Pages @{account.username} can access</p>
+                    <div className="grid gap-2.5 sm:grid-cols-2">
+                      {ASSIGNABLE_PAGES.map((page) => (
+                        <label key={page.key} className="flex items-center gap-2.5 text-sm text-slate-700">
+                          <input type="checkbox" checked={permissionDraft.includes(page.key)} onChange={() => togglePermission(page.key)} className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                          {page.label}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-slate-500">Check the pages this account can open. Unchecked pages will be hidden and blocked. The default set (standard admin pages) is pre-checked for new accounts.</p>
+                    <div className="mt-4 flex gap-2">
+                      <Button type="button" size="sm" disabled={savingPermissions} onClick={savePermissions} className="rounded-full">{savingPermissions ? "Saving…" : "Save access"}</Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEditingPermissions(null)} className="rounded-full">Cancel</Button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )) : <p className="py-8 text-sm text-slate-500">No dashboard accounts have been added.</p>}
+              );
+            }) : <p className="py-8 text-sm text-slate-500">No dashboard accounts have been added.</p>}
           </div>
       </SettingsSection>
     </div>

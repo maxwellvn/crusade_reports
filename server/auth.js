@@ -8,6 +8,50 @@ const COOKIE = "kc_access_token";
 const profileCache = new Map();
 export const SUPER_ADMIN_USERNAME = "maxwellvn";
 
+// Pages that can be individually assigned to non-super-admin accounts. Super
+// admins always have full access. New accounts (including /pm self-service)
+// default to DEFAULT_PAGE_KEYS — the standard non-super-admin set. Once the
+// super admin assigns specific pages, only those pages are accessible.
+export const ASSIGNABLE_PAGES = [
+  { key: "dashboard", label: "Reports dashboard", path: "/dashboard" },
+  { key: "crusades", label: "Reports", path: "/crusades" },
+  { key: "registrations", label: "Registered crusades", path: "/registrations" },
+  { key: "registrations/live", label: "Live registrations", path: "/registrations/live" },
+  { key: "dashboard/zone-links", label: "Zone links", path: "/dashboard/zone-links" },
+  { key: "dashboard/coverage", label: "Coverage map", path: "/dashboard/coverage" },
+  { key: "crusades/edit", label: "Edit reports", path: "/crusades" },
+  { key: "registrations/manual-organizations", label: "Manual organisations", path: "/registrations/manual-organizations" },
+  { key: "dashboard/mission-nations", label: "Mission nations", path: "/dashboard/mission-nations" },
+  { key: "dashboard/media-training", label: "Media training", path: "/dashboard/media-training" },
+  { key: "dashboard/mission-trips", label: "Mission trips", path: "/dashboard/mission-trips" },
+  { key: "dashboard/resources", label: "Resources admin", path: "/dashboard/resources" },
+  { key: "dashboard/blue-elite", label: "Blue Elite", path: "/dashboard/blue-elite" },
+  { key: "registrations/blue-elite", label: "Blue Elite registrations", path: "/registrations/blue-elite" },
+  { key: "dashboard/database-protection", label: "Backups", path: "/dashboard/database-protection" },
+];
+
+// The pages new accounts get by default (the standard non-super-admin set).
+export const DEFAULT_PAGE_KEYS = [
+  "dashboard",
+  "crusades",
+  "registrations",
+  "registrations/live",
+  "dashboard/zone-links",
+  "dashboard/coverage",
+];
+
+function getUserPermissions(username) {
+  if (isSuperAdminUsername(username)) return ASSIGNABLE_PAGES.map((p) => p.key);
+  const rows = db.prepare("SELECT page_key FROM dashboard_permissions WHERE username = ? COLLATE NOCASE ORDER BY page_key").all(username);
+  return rows.length ? rows.map((r) => r.page_key) : [...DEFAULT_PAGE_KEYS];
+}
+
+export function canAccessPage(user, pageKey) {
+  if (!user) return false;
+  if (user.is_super_admin) return true;
+  return getUserPermissions(user.username).includes(pageKey);
+}
+
 export const normalizeKingsChatUsername = (value) => String(value || "").trim().replace(/^@/, "").toLowerCase();
 export const isSuperAdminUsername = (value) => normalizeKingsChatUsername(value) === SUPER_ADMIN_USERNAME;
 
@@ -118,6 +162,8 @@ async function authorizedUser(req) {
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
     throw new ApiError(403, "FORBIDDEN", `@${user.username} does not have dashboard access.`);
   }
+  user.permissions = getUserPermissions(user.username);
+  user.assignable_pages = ASSIGNABLE_PAGES;
   return user;
 }
 
@@ -184,6 +230,10 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
   if (pmAutoApprove) {
     res.clearCookie("pm_auto_approve", { httpOnly: true, sameSite: "none", secure: true, path: "/" });
     db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, "pm_auto_approve");
+    // Seed default page permissions for pm users so they start with the
+    // standard non-super-admin set, not the full list.
+    const permStmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
+    for (const key of DEFAULT_PAGE_KEYS) permStmt.run(user.username, key);
   }
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
     return res.redirect(`${landing}?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
@@ -192,7 +242,7 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 365 * 24 * 60 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
   res.redirect(landing);
@@ -229,6 +279,9 @@ auth.post("/accounts", requireSuperAdmin, wrap(async (req, res) => {
   const kingsChatUser = await lookupKingsChatUser(accessToken(req), username, req.admin);
   if (!kingsChatUser) throw new ApiError(422, "NOT_FOUND", "No exact KingsChat username match was found.");
   db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(username, req.admin.username);
+  // Seed default page permissions for manually added accounts.
+  const permStmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
+  for (const key of DEFAULT_PAGE_KEYS) permStmt.run(username, key);
   res.status(201).json({ ...db.prepare("SELECT username, created_by, created_at FROM dashboard_accounts WHERE username = ?").get(username), name: kingsChatUser.name });
 }));
 
@@ -240,5 +293,40 @@ auth.delete("/accounts/:username", requireSuperAdmin, wrap((req, res) => {
   }
   const result = db.prepare("DELETE FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").run(username);
   if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Dashboard account not found.");
+  db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
   res.json({ ok: true });
+}));
+
+// Returns the list of pages that can be assigned to non-super-admin accounts.
+auth.get("/pages", requireAdmin, (_req, res) => {
+  res.json(ASSIGNABLE_PAGES);
+});
+
+// Returns the page keys assigned to a specific account. Super admins always
+// return all assignable pages.
+auth.get("/permissions/:username", requireSuperAdmin, wrap((req, res) => {
+  const username = normalizeKingsChatUsername(req.params.username);
+  res.json({ username, permissions: getUserPermissions(username) });
+}));
+
+// Replaces the full set of page permissions for an account. Send an empty
+// array to reset to default (all assignable pages). Super admin permissions
+// cannot be changed.
+auth.put("/permissions/:username", requireSuperAdmin, wrap((req, res) => {
+  const username = normalizeKingsChatUsername(req.params.username);
+  if (username === SUPER_ADMIN_USERNAME) throw new ApiError(409, "SUPER_ADMIN", "Super admin permissions cannot be changed.");
+  if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(username)) {
+    throw new ApiError(404, "NOT_FOUND", "Dashboard account not found.");
+  }
+  const requested = Array.isArray(req.body?.permissions) ? req.body.permissions : null;
+  if (!requested) throw new ApiError(422, "VALIDATION", "Send a permissions array.");
+  const validKeys = new Set(ASSIGNABLE_PAGES.map((p) => p.key));
+  const clean = [...new Set(requested.filter((k) => validKeys.has(k)))];
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
+    const stmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
+    for (const key of clean) stmt.run(username, key);
+  });
+  tx();
+  res.json({ username, permissions: getUserPermissions(username) });
 }));

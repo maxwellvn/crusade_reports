@@ -158,7 +158,7 @@ test("Blue Elite registration allows zonal staff without a group or church", () 
   };
 
   assert.equal(blueEliteRegistrationSchema.safeParse(registration).success, true);
-  assert.equal(blueEliteRegistrationSchema.safeParse({ ...registration, kingschat_username: "" }).success, true);
+  assert.equal(blueEliteRegistrationSchema.safeParse({ ...registration, kingschat_username: "" }).success, false);
   assert.equal(blueEliteRegistrationSchema.safeParse({ ...registration, zone: "" }).success, false);
 });
 

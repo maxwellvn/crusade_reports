@@ -1,0 +1,235 @@
+/* Admin sign-in gate — campaign brand language (indigo frame, navy stage,
+   gold glow) ported from landing.css. Scoped to .admin-gate so nothing leaks
+   into the admin dashboard rendered after the gate opens. */
+
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap");
+
+.admin-gate {
+    background: #3e43c0;
+    min-height: 100dvh;
+    padding: clamp(16px, 2.57vw, 37px) clamp(12px, 1.74vw, 25px);
+    display: flex;
+    font-family: "Roboto", sans-serif;
+    line-height: normal;
+}
+.admin-gate a { text-decoration: none; }
+.admin-gate img { display: block; max-width: 100%; }
+
+/* ===== Card (split: navy stage | paper panel) ===== */
+.gate-card {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(26rem, 30rem);
+    background: #fff;
+    border-radius: clamp(28px, 3.47vw, 50px);
+    overflow: hidden;
+}
+
+/* ===== Visual stage (left) ===== */
+.gate-visual {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 48px;
+    background: #14163b;
+    color: #fff;
+    padding: clamp(32px, 4vw, 64px);
+    overflow: hidden;
+}
+.gate-glow {
+    position: absolute;
+    bottom: -22%;
+    left: -12%;
+    width: 85%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: #efe89a;
+    filter: blur(120px);
+    opacity: 0.26;
+    pointer-events: none;
+}
+.gate-globe {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 74%;
+    object-fit: cover;
+    object-position: center top;
+    opacity: 0.45;
+    pointer-events: none;
+}
+/* scrim so the note stays readable over the globe */
+.gate-visual::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(20, 22, 59, 0.1) 30%, rgba(20, 22, 59, 0.88) 82%);
+    pointer-events: none;
+}
+.gate-visual-copy, .gate-visual-note { position: relative; z-index: 1; }
+
+.gate-eyebrow {
+    font-family: "Instrument Sans", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #efe89a;
+}
+.gate-visual-copy h1 {
+    margin: 18px 0 0;
+    max-width: 15ch;
+    font-family: "Instrument Sans", sans-serif;
+    font-weight: 500;
+    font-size: clamp(2rem, 3.2vw, 3.4rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+}
+.gate-visual-copy p {
+    margin: 22px 0 0;
+    max-width: 42ch;
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* ===== Sign-in panel (right) ===== */
+.gate-panel {
+    display: flex;
+    flex-direction: column;
+    padding: clamp(24px, 2.8vw, 44px) clamp(24px, 3.4vw, 56px) clamp(32px, 3.4vw, 56px);
+}
+.gate-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.gate-panel-head img { height: 40px; width: auto; }
+.gate-home-link {
+    font-size: 14px;
+    font-weight: 500;
+    color: #14163b;
+    text-underline-offset: 4px;
+}
+.gate-home-link:hover { text-decoration: underline; }
+
+.gate-form { margin: auto 0; max-width: 26rem; padding: 48px 0; }
+.gate-form h2 {
+    margin: 0;
+    font-family: "Instrument Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(1.75rem, 2.2vw, 2.25rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #14163b;
+}
+.gate-form > p {
+    margin: 14px 0 0;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #4a4e63;
+}
+.gate-error {
+    margin-top: 24px;
+    background: rgba(239, 232, 154, 0.3);
+    border: 1px solid rgba(20, 22, 59, 0.14);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #14163b;
+}
+.gate-error p { margin: 0; }
+.gate-error-title { font-weight: 700; margin-bottom: 2px !important; }
+
+.gate-cta {
+    margin-top: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 52px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #4247cc 0%, #2c30a6 100%);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 8px 20px rgba(48, 53, 176, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, filter 0.2s ease;
+}
+.gate-cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px rgba(48, 53, 176, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    filter: brightness(1.06);
+}
+.gate-cta:active { transform: translateY(0) scale(0.98); box-shadow: 0 6px 16px rgba(48, 53, 176, 0.4); }
+.gate-cta-secondary {
+  background: transparent;
+  border: 1px solid #14163b;
+  color: #14163b;
+  box-shadow: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.gate-cta-secondary:hover {
+  background: #14163b;
+  color: #fff;
+  box-shadow: none;
+  filter: none;
+}
+.gate-cta-mark { width: 22px; height: 22px; border-radius: 50%; }
+.gate-cta-arrow { width: 22px; height: 22px; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gate-cta:hover .gate-cta-arrow { transform: rotate(45deg); }
+
+.gate-helper { margin-top: 16px; font-size: 12.5px; line-height: 1.55; color: #6b6f82; }
+
+.admin-gate a:focus-visible {
+    outline: 2px solid #2c30a6;
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+.gate-cta:focus-visible { outline-offset: 4px; border-radius: 999px; }
+
+/* ===== Checking state (brand frame + globe pulse, no blank flash) ===== */
+.gate-checking { display: grid; place-items: center; }
+.gate-checking-globe { width: min(38vw, 220px); }
+
+/* ===== Entrance motion (staggered rise; static under reduced-motion) ===== */
+@media (prefers-reduced-motion: no-preference) {
+    .gate-card { animation: gate-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .gate-globe { animation: gate-globe-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .gate-visual-copy > * { animation: gate-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .gate-visual-copy > *:nth-child(2) { animation-delay: 0.08s; }
+    .gate-visual-copy > *:nth-child(3) { animation-delay: 0.16s; }
+    .gate-panel-head { animation: gate-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
+    .gate-form > * { animation: gate-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .gate-form > *:nth-child(1) { animation-delay: 0.14s; }
+    .gate-form > *:nth-child(2) { animation-delay: 0.2s; }
+    .gate-form > *:nth-child(3) { animation-delay: 0.26s; }
+    .gate-form > *:nth-child(4) { animation-delay: 0.32s; }
+    .gate-checking-globe { animation: gate-pulse 1.6s ease-in-out infinite; }
+}
+@keyframes gate-rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes gate-globe-in {
+    from { opacity: 0; transform: scale(1.05); }
+    to { opacity: 0.45; transform: scale(1); }
+}
+@keyframes gate-pulse {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.03); }
+}
+
+/* ===== Mobile collapse (< 1024px): single column, visual as top band ===== */
+@media (max-width: 1023px) {
+    .gate-card { grid-template-columns: minmax(0, 1fr); }
+    .gate-visual { min-height: 320px; gap: 32px; padding: 28px 24px; }
+    .gate-globe { height: 100%; opacity: 0.35; }
+    .gate-visual-copy h1 { max-width: 18ch; }
+    .gate-panel { padding: 24px 24px 40px; }
+    .gate-form { max-width: none; padding: 40px 0 8px; }
+}

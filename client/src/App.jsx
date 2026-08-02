@@ -42,7 +42,7 @@ const PAGE_META = [
   [/^\/$/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/"],
   [/^\/crusade-registration\/register/, "Register Your Crusades", "Register confirmed crusades for A Night of a Thousand Crusades and add them to the global record.", true, "/crusade-registration/register"],
   [/^\/crusade-registration/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/crusade-registration"],
-  [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register confirmed crusades for the Loveworld Blue Elite team.", true, "/blue-elite/register"],
+  [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register confirmed crusades for the Loveworld Blue Elite staff.", true, "/blue-elite/register"],
   [/^\/blue-elite/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", true, "/blue-elite"],
   [/^\/report/, "Report a Crusade", "Submit the verified outcome of a completed A Night of a Thousand Crusades event.", true, "/report"],
   [/^\/resources$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) Approved Resources Hub", "Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.", true, "/resources"],
@@ -102,7 +102,16 @@ const navLink = ({ isActive }) =>
 function Shell({ subtitle, links }) {
   const [logoOk, setLogoOk] = useState(true);
   const admin = useAdmin();
-  const visibleLinks = links.filter(([, , , superAdminOnly]) => !superAdminOnly || admin?.is_super_admin);
+  const visibleLinks = links.filter(([to, , , superAdminOnly]) => {
+    if (superAdminOnly && !admin?.is_super_admin) return false;
+    // For non-super-admins, check page-level permissions. The Home link ("/")
+    // is always visible. Every other link needs a matching permission key.
+    if (!admin?.is_super_admin && to !== "/") {
+      const pageKey = to.replace(/^\//, "");
+      if (admin?.permissions && !admin.permissions.includes(pageKey)) return false;
+    }
+    return true;
+  });
   return (
     <div className="min-h-screen">
       <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden">
@@ -154,15 +163,6 @@ function SettingsRoute() {
   return <Settings />;
 }
 
-// Blue Elite admin surface is super-admin only — the data is isolated from the
-// public registration views and only @maxwellvn can see it. Non-super-admins
-// who hit the URL directly are redirected to the standard dashboard.
-function SuperAdminRoute({ children }) {
-  const admin = useAdmin();
-  if (!admin?.is_super_admin) return <Navigate to="/dashboard" replace />;
-  return children;
-}
-
 // /admin/pm — self-service access link. Sends the user to KingsChat login with
 // pm=1, which sets a short-lived cookie that auto-adds their username to the
 // dashboard allow list on callback. If already signed in and approved, go straight
@@ -181,6 +181,17 @@ function PmRedirect() {
       </div>
     </div>
   );
+}
+
+// Page-level access guard. Checks the signed-in admin's permissions array
+// (returned by /auth/me) and redirects to the first accessible page if the
+// user doesn't have access. Super admins bypass the check.
+function PageGuard({ pageKey, children }) {
+  const admin = useAdmin();
+  if (admin?.is_super_admin) return children;
+  const allowed = admin?.permissions?.includes(pageKey);
+  if (!allowed) return <Navigate to="/admin" replace />;
+  return children;
 }
 
 export default function App() {
@@ -219,25 +230,24 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations", false, true], ["/dashboard/mission-nations", "Mission nations", false, true], ["/dashboard/media-training", "Media training", false, true], ["/dashboard/mission-trips", "Mission trips", false, true], ["/dashboard/resources", "Resources", false, true], ["/dashboard/blue-elite", "Blue Elite", false, true], ["/registrations/blue-elite", "Blue Elite reg.", false, true], ["/dashboard/database-protection", "Backups", false, true], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/dashboard/widget/:id" element={<WidgetDetail />} />
-          <Route path="/crusades" element={<CrusadesTable />} />
-          <Route path="/crusades/:id/edit" element={<SuperAdminRoute><EditCrusadePage /></SuperAdminRoute>} />
-          <Route path="/registrations" element={<RegistrationsTable />} />
-          <Route path="/registrations/live" element={<RegistrationsLive />} />
-          <Route path="/registrations/manual-organizations" element={<SuperAdminRoute><ManualOrganizations /></SuperAdminRoute>} />
-          <Route path="/dashboard/zone-links" element={<ZoneLinks />} />
-          <Route path="/dashboard/coverage" element={<CrusadeCoverage />} />
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
+          <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
+          <Route path="/crusades" element={<PageGuard pageKey="crusades"><CrusadesTable /></PageGuard>} />
+          <Route path="/crusades/:id/edit" element={<PageGuard pageKey="crusades/edit"><EditCrusadePage /></PageGuard>} />
+          <Route path="/registrations" element={<PageGuard pageKey="registrations"><RegistrationsTable /></PageGuard>} />
+          <Route path="/registrations/live" element={<PageGuard pageKey="registrations/live"><RegistrationsLive /></PageGuard>} />
+          <Route path="/registrations/manual-organizations" element={<PageGuard pageKey="registrations/manual-organizations"><ManualOrganizations /></PageGuard>} />
+          <Route path="/dashboard/zone-links" element={<PageGuard pageKey="dashboard/zone-links"><ZoneLinks /></PageGuard>} />
+          <Route path="/dashboard/coverage" element={<PageGuard pageKey="dashboard/coverage"><CrusadeCoverage /></PageGuard>} />
           <Route path="/dashboard/settings" element={<SettingsRoute />} />
-          <Route path="/dashboard/database-protection" element={<SuperAdminRoute><DatabaseProtection /></SuperAdminRoute>} />
-          <Route path="/dashboard/resources" element={<SuperAdminRoute><ResourcesAdmin /></SuperAdminRoute>} />
-          <Route path="/dashboard/mission-nations" element={<SuperAdminRoute><MissionNationAdmin /></SuperAdminRoute>} />
-          <Route path="/dashboard/media-training" element={<SuperAdminRoute><MediaTrainingAdmin /></SuperAdminRoute>} />
-          <Route path="/dashboard/mission-trips" element={<SuperAdminRoute><MissionTripAdmin /></SuperAdminRoute>} />
-          {/* Blue Elite admin surface — super-admin only */}
-          <Route path="/dashboard/blue-elite" element={<SuperAdminRoute><BlueEliteDashboard /></SuperAdminRoute>} />
-          <Route path="/registrations/blue-elite" element={<SuperAdminRoute><BlueEliteRegistrationsTable /></SuperAdminRoute>} />
+          <Route path="/dashboard/database-protection" element={<PageGuard pageKey="dashboard/database-protection"><DatabaseProtection /></PageGuard>} />
+          <Route path="/dashboard/resources" element={<PageGuard pageKey="dashboard/resources"><ResourcesAdmin /></PageGuard>} />
+          <Route path="/dashboard/mission-nations" element={<PageGuard pageKey="dashboard/mission-nations"><MissionNationAdmin /></PageGuard>} />
+          <Route path="/dashboard/media-training" element={<PageGuard pageKey="dashboard/media-training"><MediaTrainingAdmin /></PageGuard>} />
+          <Route path="/dashboard/mission-trips" element={<PageGuard pageKey="dashboard/mission-trips"><MissionTripAdmin /></PageGuard>} />
+          <Route path="/dashboard/blue-elite" element={<PageGuard pageKey="dashboard/blue-elite"><BlueEliteDashboard /></PageGuard>} />
+          <Route path="/registrations/blue-elite" element={<PageGuard pageKey="registrations/blue-elite"><BlueEliteRegistrationsTable /></PageGuard>} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
