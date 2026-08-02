@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
 import { getJSON, putJSON } from "@/lib/api";
 import { GeoMap, BarH, nfull, orgHierarchy, typeLabel, Empty, StatTile } from "@/lib/dashboardWidgets";
-import { groupByContinent } from "@/lib/continents";
+import { continentOf, groupByContinent } from "@/lib/continents";
 
 const POLL_MS = 10000;
 const LS_KEY = "crusades-live-registrations-v1";
@@ -108,8 +108,23 @@ function downloadBlob(filename, blob) {
 
 function countryReportData(data) {
   const rows = [...(data.by_country || [])].sort((a, b) => (b.planned || 0) - (a.planned || 0));
+  const grouped = new Map();
+  for (const row of rows) {
+    const continent = continentOf(row.key) || "Other";
+    const group = grouped.get(continent) || { name: continent, rows: [], planned: 0, registrations: 0 };
+    group.rows.push(row);
+    group.planned += row.planned || 0;
+    group.registrations += row.registrations || 0;
+    grouped.set(continent, group);
+  }
+  const continents = [...grouped.values()].sort((a, b) => {
+    if (a.name === "Other") return 1;
+    if (b.name === "Other") return -1;
+    return b.planned - a.planned || a.name.localeCompare(b.name);
+  });
   return {
     rows,
+    continents,
     totalCrusades: rows.reduce((sum, row) => sum + (row.planned || 0), 0),
     totalRegistrations: rows.reduce((sum, row) => sum + (row.registrations || 0), 0),
     generatedAt: docDate.format(new Date()),
@@ -117,21 +132,31 @@ function countryReportData(data) {
 }
 
 function buildCountryRegistrationsReportHtml(data) {
-  const { rows, totalCrusades, totalRegistrations, generatedAt } = countryReportData(data);
-  const tableRows = rows.map((row, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>${escapeHtml(row.key || "Unspecified")}</td>
-      <td class="num">${nfull.format(row.planned || 0)}</td>
-      <td class="num">${nfull.format(row.registrations || 0)}</td>
+  const { rows, continents, totalCrusades, totalRegistrations, generatedAt } = countryReportData(data);
+  let countryIndex = 0;
+  const tableRows = continents.map((continent) => `
+    <tr class="continent-row">
+      <td></td>
+      <td>${escapeHtml(continent.name)} <span>${continent.rows.length} ${continent.rows.length === 1 ? "country" : "countries"}</span></td>
+      <td class="num">${nfull.format(continent.planned)}</td>
+      <td class="num">${nfull.format(continent.registrations)}</td>
     </tr>
+    ${continent.rows.map((row) => {
+      countryIndex += 1;
+      return `<tr class="country-row">
+        <td>${countryIndex}</td>
+        <td>${escapeHtml(row.key || "Unspecified")}</td>
+        <td class="num">${nfull.format(row.planned || 0)}</td>
+        <td class="num">${nfull.format(row.registrations || 0)}</td>
+      </tr>`;
+    }).join("")}
   `).join("");
   return `
     <!doctype html>
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>Registrations by Country</title>
+        <title>Registrations by Continent and Country</title>
         <style>
           @page { margin: 0.65in; }
           body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; line-height: 1.45; }
@@ -146,15 +171,19 @@ function buildCountryRegistrationsReportHtml(data) {
           table.report { width: 100%; border-collapse: collapse; font-size: 12px; }
           .report th { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 9px 10px; text-align: left; }
           .report td { border: 1px solid #dbe4ef; padding: 8px 10px; }
-          .report tr:nth-child(even) td { background: #f8fafc; }
+          .report .continent-row { break-inside: avoid; page-break-inside: avoid; }
+          .report .continent-row td { background: #dbeafe; border-color: #bfdbfe; color: #1e3a8a; font-weight: 700; padding-top: 10px; padding-bottom: 10px; }
+          .report .continent-row span { margin-left: 6px; color: #475569; font-size: 10px; font-weight: 400; text-transform: uppercase; }
+          .report .country-row:nth-child(odd) td { background: #f8fafc; }
+          .report .country-row td:nth-child(2) { padding-left: 26px; }
           .num { text-align: right; font-variant-numeric: tabular-nums; }
           .footer { margin-top: 20px; color: #64748b; font-size: 11px; }
         </style>
       </head>
       <body>
         <div class="eyebrow">Crusade registrations report</div>
-        <h1>Registrations by Country</h1>
-        <p class="meta">Generated ${escapeHtml(generatedAt)} from the live registrations dashboard.</p>
+        <h1>Registrations by Continent and Country</h1>
+        <p class="meta">Generated ${escapeHtml(generatedAt)} from the live registrations dashboard. ${nfull.format(continents.length)} continents represented.</p>
         <table class="summary">
           <tr>
             <td><span class="label">Countries represented:</span><span class="value">${nfull.format(rows.length)}</span></td>
@@ -163,7 +192,7 @@ function buildCountryRegistrationsReportHtml(data) {
           </tr>
         </table>
         <table class="report">
-          <thead><tr><th style="width: 48px;">#</th><th>Country</th><th class="num">Registered crusades</th><th class="num">Registration entries</th></tr></thead>
+          <thead><tr><th style="width: 48px;">#</th><th>Continent / Country</th><th class="num">Registered crusades</th><th class="num">Registration entries</th></tr></thead>
           <tbody>${tableRows || `<tr><td colspan="4">No country registrations available.</td></tr>`}</tbody>
         </table>
         <p class="footer">Prepared for internal campaign tracking and operational reporting.</p>
@@ -183,19 +212,31 @@ const wCell = (content, { width = 2400, fill, color, bold, size = 22, align = "l
 const wRow = (cells) => `<w:tr>${cells.join("")}</w:tr>`;
 
 function buildCountryRegistrationsDocxXml(data) {
-  const { rows, totalCrusades, totalRegistrations, generatedAt } = countryReportData(data);
-  const reportRows = rows.length ? rows.map((row, index) => wRow([
-    wCell(String(index + 1), { width: 700 }),
-    wCell(row.key || "Unspecified", { width: 4600 }),
-    wCell(nfull.format(row.planned || 0), { width: 2200, align: "right" }),
-    wCell(nfull.format(row.registrations || 0), { width: 2200, align: "right" }),
-  ])).join("") : wRow([wCell("No country registrations available.", { width: 9700 })]);
+  const { rows, continents, totalCrusades, totalRegistrations, generatedAt } = countryReportData(data);
+  let countryIndex = 0;
+  const reportRows = continents.length ? continents.map((continent) => [
+    wRow([
+      wCell("", { width: 700, fill: "DBEAFE" }),
+      wCell(`${continent.name} (${continent.rows.length} ${continent.rows.length === 1 ? "country" : "countries"})`, { width: 4600, fill: "DBEAFE", color: "1E3A8A", bold: true }),
+      wCell(nfull.format(continent.planned), { width: 2200, fill: "DBEAFE", color: "1E3A8A", bold: true, align: "right" }),
+      wCell(nfull.format(continent.registrations), { width: 2200, fill: "DBEAFE", color: "1E3A8A", bold: true, align: "right" }),
+    ]),
+    ...continent.rows.map((row) => {
+      countryIndex += 1;
+      return wRow([
+        wCell(String(countryIndex), { width: 700 }),
+        wCell(`   ${row.key || "Unspecified"}`, { width: 4600 }),
+        wCell(nfull.format(row.planned || 0), { width: 2200, align: "right" }),
+        wCell(nfull.format(row.registrations || 0), { width: 2200, align: "right" }),
+      ]);
+    }),
+  ]).flat().join("") : wRow([wCell("No country registrations available.", { width: 9700 })]);
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
       <w:body>
         ${wParagraph(wText("CRUSADE REGISTRATIONS REPORT", '<w:rPr><w:b/><w:color w:val="1D4ED8"/><w:sz w:val="22"/></w:rPr>'))}
-        ${wParagraph(wText("Registrations by Country", '<w:rPr><w:b/><w:color w:val="0F172A"/><w:sz w:val="48"/></w:rPr>'))}
-        ${wParagraph(wText(`Generated ${generatedAt} from the live registrations dashboard.`, '<w:rPr><w:color w:val="475569"/><w:sz w:val="22"/></w:rPr>'))}
+        ${wParagraph(wText("Registrations by Continent and Country", '<w:rPr><w:b/><w:color w:val="0F172A"/><w:sz w:val="48"/></w:rPr>'))}
+        ${wParagraph(wText(`Generated ${generatedAt} from the live registrations dashboard. ${nfull.format(continents.length)} continents represented.`, '<w:rPr><w:color w:val="475569"/><w:sz w:val="22"/></w:rPr>'))}
         <w:tbl>
           <w:tblPr><w:tblW w:w="9700" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="475569"/><w:left w:val="single" w:sz="4" w:color="475569"/><w:bottom w:val="single" w:sz="18" w:color="1D4ED8"/><w:right w:val="single" w:sz="4" w:color="475569"/><w:insideH w:val="single" w:sz="4" w:color="475569"/><w:insideV w:val="single" w:sz="4" w:color="475569"/></w:tblBorders></w:tblPr>
           ${wRow([
@@ -209,7 +250,7 @@ function buildCountryRegistrationsDocxXml(data) {
           <w:tblPr><w:tblW w:w="9700" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="BFDBFE"/><w:left w:val="single" w:sz="4" w:color="BFDBFE"/><w:bottom w:val="single" w:sz="4" w:color="BFDBFE"/><w:right w:val="single" w:sz="4" w:color="BFDBFE"/><w:insideH w:val="single" w:sz="4" w:color="DBE4EF"/><w:insideV w:val="single" w:sz="4" w:color="DBE4EF"/></w:tblBorders></w:tblPr>
           ${wRow([
             wCell("#", { width: 700, fill: "EFF6FF", color: "1E3A8A", bold: true }),
-            wCell("Country", { width: 4600, fill: "EFF6FF", color: "1E3A8A", bold: true }),
+            wCell("Continent / Country", { width: 4600, fill: "EFF6FF", color: "1E3A8A", bold: true }),
             wCell("Registered crusades", { width: 2200, fill: "EFF6FF", color: "1E3A8A", bold: true, align: "right" }),
             wCell("Registration entries", { width: 2200, fill: "EFF6FF", color: "1E3A8A", bold: true, align: "right" }),
           ])}
@@ -247,7 +288,7 @@ function downloadCountryRegistrationsReport(data, format = "word") {
     setTimeout(() => printWindow.print(), 300);
     return;
   }
-  downloadCountryRegistrationsDocx(data, `registrations-by-country-${date}.docx`);
+  downloadCountryRegistrationsDocx(data, `registrations-by-continent-and-country-${date}.docx`);
 }
 
 function timeAgo(sqliteUtc) {
@@ -397,10 +438,10 @@ export function RegistrationsLive() {
           return <Card key={id} className={`rounded-none border-x-0 border-slate-200 shadow-none ${expanded || widget.size === 2 ? "sm:col-span-2" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={() => dropOn(id)}>
             <CardHeader className="flex-row items-center justify-between space-y-0 bg-slate-50/70 px-4 py-3">
               <div className="flex min-w-0 items-center gap-1.5"><span draggable title="Drag to rearrange" className="cursor-grab text-muted-foreground print:hidden" onDragStart={() => { dragId.current = id; }}><GripVertical /></span><div><CardTitle className="text-sm">{widget.title}</CardTitle>{id === "coverage" && <CardDescription>Click a location to open matching registrations.</CardDescription>}</div></div>
-              <div className="flex text-muted-foreground print:hidden">
+              <div className="flex items-center gap-1 text-muted-foreground print:hidden">
                 {id === "countries" && (
-                  <details className="relative">
-                    <summary title="Download report" aria-label="Download registrations by country report" className="flex cursor-pointer list-none items-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 [&::-webkit-details-marker]:hidden">
+                  <details className="relative inline-flex shrink-0">
+                    <summary title="Download report" aria-label="Download registrations by country report" className="flex h-8 cursor-pointer list-none items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 [&::-webkit-details-marker]:hidden">
                       <FileDown className="size-3.5" />
                       <ChevronDown className="ml-1 size-3" />
                     </summary>
@@ -414,8 +455,8 @@ export function RegistrationsLive() {
                     </div>
                   </details>
                 )}
-                {widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="p-1.5 hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}
-                <button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="p-1.5 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button>
+                {widget.size !== 2 && <button type="button" title={expanded ? "Collapse widget" : "Expand widget"} aria-label={`${expanded ? "Collapse" : "Expand"} ${widget.title}`} className="flex size-8 items-center justify-center rounded-md hover:bg-accent hover:text-foreground" onClick={() => patch(id, { expanded: !expanded })}>{expanded ? <Minimize2 /> : <Maximize2 />}</button>}
+                <button type="button" title="Remove widget" aria-label={`Remove ${widget.title}`} className="flex size-8 items-center justify-center rounded-md hover:bg-destructive/10 hover:text-destructive" onClick={() => setLayout((current) => current.filter((item) => item.id !== id))}><X /></button>
               </div>
             </CardHeader>
             <CardContent className="px-4 py-5">{widget.render(data, expanded, go)}</CardContent>
