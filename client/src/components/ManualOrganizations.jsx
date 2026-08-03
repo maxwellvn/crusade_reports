@@ -71,8 +71,10 @@ function ReconcileDialog({ row, onClose, onSaved }) {
   const ref = React.useRef(null);
   const [zones, setZones] = React.useState([]);
   const [groups, setGroups] = React.useState([]);
-  const [zone, setZone] = React.useState("");
-  const [group, setGroup] = React.useState("");
+  // Pre-fill with the registration's current zone/group so the admin sees what
+  // was typed and can adjust from there rather than starting blank.
+  const [zone, setZone] = React.useState(row.zone || "");
+  const [group, setGroup] = React.useState(row.group_name || "");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => { ref.current?.showModal(); }, []);

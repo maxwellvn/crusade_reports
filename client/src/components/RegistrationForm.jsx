@@ -105,6 +105,8 @@ export function RegistrationForm() {
   const [done, setDone] = React.useState(null);
   const [batchType, setBatchType] = React.useState("");
   const [selectedCrusades, setSelectedCrusades] = React.useState([]);
+  const [manualZones, setManualZones] = React.useState(false);
+  const [manualGroups, setManualGroups] = React.useState(true);
   const orgType = watch("organization_type");
   const zone = watch("zone");
   const items = watch("items");
@@ -155,6 +157,13 @@ export function RegistrationForm() {
       .then((scope) => { setPortalScope(scope); applyScope(scope); })
       .catch((error) => setPortalError(error.message));
   }, [portalToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    getJSON("/campaign-settings").then((s) => {
+      setManualZones(s.manual_zones_enabled ?? false);
+      setManualGroups(s.manual_groups_enabled ?? true);
+    }).catch(() => { /* defaults are fine */ });
+  }, []);
 
   React.useEffect(() => {
     if (!draftReady.current || done) return;
@@ -340,15 +349,15 @@ export function RegistrationForm() {
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Zone" required error={errors.zone?.message}>
                           {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="zone" render={({ field }) => (
-                            <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
-                              fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("zone_manual", false); setValue("group_name", ""); setValue("group_manual", false); clearGroupCache(); }} />
+                            <Combobox value={field.value} invalid={!!errors.zone} caps allowCreate={manualZones} createDescription="Submit this zone for admin review" placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
+                              fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("zone_manual", !!o.created); setValue("group_name", ""); setValue("group_manual", false); clearGroupCache(); }} />
                           )} />}
                         </Field>
                         {needsGroup && (
                           <Field label="Group" required error={errors.group_name?.message}>
                             <Controller control={control} name="group_name" render={({ field }) => (
                               <Combobox value={field.value} invalid={!!errors.group_name} caps disabled={!zone}
-                                allowCreate createDescription="Submit this group for admin review" placeholder={zone ? "Select group or type one" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
+                                allowCreate={manualGroups} createDescription="Submit this group for admin review" placeholder={zone ? "Select group or type one" : "Pick a zone first"} searchPlaceholder="Search groups…" emptyText="No groups"
                                 fetcher={fetchGroups} onSelect={(o) => { field.onChange(o.label); setValue("group_manual", !!o.created); }} />
                             )} />
                           </Field>

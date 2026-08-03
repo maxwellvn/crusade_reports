@@ -13,7 +13,6 @@ const POLL_MS = 10000;
 const LS_KEY = "crusades-live-registrations-v1";
 const KPI_TONES = {
   planned: "bg-blue-50/80 [&_.stat-value]:!text-blue-700",
-  organizations: "bg-violet-50/80 [&_.stat-value]:!text-violet-700",
   zones_count: "bg-violet-50/80 [&_.stat-value]:!text-violet-700",
   groups_count: "bg-fuchsia-50/80 [&_.stat-value]:!text-fuchsia-700",
   churches_count: "bg-purple-50/80 [&_.stat-value]:!text-purple-700",
@@ -33,7 +32,7 @@ const READINESS_LABELS = {
 };
 const titleCase = (value) => value ? value[0].toUpperCase() + value.slice(1) : "—";
 const bars = (rows, label = (value) => value) => (rows || []).map((row) => ({
-  key: row.key, label: label(row.key), value: row.planned || 0, sub: `${row.planned || 0} crusade${(row.planned || 0) === 1 ? "" : "s"}`,
+  key: row.key, label: label(row.key), value: row.planned || 0,
 }));
 const docDate = new Intl.DateTimeFormat("en", { dateStyle: "long", timeStyle: "short" });
 
@@ -301,7 +300,6 @@ function timeAgo(sqliteUtc) {
 
 const LIVE_WIDGETS = {
   planned: { title: "Crusades planned", kpi: true, filter: {}, render: (d) => <StatTile label="Crusades planned" value={nfull.format(d.totals.planned)} /> },
-  organizations: { title: "Crusades", kpi: true, filter: {}, render: (d) => <StatTile label="Crusades" value={nfull.format(d.totals.planned)} /> },
   zones_count: { title: "Zone crusades", kpi: true, filter: { organization_type: "zone" }, render: (d) => <StatTile label="Zone crusades" value={nfull.format(d.totals.zone_crusades)} /> },
   groups_count: { title: "Group crusades", kpi: true, filter: { organization_type: "group" }, render: (d) => <StatTile label="Group crusades" value={nfull.format(d.totals.group_crusades)} /> },
   churches_count: { title: "Church crusades", kpi: true, filter: { organization_type: "church" }, render: (d) => <StatTile label="Church crusades" value={nfull.format(d.totals.church_crusades)} /> },

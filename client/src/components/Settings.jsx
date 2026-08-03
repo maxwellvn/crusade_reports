@@ -63,6 +63,9 @@ export function Settings() {
   const [landingPage, setLandingPage] = React.useState("");
   const [landingOptions, setLandingOptions] = React.useState([]);
   const [savingLanding, setSavingLanding] = React.useState(false);
+  const [manualZones, setManualZones] = React.useState(null);
+  const [manualGroups, setManualGroups] = React.useState(null);
+  const [savingManualOrg, setSavingManualOrg] = React.useState(false);
   const [editingPermissions, setEditingPermissions] = React.useState(null);
   const [permissionDraft, setPermissionDraft] = React.useState([]);
   const [savingPermissions, setSavingPermissions] = React.useState(false);
@@ -82,6 +85,8 @@ export function Settings() {
         setReportingOpen(settings.reporting_open);
         setLandingPage(settings.default_landing_page || "");
         setLandingOptions(Array.isArray(settings.landing_page_options) ? settings.landing_page_options : []);
+        setManualZones(settings.manual_zones_enabled ?? false);
+        setManualGroups(settings.manual_groups_enabled ?? true);
       })
       .catch((error) => toast.error(error.message));
   }, [admin]);
@@ -194,6 +199,22 @@ export function Settings() {
     }
   }
 
+  async function toggleManualOrg(key) {
+    const current = key === "zones" ? manualZones : manualGroups;
+    const next = !current;
+    setSavingManualOrg(true);
+    try {
+      const settings = await putJSON("/campaign-settings", { [`manual_${key}_enabled`]: next });
+      setManualZones(settings.manual_zones_enabled);
+      setManualGroups(settings.manual_groups_enabled);
+      toast.success(`Manual ${key} ${settings[`manual_${key}_enabled`] ? "enabled" : "disabled"}.`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingManualOrg(false);
+    }
+  }
+
   if (!admin?.is_super_admin) {
     return <div className="mx-auto max-w-3xl border-y border-slate-200 py-8 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard settings.</div>;
   }
@@ -238,6 +259,13 @@ export function Settings() {
             Current destination: <span className="font-semibold text-slate-900">{LANDING_PAGE_LABELS[landingPage] || landingPage || "Loading…"}</span>
             <ArrowUpRight className="size-3.5" aria-hidden="true" />
           </p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Manual organisation entry" description="Let registrants type a zone or group name that isn't in the directory. Typed entries are flagged for admin review on the Manual organisations page.">
+        <div className="space-y-6">
+          <ManualOrgToggle label="Manual zones" description="Allow registrants to type a zone name not in the directory. Off by default — zones should come from the churches API." checked={manualZones} disabled={manualZones === null || savingManualOrg} onChange={() => toggleManualOrg("zones")} />
+          <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. On by default — new groups appear frequently." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
         </div>
       </SettingsSection>
 
@@ -297,6 +325,23 @@ export function Settings() {
             }) : <p className="py-8 text-sm text-slate-500">No dashboard accounts have been added.</p>}
           </div>
       </SettingsSection>
+    </div>
+  );
+}
+
+function ManualOrgToggle({ label, description, checked, disabled, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-6 border-b border-slate-200 pb-6 last:border-0 last:pb-0">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-950">{label}</p>
+        <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">{description}</p>
+      </div>
+      <button type="button" role="switch" aria-checked={Boolean(checked)} disabled={disabled}
+        onClick={onChange}
+        className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4 disabled:opacity-50 ${checked ? "border-slate-950 bg-slate-950" : "border-slate-300 bg-slate-200"}`}>
+        <span className={`absolute top-1 block size-4 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+        <span className="sr-only">{checked ? `Disable ${label.toLowerCase()}` : `Enable ${label.toLowerCase()}`}</span>
+      </button>
     </div>
   );
 }
