@@ -501,6 +501,27 @@ test("planned versus held counts only reports linked to registered crusades", ()
   }
 });
 
+test("explicit network ownership takes priority over Youths Aglow fallback attribution", () => {
+  const network = `TNI regression ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    const registrationId = db.prepare(
+      `INSERT INTO registrations (organization_type, zone, network_name, country, plan_date)
+       VALUES ('network', 'BLW Test Zone', ?, 'Nigeria', '2026-08-01')`
+    ).run(network).lastInsertRowid;
+    db.prepare(
+      `INSERT INTO registration_items
+       (registration_id, organization_type, zone, network_name, country, plan_date, event_type, planned_count, event_name, event_date, venue, expected_attendance)
+       VALUES (?, 'network', 'BLW Test Zone', ?, 'Nigeria', '2026-08-01', 'youths-aglow', 1, 'TNI ownership test', '2026-08-01', 'Test venue', 100)`
+    ).run(registrationId, network);
+
+    const row = registrationProgress("network_name").find((item) => item.key === network);
+    assert.deepEqual({ planned: row?.planned, items: row?.items }, { planned: 1, items: 1 });
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
 test("reporting access can be closed and is enforced server-side", () => {
   db.exec("BEGIN");
   try {
