@@ -65,6 +65,7 @@ export function Settings() {
   const [savingLanding, setSavingLanding] = React.useState(false);
   const [manualZones, setManualZones] = React.useState(null);
   const [manualGroups, setManualGroups] = React.useState(null);
+  const [manualCities, setManualCities] = React.useState(null);
   const [savingManualOrg, setSavingManualOrg] = React.useState(false);
   const [editingPermissions, setEditingPermissions] = React.useState(null);
   const [permissionDraft, setPermissionDraft] = React.useState([]);
@@ -87,6 +88,7 @@ export function Settings() {
         setLandingOptions(Array.isArray(settings.landing_page_options) ? settings.landing_page_options : []);
         setManualZones(settings.manual_zones_enabled ?? false);
         setManualGroups(settings.manual_groups_enabled ?? true);
+        setManualCities(settings.manual_cities_enabled ?? true);
       })
       .catch((error) => toast.error(error.message));
   }, [admin]);
@@ -200,13 +202,14 @@ export function Settings() {
   }
 
   async function toggleManualOrg(key) {
-    const current = key === "zones" ? manualZones : manualGroups;
+    const current = key === "zones" ? manualZones : key === "groups" ? manualGroups : manualCities;
     const next = !current;
     setSavingManualOrg(true);
     try {
       const settings = await putJSON("/campaign-settings", { [`manual_${key}_enabled`]: next });
       setManualZones(settings.manual_zones_enabled);
       setManualGroups(settings.manual_groups_enabled);
+      setManualCities(settings.manual_cities_enabled);
       toast.success(`Manual ${key} ${settings[`manual_${key}_enabled`] ? "enabled" : "disabled"}.`);
     } catch (error) {
       toast.error(error.message);
@@ -262,10 +265,11 @@ export function Settings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Manual organisation entry" description="Let registrants type a zone or group name that isn't in the directory. Typed entries are flagged for admin review on the Manual organisations page.">
+      <SettingsSection title="Manual organisation entry" description="Let registrants type a zone, group, or city name that isn't in the directory. Typed entries are flagged for admin review on the Manual organisations page.">
         <div className="space-y-6">
           <ManualOrgToggle label="Manual zones" description="Allow registrants to type a zone name not in the directory. Off by default — zones should come from the churches API." checked={manualZones} disabled={manualZones === null || savingManualOrg} onChange={() => toggleManualOrg("zones")} />
           <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. On by default — new groups appear frequently." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
+          <ManualOrgToggle label="Manual cities" description="Allow registrants to type a city name not found in the search results. On by default — the create option only appears when no match is found." checked={manualCities} disabled={manualCities === null || savingManualOrg} onChange={() => toggleManualOrg("cities")} />
         </div>
       </SettingsSection>
 

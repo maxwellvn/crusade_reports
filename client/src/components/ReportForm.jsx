@@ -55,6 +55,7 @@ export function ReportForm() {
   const [done, setDone] = React.useState(null);
   const [batchType, setBatchType] = React.useState("");
   const [reportingOpen, setReportingOpen] = React.useState(null);
+  const [manualCities, setManualCities] = React.useState(true);
   const [portalScope, setPortalScope] = React.useState(null);
   const [portalError, setPortalError] = React.useState("");
   const orgType = watch("organization_type");
@@ -95,7 +96,7 @@ export function ReportForm() {
 
   React.useEffect(() => {
     getJSON("/campaign-settings")
-      .then((settings) => setReportingOpen(settings.reporting_open))
+      .then((settings) => { setReportingOpen(settings.reporting_open); setManualCities(settings.manual_cities_enabled ?? true); })
       .catch(() => setReportingOpen(false));
   }, []);
 
@@ -606,7 +607,7 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, o
           <Controller control={control} name={p("city")} render={({ field }) => (
             <Combobox value={field.value} invalid={!!rowErr.city} disabled={!rowCountry}
               placeholder={rowCountry ? "Search city" : "Pick a country first"} searchPlaceholder="Type a city…" minChars={1} emptyText="No cities found"
-              allowCreate fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { const city = citySelectionFields(o); field.onChange(city.city); setValue(p("city_place_id"), city.city_place_id); }} />
+              allowCreate={manualCities} fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { const city = citySelectionFields(o); field.onChange(city.city); setValue(p("city_place_id"), city.city_place_id); }} />
           )} />
         </Field>
         {!isOnline && (

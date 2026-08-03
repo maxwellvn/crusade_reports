@@ -95,6 +95,7 @@ export function BlueEliteRegistrationForm() {
   const [done, setDone] = React.useState(null);
   const [batchType, setBatchType] = React.useState("");
   const [selectedCrusades, setSelectedCrusades] = React.useState([]);
+  const [manualCities, setManualCities] = React.useState(true);
   const zone = watch("zone");
   const items = watch("items");
 
@@ -134,6 +135,12 @@ export function BlueEliteRegistrationForm() {
     }
     draftReady.current = true;
   }, [reset]);
+
+  React.useEffect(() => {
+    getJSON("/campaign-settings").then((s) => {
+      setManualCities(s.manual_cities_enabled ?? true);
+    }).catch(() => { /* default is fine */ });
+  }, []);
 
   React.useEffect(() => {
     if (!draftReady.current || done) return;
@@ -421,7 +428,7 @@ export function BlueEliteRegistrationForm() {
                               <Controller control={control} name={`items.${i}.city`} render={({ field }) => (
                                 <Combobox value={field.value} disabled={!rowCountry}
                                   placeholder={rowCountry ? "Search city" : "Pick a country first"} searchPlaceholder="Type a city…" minChars={1} emptyText="No cities found"
-                                  allowCreate fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { const city = citySelectionFields(o); field.onChange(city.city); setValue(`items.${i}.city_place_id`, city.city_place_id); }} />
+                                  allowCreate={manualCities} fetcher={cityFetcherFor(rowCountry)} onSelect={(o) => { const city = citySelectionFields(o); field.onChange(city.city); setValue(`items.${i}.city_place_id`, city.city_place_id); }} />
                               )} />
                             </Field>
                             <Field label="Venue / address" required error={rowErr.venue?.message} className="sm:col-span-2"

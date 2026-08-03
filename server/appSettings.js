@@ -43,3 +43,10 @@ export const isManualGroupsEnabled = () => {
 export const setManualGroupsEnabled = (enabled) => db.prepare(
   "INSERT INTO app_settings (key, value) VALUES ('manual_groups_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
 ).run(enabled ? "1" : "0");
+export const isManualCitiesEnabled = () => {
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'manual_cities_enabled'").get();
+  return row ? row.value === "1" : true; // default on
+};
+export const setManualCitiesEnabled = (enabled) => db.prepare(
+  "INSERT INTO app_settings (key, value) VALUES ('manual_cities_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+).run(enabled ? "1" : "0");
