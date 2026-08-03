@@ -340,8 +340,8 @@ export function RegistrationForm() {
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Zone" required error={errors.zone?.message}>
                           {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="zone" render={({ field }) => (
-                            <Combobox value={field.value} invalid={!!errors.zone} caps allowCreate createDescription="Submit this zone for admin review" placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
-                              fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("zone_manual", !!o.created); setValue("group_name", ""); setValue("group_manual", false); clearGroupCache(); }} />
+                            <Combobox value={field.value} invalid={!!errors.zone} caps placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
+                              fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("zone_manual", false); setValue("group_name", ""); setValue("group_manual", false); clearGroupCache(); }} />
                           )} />}
                         </Field>
                         {needsGroup && (

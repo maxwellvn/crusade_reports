@@ -246,3 +246,11 @@ export const missionTripVolunteerSchema = z.object({
   partnership_acknowledged: z.literal(true, { errorMap: () => ({ message: "Acknowledge the partnership information" }) }),
   additional_information: z.string().trim().max(2000).optional().default(""),
 });
+
+// Admin reconciliation of manually-typed org names: map a registration's zone
+// and/or group to the real directory entry. Zone is required; group is optional
+// (some org types don't have groups). Both clear the manual flags on save.
+export const manualOrgUpdateSchema = z.object({
+  zone: z.string().trim().min(1, "Select a zone from the directory"),
+  group_name: z.string().trim().max(200).optional().default(""),
+});

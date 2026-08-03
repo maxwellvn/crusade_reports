@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db.js";
 import { backupDatabase } from "../databaseProtection.js";
-import { registrationCrusadeEditSchema, registrationSchema } from "../validation.js";
+import { registrationCrusadeEditSchema, registrationSchema, manualOrgUpdateSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
 import { requireAdmin, requireSuperAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
@@ -136,6 +136,26 @@ registrations.get("/manual-organizations", requireSuperAdmin, wrap((_req, res) =
     ORDER BY i.created_at DESC, i.id DESC
   `).all();
   res.json({ rows });
+}));
+
+// Admin reconciliation: map a manually-typed zone/group to the real directory
+// entry. Updates both the registrations row and all its registration_items so
+// the flags stay consistent. Super-admin only — this rewrites org ownership.
+registrations.patch("/manual-organizations/:registrationId", requireSuperAdmin, wrap((req, res) => {
+  const parsed = manualOrgUpdateSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid organisation update.");
+  const { zone, group_name } = parsed.data;
+  const regId = req.params.registrationId;
+  const reg = db.prepare("SELECT id FROM registrations WHERE id = ?").get(regId);
+  if (!reg) throw new ApiError(404, "NOT_FOUND", "Registration not found");
+  db.transaction(() => {
+    db.prepare("UPDATE registrations SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE id = ?")
+      .run(zone, group_name || null, regId);
+    db.prepare("UPDATE registration_items SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE registration_id = ?")
+      .run(zone, group_name || null, regId);
+  })();
+  backupDatabaseRolling().catch((error) => logger.error({ err: error }, "org reconciliation backup failed"));
+  res.json({ ok: true });
 }));
 
 // A crusade's network planning details (collaborators, contribution, budget,
