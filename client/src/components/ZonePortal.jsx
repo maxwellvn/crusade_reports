@@ -442,15 +442,16 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
 
   return (
     <dialog ref={ref} onClose={onClose} onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
-      className="max-h-[calc(100vh-2rem)] w-[min(60rem,calc(100%-2rem))] overflow-y-auto border bg-background p-0 text-foreground backdrop:bg-black/60">
-      <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background p-5">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Submit crusade report</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">{crusade.event_name || typeLabel(crusade.event_type)}</h2>
+      className="w-[calc(100%-1rem)] overflow-hidden border bg-background p-0 text-foreground backdrop:bg-black/60 sm:w-[min(60rem,calc(100%-2rem))]">
+      <form onSubmit={submit} className="flex max-h-[calc(100dvh-1rem)] flex-col sm:max-h-[calc(100dvh-2rem)]">
+        <div className="z-10 flex shrink-0 items-start justify-between gap-4 border-b bg-background p-4 sm:p-5">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Submit crusade report</p>
+            <h2 className="mt-1 truncate text-xl font-semibold tracking-tight">{crusade.event_name || typeLabel(crusade.event_type)}</h2>
+          </div>
+          <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => ref.current?.close()} aria-label="Close report form"><X /></Button>
         </div>
-        <Button type="button" variant="ghost" size="icon" onClick={() => ref.current?.close()} aria-label="Close report form"><X /></Button>
-      </div>
-      <form onSubmit={submit} className="space-y-5 p-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Crusade type" required>
             <Select value={report.event_type} onChange={(event) => setField("event_type", event.target.value)}>
@@ -532,7 +533,8 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
             <Textarea rows={4} maxLength={4000} value={mediaLinks} onChange={(event) => setMediaLinks(event.target.value)} placeholder="One Google Drive, YouTube or other link per line…" />
           </Field>
         </div>
-        <div className="flex justify-end gap-2 border-t pt-4">
+        </div>
+        <div className="grid shrink-0 grid-cols-2 gap-2 border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex sm:justify-end sm:px-5">
           <Button type="button" variant="outline" onClick={() => ref.current?.close()}>Cancel</Button>
           <Button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit report"}</Button>
         </div>
