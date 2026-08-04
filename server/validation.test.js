@@ -16,6 +16,7 @@ import { applyPortalScope } from "./portalScope.js";
 import { COUNTRIES } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
+import { updateCampaignSettings } from "./routes/campaignSettings.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
 import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
@@ -530,6 +531,21 @@ test("reporting access can be closed and is enforced server-side", () => {
     assert.throws(ensureReportingOpen, (error) => error.code === "REPORTING_CLOSED" && error.status === 403);
     setReportingOpen(true);
     assert.doesNotThrow(ensureReportingOpen);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("unrelated campaign settings updates preserve reporting access", () => {
+  db.exec("BEGIN");
+  try {
+    setReportingOpen(true);
+    const updated = updateCampaignSettings({ manual_cities_enabled: false });
+    assert.equal(updated.reporting_open, true);
+    assert.equal(isReportingOpen(), true);
+
+    updateCampaignSettings({ reporting_open: false });
+    assert.equal(isReportingOpen(), false);
   } finally {
     db.exec("ROLLBACK");
   }

@@ -404,6 +404,7 @@ function useCityFetcher(countryName) {
 export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmitted }) {
   const ref = React.useRef(null);
   const [saving, setSaving] = React.useState(false);
+  const [visualViewport, setVisualViewport] = React.useState(null);
   const [report, setReport] = React.useState({
     format: ONLINE_TYPES.includes(crusade.event_type) ? "online" : "physical",
     event_type: crusade.event_type || "", other_event_type: "", event_name: crusade.event_name || "",
@@ -416,7 +417,37 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
   const fetchCities = useCityFetcher(crusade.country);
 
   React.useEffect(() => { ref.current?.showModal(); }, []);
+  React.useEffect(() => {
+    const viewport = window.visualViewport;
+
+    const updateViewport = () => {
+      setVisualViewport({
+        height: Math.round(viewport?.height || window.innerHeight),
+        offsetTop: Math.round(viewport?.offsetTop || 0),
+      });
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.addEventListener("orientationchange", updateViewport);
+    viewport?.addEventListener("resize", updateViewport);
+    viewport?.addEventListener("scroll", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.removeEventListener("orientationchange", updateViewport);
+      viewport?.removeEventListener("resize", updateViewport);
+      viewport?.removeEventListener("scroll", updateViewport);
+    };
+  }, []);
   const setField = (field, value) => setReport((current) => ({ ...current, [field]: value }));
+
+  const dialogViewportStyle = visualViewport ? {
+    top: `${visualViewport.offsetTop + 8}px`,
+    bottom: "auto",
+    marginTop: 0,
+    marginBottom: 0,
+    maxHeight: `${Math.max(160, visualViewport.height - 16)}px`,
+  } : undefined;
 
   async function submit(event) {
     event.preventDefault();
@@ -442,8 +473,10 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
 
   return (
     <dialog ref={ref} onClose={onClose} onClick={(event) => event.target === event.currentTarget && event.currentTarget.close()}
+      style={dialogViewportStyle}
       className="w-[calc(100%-1rem)] overflow-hidden border bg-background p-0 text-foreground backdrop:bg-black/60 sm:w-[min(60rem,calc(100%-2rem))]">
-      <form onSubmit={submit} className="flex max-h-[calc(100dvh-1rem)] flex-col sm:max-h-[calc(100dvh-2rem)]">
+      <form onSubmit={submit} style={visualViewport ? { maxHeight: dialogViewportStyle.maxHeight } : undefined}
+        className="flex max-h-[calc(100vh-1rem)] flex-col supports-[height:100dvh]:max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100vh-2rem)] sm:supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]">
         <div className="z-10 flex shrink-0 items-start justify-between gap-4 border-b bg-background p-4 sm:p-5">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Submit crusade report</p>

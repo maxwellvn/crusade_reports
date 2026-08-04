@@ -7,27 +7,23 @@ import { wrap } from "../logger.js";
 
 export const campaignSettings = Router();
 
-campaignSettings.get("/", (_req, res) => res.json({
+export const getCampaignSettings = () => ({
   reporting_open: isReportingOpen(),
   default_landing_page: getDefaultLandingPage(),
   landing_page_options: landingPageOptions(),
   manual_zones_enabled: isManualZonesEnabled(),
   manual_groups_enabled: isManualGroupsEnabled(),
   manual_cities_enabled: isManualCitiesEnabled(),
-}));
-campaignSettings.put("/", requireSuperAdmin, wrap((req, res) => {
-  const reportingOpen = req.body?.reporting_open === true;
-  setReportingOpen(reportingOpen);
-  if (req.body?.default_landing_page != null) setDefaultLandingPage(req.body.default_landing_page);
-  if (req.body?.manual_zones_enabled != null) setManualZonesEnabled(req.body.manual_zones_enabled === true);
-  if (req.body?.manual_groups_enabled != null) setManualGroupsEnabled(req.body.manual_groups_enabled === true);
-  if (req.body?.manual_cities_enabled != null) setManualCitiesEnabled(req.body.manual_cities_enabled === true);
-  res.json({
-    reporting_open: reportingOpen,
-    default_landing_page: getDefaultLandingPage(),
-    landing_page_options: landingPageOptions(),
-    manual_zones_enabled: isManualZonesEnabled(),
-    manual_groups_enabled: isManualGroupsEnabled(),
-    manual_cities_enabled: isManualCitiesEnabled(),
-  });
-}));
+});
+
+export function updateCampaignSettings(body = {}) {
+  if (typeof body.reporting_open === "boolean") setReportingOpen(body.reporting_open);
+  if (body.default_landing_page != null) setDefaultLandingPage(body.default_landing_page);
+  if (body.manual_zones_enabled != null) setManualZonesEnabled(body.manual_zones_enabled === true);
+  if (body.manual_groups_enabled != null) setManualGroupsEnabled(body.manual_groups_enabled === true);
+  if (body.manual_cities_enabled != null) setManualCitiesEnabled(body.manual_cities_enabled === true);
+  return getCampaignSettings();
+}
+
+campaignSettings.get("/", (_req, res) => res.json(getCampaignSettings()));
+campaignSettings.put("/", requireSuperAdmin, wrap((req, res) => res.json(updateCampaignSettings(req.body))));
