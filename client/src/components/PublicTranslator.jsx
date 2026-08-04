@@ -99,7 +99,7 @@ export function PublicTranslator() {
   }, [pathname, isPublic, translatePage]);
 
   if (!isPublic) return null;
-  return <div data-page-translator translate="no" className="fixed bottom-4 left-4 z-[80] flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 shadow-[0_10px_30px_rgba(15,23,42,.16)] print:hidden">
+  return <div data-page-translator translate="no" className="fixed left-4 z-[80] flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 shadow-[0_10px_30px_rgba(15,23,42,.16)] print:hidden">
     {status === "loading" ? <Loader2 className="size-4 animate-spin text-blue-700" /> : <Languages className="size-4 text-blue-700" />}
     <label htmlFor="page-language" className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Language</label>
     <select id="page-language" value={language} onChange={(event) => { const next = event.target.value; localStorage.setItem("page-language", next); failedKey.current = ""; setLanguage(next); }} className="max-w-36 cursor-pointer bg-white text-sm font-semibold text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:max-w-44">

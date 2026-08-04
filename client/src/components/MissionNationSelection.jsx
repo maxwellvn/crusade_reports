@@ -138,6 +138,7 @@ export function MissionNationSelection() {
           {errors.mission_country_code && <p className="mt-3 text-sm text-red-700">{errors.mission_country_code}</p>}
         </section>
 
+        {selected && <span className="public-mobile-bottom-action hidden" aria-hidden="true" />}
         <section className={`${selected ? "flex" : "hidden"} sticky bottom-0 z-20 -mx-4 border-t border-slate-300 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:border-y lg:px-0 lg:py-6 lg:backdrop-blur-none`}><div className="hidden lg:block">{selected ? <><p className="text-sm font-semibold text-slate-950">{selected.name} preferred</p><p className="mt-1 text-sm text-slate-500">{form.zone_name || "Your ministry"} proposes at least 1,000 crusades in this nation.</p></> : <><p className="text-sm font-semibold text-slate-950">No nation selected</p><p className="mt-1 text-sm text-slate-500">Complete your details and choose one nation.</p></>}</div><Button type="submit" disabled={submitting || !selected || !catalogue?.selection_open} className="w-full rounded-full lg:w-auto"><ShieldCheck />{submitting ? "Submitting…" : selected ? `Submit ${selected.name} preference` : "Submit nation preference"}</Button></section>
         <p className="mt-5 flex gap-2 text-xs leading-5 text-slate-500"><Info className="mt-0.5 size-3.5 shrink-0" />If a zone does not make a selection during the open window, a mission nation may be designated to that zone.</p>
       </form>

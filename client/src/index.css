@@ -47,6 +47,23 @@
   table tbody tr { @apply transition-colors hover:bg-blue-50/55; }
 }
 
+/* Keep the public language control clear of persistent form actions. The
+   safe-area inset also prevents either control from sitting on an iOS home
+   indicator. */
+[data-page-translator] {
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+body:has(.public-fixed-bottom-action) [data-page-translator] {
+  bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 1023px) {
+  body:has(.public-mobile-bottom-action) [data-page-translator] {
+    bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* PDF export = the browser's print-to-PDF. `print:` variants hide the nav and
    widget chrome; this keeps colours and chart fills faithful in the export. */
 @media print {

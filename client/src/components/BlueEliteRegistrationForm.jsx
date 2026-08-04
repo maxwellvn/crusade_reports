@@ -494,7 +494,7 @@ export function BlueEliteRegistrationForm() {
               )}
             </div>
 
-            <div className="blue-elite-action-bar fixed inset-x-0 bottom-0 border-t bg-card/95 backdrop-blur">
+            <div className="blue-elite-action-bar public-fixed-bottom-action fixed inset-x-0 bottom-0 border-t bg-card/95 backdrop-blur">
               <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
                 <div className="flex items-center gap-4">
                   {step > 0 && <Button type="button" variant="ghost" onClick={back}><ArrowLeft /> Back</Button>}
