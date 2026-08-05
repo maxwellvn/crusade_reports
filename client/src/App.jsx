@@ -28,6 +28,7 @@ import { MissionTripRegistration } from "@/components/MissionTripRegistration";
 import { MissionTripAdmin } from "@/components/MissionTripAdmin";
 import { PublicTranslator } from "@/components/PublicTranslator";
 import { CrusadeCoverage } from "@/components/CrusadeCoverage";
+import { CountryCoverage } from "@/components/CountryCoverage";
 import { DatabaseProtection } from "@/components/DatabaseProtection";
 import { ManualOrganizations } from "@/components/ManualOrganizations";
 import { Toaster } from "@/components/ui/sonner";
@@ -163,6 +164,13 @@ function SettingsRoute() {
   return <Settings />;
 }
 
+// Country coverage analysis is super-admin only.
+function CountryCoverageRoute() {
+  const admin = useAdmin();
+  if (!admin?.is_super_admin) return <Navigate to="/dashboard" replace />;
+  return <CountryCoverage />;
+}
+
 // /admin/pm — self-service access link. Sends the user to KingsChat login with
 // pm=1, which sets a short-lived cookie that auto-adds their username to the
 // dashboard allow list on callback. If already signed in and approved, go straight
@@ -230,7 +238,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage", false, true], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
           <Route path="/crusades" element={<PageGuard pageKey="crusades"><CrusadesTable /></PageGuard>} />
@@ -241,6 +249,7 @@ export default function App() {
           <Route path="/dashboard/zone-links" element={<PageGuard pageKey="dashboard/zone-links"><ZoneLinks /></PageGuard>} />
           <Route path="/dashboard/coverage" element={<PageGuard pageKey="dashboard/coverage"><CrusadeCoverage /></PageGuard>} />
           <Route path="/dashboard/settings" element={<SettingsRoute />} />
+          <Route path="/dashboard/country-coverage" element={<CountryCoverageRoute />} />
           <Route path="/dashboard/database-protection" element={<PageGuard pageKey="dashboard/database-protection"><DatabaseProtection /></PageGuard>} />
           <Route path="/dashboard/resources" element={<PageGuard pageKey="dashboard/resources"><ResourcesAdmin /></PageGuard>} />
           <Route path="/dashboard/mission-nations" element={<PageGuard pageKey="dashboard/mission-nations"><MissionNationAdmin /></PageGuard>} />

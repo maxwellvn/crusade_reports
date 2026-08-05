@@ -25,6 +25,7 @@ import { mediaTraining } from "./routes/mediaTraining.js";
 import { missionTrips } from "./routes/missionTrips.js";
 import { translation } from "./routes/translation.js";
 import { coverage } from "./routes/coverage.js";
+import { countryCoverage } from "./routes/countryCoverage.js";
 import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
@@ -60,6 +61,7 @@ app.use("/api/media-training", mediaTraining);
 app.use("/api/mission-trips", missionTrips);
 app.use("/api/translation", translation);
 app.use("/api/coverage", coverage);
+app.use("/api/country-coverage", countryCoverage);
 app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 
