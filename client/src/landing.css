@@ -1161,6 +1161,10 @@
 }
 .avatar-hero {
     position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+    align-items: center;
+    gap: clamp(20px, 3vw, 36px);
     overflow: hidden;
     border-radius: clamp(22px, 3vw, 40px);
     background: #16194f;
@@ -1180,9 +1184,27 @@
     pointer-events: none;
 }
 .avatar-hero-copy { position: relative; z-index: 1; max-width: 40rem; }
+.avatar-hero-media {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    border-radius: clamp(16px, 2vw, 24px);
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(15, 17, 60, 0.28);
+}
+.avatar-hero-media img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+}
 .avatar-hero .reg-eyebrow { color: #efe89a; }
 .avatar-hero .reg-eyebrow::before { background: rgba(255, 255, 255, 0.75); }
 .avatar-hero .reg-title { color: #fff; }
+@media (max-width: 900px) {
+    .avatar-hero { grid-template-columns: 1fr; }
+    .avatar-hero-media { max-width: 24rem; margin-inline: auto; width: 100%; }
+}
 .avatar-tool {
     padding: clamp(22px, 3.5vw, 40px);
 }

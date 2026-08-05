@@ -72,6 +72,9 @@ export function AvatarFrame() {
               </p>
             </div>
           </div>
+          <div className="avatar-hero-media">
+            <img src="/PM.jpeg" alt="Night of a Thousand Crusades campaign avatar" />
+          </div>
           <div className="avatar-hero-glow" aria-hidden="true" />
         </section>
 
