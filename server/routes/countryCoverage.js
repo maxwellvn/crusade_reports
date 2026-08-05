@@ -3,8 +3,6 @@ import { db } from "../db.js";
 import { requireSuperAdmin } from "../auth.js";
 import { wrap } from "../logger.js";
 import { COUNTRIES } from "./countries.js";
-import { continentForCode } from "../countryContinents.js";
-import ExcelJS from "exceljs";
 
 export const countryCoverage = Router();
 
@@ -107,59 +105,47 @@ countryCoverage.get("/", requireSuperAdmin, wrap((_req, res) => {
   });
 }));
 
-// Multi-sheet Excel export
-countryCoverage.get("/export", requireSuperAdmin, wrap(async (_req, res) => {
+// CSV export with all data combined
+countryCoverage.get("/export", requireSuperAdmin, wrap((_req, res) => {
   const gpdZones = getGpdZonesCountryBreakdown();
   const networks = getNetworkCountryBreakdown();
 
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Crusade Reports";
-  workbook.created = new Date();
+  const escapeCSV = (value) => {
+    const str = String(value ?? "");
+    return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+  };
 
-  // Sheet 1: Summary
-  const summarySheet = workbook.addWorksheet("Summary");
-  summarySheet.columns = [
-    { header: "Group", key: "group", width: 30 },
-    { header: "Countries", key: "countries", width: 15 },
-    { header: "Crusades", key: "crusades", width: 15 },
-    { header: "Registrations", key: "registrations", width: 15 },
-  ];
-  summarySheet.getRow(1).font = { bold: true };
-  summarySheet.addRow({ group: "GPD Zones", countries: gpdZones.countryCount, crusades: gpdZones.totalCrusades, registrations: gpdZones.totalRegistrations });
+  const lines = [];
+
+  // Section 1: Summary
+  lines.push("=== SUMMARY ===");
+  lines.push("Group,Countries,Crusades,Registrations");
+  lines.push(`${escapeCSV("GPD Zones")},${gpdZones.countryCount},${gpdZones.totalCrusades},${gpdZones.totalRegistrations}`);
   for (const n of networks) {
-    summarySheet.addRow({ group: n.network, countries: n.countries.length, crusades: n.totalCrusades, registrations: n.totalRegistrations });
+    lines.push(`${escapeCSV(n.network)},${n.countries.length},${n.totalCrusades},${n.totalRegistrations}`);
   }
 
-  // Sheet 2: GPD Zones countries
-  const gpdSheet = workbook.addWorksheet("GPD Zones");
-  gpdSheet.columns = [
-    { header: "Country", key: "country", width: 30 },
-    { header: "Crusades", key: "crusades", width: 15 },
-    { header: "Registrations", key: "registrations", width: 15 },
-  ];
-  gpdSheet.getRow(1).font = { bold: true };
+  // Section 2: GPD Zones breakdown
+  lines.push("");
+  lines.push("=== GPD ZONES - COUNTRY BREAKDOWN ===");
+  lines.push("Country,Crusades,Registrations");
   for (const c of gpdZones.countries) {
-    gpdSheet.addRow({ country: c.country, crusades: c.crusades, registrations: c.registrations });
+    lines.push(`${escapeCSV(c.country)},${c.crusades},${c.registrations}`);
   }
 
-  // Sheet 3+: Each network
+  // Section 3+: Each network breakdown
   for (const n of networks) {
-    const sheetName = n.network.slice(0, 31).replace(/[*?:/\\[\]]/g, "");
-    const sheet = workbook.addWorksheet(sheetName);
-    sheet.columns = [
-      { header: "Country", key: "country", width: 30 },
-      { header: "Crusades", key: "crusades", width: 15 },
-      { header: "Registrations", key: "registrations", width: 15 },
-    ];
-    sheet.getRow(1).font = { bold: true };
+    lines.push("");
+    lines.push(`=== ${n.network.toUpperCase()} - COUNTRY BREAKDOWN ===`);
+    lines.push("Country,Crusades,Registrations");
     for (const c of n.countries) {
-      sheet.addRow({ country: c.country, crusades: c.crusades, registrations: c.registrations });
+      lines.push(`${escapeCSV(c.country)},${c.crusades},${c.registrations}`);
     }
   }
 
+  const csv = lines.join("\n");
   const date = new Date().toISOString().slice(0, 10);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="country-coverage-breakdown-${date}.xlsx"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="country-coverage-breakdown-${date}.csv"`);
+  res.send(csv);
 }));

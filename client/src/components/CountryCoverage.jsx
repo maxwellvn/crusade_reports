@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronDown, ChevronRight, Copy, FileSpreadsheet, Globe } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Download, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ export function CountryCoverage() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={exportBreakdown}>
-          <FileSpreadsheet className="size-4" /> Export breakdown (Excel)
+          <Download className="size-4" /> Export breakdown (CSV)
         </Button>
       </header>
 

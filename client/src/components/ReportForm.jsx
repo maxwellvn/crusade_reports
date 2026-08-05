@@ -625,10 +625,16 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, o
         <Field label="Venue" required error={rowErr.venue?.message} hint="Where it held. For online/TV/radio, put 'Online' or 'N/A'">
           <Input {...register(p("venue"))} aria-invalid={!!rowErr.venue} placeholder="e.g. City Stadium" />
         </Field>
-        <Field label="Crusade expense" hint="Optional — enter the amount spent on this crusade">
-          <Input type="number" min="0" step="0.01" {...register(p("crusade_expense"))} aria-invalid={!!rowErr.crusade_expense} placeholder="0.00" />
-        </Field>
       </div>
+
+      {c.event_type === "mega" && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+          <p className="mb-2 text-sm font-medium text-amber-900">Mega Crusade Expense Report</p>
+          <Field label="Crusade expense" error={rowErr.crusade_expense?.message} hint="Enter the total amount spent on this mega crusade">
+            <Input type="number" min="0" step="0.01" {...register(p("crusade_expense"))} aria-invalid={!!rowErr.crusade_expense} placeholder="0.00" />
+          </Field>
+        </div>
+      )}
 
       <div className="mt-3">
         <p className="mb-1.5 text-xs font-medium text-muted-foreground">Outcomes <span className="font-normal">(optional — leave blank if none)</span></p>
