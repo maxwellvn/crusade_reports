@@ -26,6 +26,7 @@ import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistratio
 import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
 import { MissionTripRegistration } from "@/components/MissionTripRegistration";
 import { MissionTripAdmin } from "@/components/MissionTripAdmin";
+import { AvatarFrame } from "@/components/AvatarFrame";
 import { PublicTranslator } from "@/components/PublicTranslator";
 import { CrusadeCoverage } from "@/components/CrusadeCoverage";
 import { CountryCoverage } from "@/components/CountryCoverage";
@@ -50,6 +51,7 @@ const PAGE_META = [
   [/^\/select-nation$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Ministers can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", true, "/select-nation", "/national-missions-leadership.png"],
   [/^\/media-training$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", true, "/media-training", "/media-training-mobilisation.png"],
   [/^\/mission-trips$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", true, "/mission-trips", "/global-missions-trip-volunteer.png"],
+  [/^\/avatar$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", true, "/avatar", "/notc-avatar-frame.jpg"],
   [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
@@ -228,6 +230,7 @@ export default function App() {
         <Route path="/select-nation" element={<MissionNationSelection />} />
         <Route path="/media-training" element={<MediaTrainingRegistration />} />
         <Route path="/mission-trips" element={<MissionTripRegistration />} />
+        <Route path="/avatar" element={<AvatarFrame />} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />

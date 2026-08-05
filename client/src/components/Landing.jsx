@@ -127,6 +127,14 @@ const INITIATIVES = [
     image: "/global-missions-trip-volunteer.png",
     tone: "rose",
   },
+  {
+    to: "/avatar",
+    title: "Campaign Avatar",
+    copy: "Add your photo to the Night of a Thousand Crusades avatar frame and announce that you have registered a Rhapsody End-Time Crusade.",
+    action: "Create your avatar",
+    image: "/notc-avatar-frame.jpg",
+    tone: "violet",
+  },
 ];
 
 const EVENT_CALENDAR = [
@@ -489,6 +497,7 @@ export function Landing() {
               <Link to="/select-nation" onClick={closeNav}>Select a Nation</Link>
               <Link to="/media-training" onClick={closeNav}>Media Training</Link>
               <Link to="/mission-trips" onClick={closeNav}>Mission Trips</Link>
+              <Link to="/avatar" onClick={closeNav}>Campaign Avatar</Link>
             </div>
             <div className="nav-pill">
               <Link to="/resources" className="nav-link resources-link" onClick={closeNav}>
@@ -619,6 +628,7 @@ export function Landing() {
                 <Link to="/select-nation">Select a nation</Link>
                 <Link to="/media-training">Media training</Link>
                 <Link to="/mission-trips">Mission trips</Link>
+                <Link to="/avatar">Campaign avatar</Link>
                 <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer">Donate</a>
               </div>
               <div className="footer-col">

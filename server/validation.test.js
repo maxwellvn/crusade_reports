@@ -124,6 +124,10 @@ test("public forms render route-specific metadata before JavaScript loads", () =
   assert.match(html, /GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION/);
   assert.match(html, /property="og:image" content="https:\/\/notc\.rhapsodycrusades\.org\/global-missions-trip-volunteer\.png"/);
   assert.match(html, /property="og:url" content="https:\/\/notc\.rhapsodycrusades\.org\/mission-trips"/);
+  const avatar = renderPageMetadata(template, "/avatar", "https://notc.rhapsodycrusades.org");
+  assert.match(avatar, /CAMPAIGN AVATAR/);
+  assert.match(avatar, /property="og:image" content="https:\/\/notc\.rhapsodycrusades\.org\/notc-avatar-frame\.jpg"/);
+  assert.match(avatar, /property="og:url" content="https:\/\/notc\.rhapsodycrusades\.org\/avatar"/);
 });
 
 test("resource links discover safe media thumbnails", () => {
