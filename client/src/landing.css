@@ -1152,6 +1152,72 @@
 }
 .blue-elite-landing-lead { background: #16194f; }
 
+/* ===== Campaign Avatar page — same navy frame + white cards as registration ===== */
+.avatar-page { padding-bottom: clamp(28px, 4vw, 48px); }
+.avatar-shell {
+    margin-top: clamp(76px, 9vw, 104px);
+    display: grid;
+    gap: clamp(14px, 2vw, 22px);
+}
+.avatar-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: clamp(22px, 3vw, 40px);
+    background: #16194f;
+    padding: clamp(28px, 4vw, 52px);
+    box-shadow: 0 30px 80px rgba(15, 17, 60, 0.22);
+}
+.avatar-hero-glow {
+    position: absolute;
+    right: -12%;
+    bottom: -40%;
+    width: min(520px, 70%);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: #efe89a;
+    filter: blur(110px);
+    opacity: 0.45;
+    pointer-events: none;
+}
+.avatar-hero-copy { position: relative; z-index: 1; max-width: 40rem; }
+.avatar-hero .reg-eyebrow { color: #efe89a; }
+.avatar-hero .reg-eyebrow::before { background: rgba(255, 255, 255, 0.75); }
+.avatar-hero .reg-title { color: #fff; }
+.avatar-tool {
+    padding: clamp(22px, 3.5vw, 40px);
+}
+.avatar-preview {
+    border-radius: clamp(18px, 2.4vw, 28px);
+    background: #eef0f8;
+    box-shadow: 0 18px 40px rgba(15, 17, 60, 0.12);
+}
+.avatar-upload {
+    border: 2px dashed rgba(48, 53, 176, 0.28);
+    border-radius: 22px;
+    background: #f4f5fb;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.avatar-upload:hover {
+    background: #eef0ff;
+    border-color: rgba(48, 53, 176, 0.55);
+    transform: translateY(-2px);
+}
+.avatar-cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    border-radius: clamp(22px, 3vw, 40px);
+    background: #16194f;
+    padding: clamp(22px, 3vw, 36px) clamp(22px, 3.5vw, 40px);
+    box-shadow: 0 24px 60px rgba(15, 17, 60, 0.2);
+}
+@media (max-width: 720px) {
+    .avatar-cta { flex-direction: column; align-items: stretch; }
+    .avatar-cta a { justify-content: center; }
+}
+
 @media (max-width: 639px) {
     .blue-elite-register { padding-inline: 12px; }
     .blue-elite-register .reg-main { padding-top: 92px; }

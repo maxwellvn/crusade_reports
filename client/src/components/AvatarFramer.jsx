@@ -3,6 +3,7 @@ import { Download, Hand, ImagePlus, Minus, Plus, RotateCcw, ZoomIn } from "lucid
 import { Button } from "@/components/ui/button";
 
 const FRAME_SRC = "/notc-avatar-frame.jpg";
+const SAMPLE_SRC = "/PM.jpeg";
 const DOWNLOAD_NAME = "notc-avatar.png";
 
 /* The frame is an opaque JPEG whose photo slot is a solid black circle, so the
@@ -30,6 +31,7 @@ export function AvatarFramer() {
 
   const [frameReady, setFrameReady] = React.useState(false);
   const [fileName, setFileName] = React.useState("");
+  const [usingSample, setUsingSample] = React.useState(true);
   const [hasPhoto, setHasPhoto] = React.useState(false);
   const [scale, setScale] = React.useState(100);
   const [scaleRange, setScaleRange] = React.useState({ min: 10, max: 200, fit: 100 });
@@ -70,35 +72,52 @@ export function AvatarFramer() {
     [hole],
   );
 
+  /* The photo starts at the smallest size that still fills the circular slot,
+     so no part of the frame's black slot shows through. */
+  const fitPhoto = React.useCallback(
+    (photo) => {
+      const { r } = hole();
+      const diameter = r * 2;
+      const fit = Math.ceil(Math.max(diameter / photo.width, diameter / photo.height) * 100);
+      positionRef.current = { x: 0, y: 0 };
+      setScaleRange({ min: Math.max(5, Math.floor(fit * 0.5)), max: Math.ceil(fit * 4), fit });
+      setScale(fit);
+      return fit;
+    },
+    [hole],
+  );
+
   React.useEffect(() => {
     let cancelled = false;
-    loadImage(FRAME_SRC)
-      .then((frame) => {
+    (async () => {
+      try {
+        const frame = await loadImage(FRAME_SRC);
         if (cancelled) return;
         frameRef.current = frame;
         const canvas = canvasRef.current;
         canvas.width = frame.naturalWidth;
         canvas.height = frame.naturalHeight;
         setFrameReady(true);
-        draw(100);
-      })
-      .catch(() => !cancelled && setError("The campaign frame could not be loaded. Refresh the page to try again."));
+
+        try {
+          const sample = await loadImage(SAMPLE_SRC);
+          if (cancelled) return;
+          photoRef.current = sample;
+          setHasPhoto(true);
+          setUsingSample(true);
+          setFileName("Sample preview");
+          draw(fitPhoto(sample));
+        } catch {
+          draw(100);
+        }
+      } catch {
+        if (!cancelled) setError("The campaign frame could not be loaded. Refresh the page to try again.");
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [draw]);
-
-  /* The photo starts at the smallest size that still fills the circular slot,
-     so no part of the frame's black slot shows through. */
-  function fitPhoto(photo) {
-    const { r } = hole();
-    const diameter = r * 2;
-    const fit = Math.ceil(Math.max(diameter / photo.width, diameter / photo.height) * 100);
-    positionRef.current = { x: 0, y: 0 };
-    setScaleRange({ min: Math.max(5, Math.floor(fit * 0.5)), max: Math.ceil(fit * 4), fit });
-    setScale(fit);
-    return fit;
-  }
+  }, [draw, fitPhoto]);
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
@@ -110,6 +129,7 @@ export function AvatarFramer() {
       const photo = await loadImage(url);
       photoRef.current = photo;
       setHasPhoto(true);
+      setUsingSample(false);
       draw(fitPhoto(photo));
       setShowHint(true);
       window.setTimeout(() => setShowHint(false), 3000);
@@ -177,9 +197,9 @@ export function AvatarFramer() {
   const zoomPercent = scaleRange.fit ? Math.round((scale / scaleRange.fit) * 100) : 100;
 
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+    <div className="avatar-framer grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
       <div>
-        <div className="relative mx-auto w-full max-w-xl overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
+        <div className="avatar-preview relative mx-auto w-full max-w-xl overflow-hidden">
           <canvas
             ref={canvasRef}
             width={1280}
@@ -192,51 +212,56 @@ export function AvatarFramer() {
             className={`block h-auto w-full touch-none select-none ${hasPhoto ? "cursor-grab active:cursor-grabbing" : ""}`}
           />
           {!frameReady && !error && (
-            <div className="absolute inset-0 grid place-items-center text-sm text-slate-500">Loading the frame…</div>
+            <div className="absolute inset-0 grid place-items-center text-sm text-[#6b6f8c]">Loading the frame…</div>
           )}
           {showHint && (
-            <div className="pointer-events-none absolute inset-0 grid animate-step-in place-items-center bg-slate-950/25 motion-reduce:animate-none">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg">
-                <Hand className="size-4 text-blue-700" /> Drag to reposition
+            <div className="pointer-events-none absolute inset-0 grid animate-step-in place-items-center bg-[#16194f]/35 motion-reduce:animate-none">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14163b] shadow-lg">
+                <Hand className="size-4 text-[#3035b0]" /> Drag to reposition
               </span>
             </div>
           )}
         </div>
+        {usingSample && hasPhoto && (
+          <p className="mx-auto mt-4 max-w-xl text-center text-sm text-[#6b6f8c]">
+            Sample preview — replace with your photo below.
+          </p>
+        )}
         {error && <p className="mx-auto mt-4 max-w-xl text-sm font-medium text-red-700">{error}</p>}
       </div>
 
-      <div className="lg:sticky lg:top-8">
-        <p className="text-sm font-semibold text-blue-700">Step 1</p>
-        <h3 className="mt-2 text-2xl tracking-[-0.025em] text-slate-950">Add your photo.</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+      <div className="lg:sticky lg:top-24">
+        <p className="text-sm font-semibold text-[#3035b0]">Step 1</p>
+        <h3 className="mt-2 text-2xl font-bold tracking-[-0.025em] text-[#14163b]">Add your photo.</h3>
+        <p className="mt-2 text-sm leading-6 text-[#65677d]">
           Nothing is uploaded. Your photo is composited in your browser and never leaves your device.
         </p>
 
-        <label className="mt-5 flex cursor-pointer flex-col items-center gap-3 border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/60">
+        <label className="avatar-upload mt-5 flex cursor-pointer flex-col items-center gap-3 px-5 py-8 text-center">
           <input type="file" accept="image/*" onChange={handleFile} className="sr-only" />
-          <span className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white">
-            <ImagePlus className="size-4" /> {hasPhoto ? "Change photo" : "Choose photo"}
+          <span className="inline-flex items-center gap-2 rounded-full bg-[#3035b0] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(48,53,176,0.35)] transition hover:brightness-110">
+            <ImagePlus className="size-4" /> {usingSample || !hasPhoto ? "Choose photo" : "Change photo"}
           </span>
-          <span className="max-w-full truncate text-xs text-slate-500">{fileName || "JPG or PNG, no file chosen"}</span>
+          <span className="max-w-full truncate text-xs text-[#6b6f8c]">{fileName || "JPG or PNG, no file chosen"}</span>
         </label>
 
         {hasPhoto && (
-          <div className="mt-8 animate-step-in border-y border-slate-200 py-7 motion-reduce:animate-none">
-            <p className="text-sm font-semibold text-blue-700">Step 2</p>
-            <h3 className="mt-2 text-2xl tracking-[-0.025em] text-slate-950">Frame your face.</h3>
+          <div className="mt-8 animate-step-in border-y border-[#e4e5f0] py-7 motion-reduce:animate-none">
+            <p className="text-sm font-semibold text-[#3035b0]">Step 2</p>
+            <h3 className="mt-2 text-2xl font-bold tracking-[-0.025em] text-[#14163b]">Frame your face.</h3>
             <div className="mt-6">
               <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
-                  <ZoomIn className="size-4 text-blue-700" /> Zoom
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#14163b]">
+                  <ZoomIn className="size-4 text-[#3035b0]" /> Zoom
                 </span>
-                <span className="text-sm tabular-nums text-slate-500">{zoomPercent}%</span>
+                <span className="text-sm tabular-nums text-[#6b6f8c]">{zoomPercent}%</span>
               </div>
               <div className="mt-3 flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => nudge(-5)}
                   aria-label="Zoom out"
-                  className="grid size-8 shrink-0 place-items-center rounded-full border border-slate-300 text-slate-700 hover:bg-slate-50"
+                  className="grid size-8 shrink-0 place-items-center rounded-full border border-[#d8dae8] text-[#3035b0] hover:bg-[#f4f5fb]"
                 >
                   <Minus className="size-4" />
                 </button>
@@ -251,19 +276,19 @@ export function AvatarFramer() {
                     setScale(next);
                     draw(next);
                   }}
-                  className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-blue-700"
+                  className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-[#e4e5f0] accent-[#3035b0]"
                 />
                 <button
                   type="button"
                   onClick={() => nudge(5)}
                   aria-label="Zoom in"
-                  className="grid size-8 shrink-0 place-items-center rounded-full border border-slate-300 text-slate-700 hover:bg-slate-50"
+                  className="grid size-8 shrink-0 place-items-center rounded-full border border-[#d8dae8] text-[#3035b0] hover:bg-[#f4f5fb]"
                 >
                   <Plus className="size-4" />
                 </button>
               </div>
             </div>
-            <p className="mt-5 border-l-2 border-blue-600 pl-4 text-sm leading-6 text-slate-700">
+            <p className="mt-5 border-l-2 border-[#efe89a] pl-4 text-sm leading-6 text-[#4a4d6a]">
               Drag the preview to move your photo inside the ring.
             </p>
             <Button type="button" variant="outline" onClick={reset} className="mt-6 rounded-full">
@@ -274,12 +299,12 @@ export function AvatarFramer() {
 
         {hasPhoto && (
           <div className="mt-8 animate-step-in motion-reduce:animate-none">
-            <p className="text-sm font-semibold text-blue-700">Step 3</p>
-            <h3 className="mt-2 text-2xl tracking-[-0.025em] text-slate-950">Share it.</h3>
+            <p className="text-sm font-semibold text-[#3035b0]">Step 3</p>
+            <h3 className="mt-2 text-2xl font-bold tracking-[-0.025em] text-[#14163b]">Share it.</h3>
             <Button type="button" onClick={download} className="mt-5 w-full rounded-full">
               <Download /> Download your avatar
             </Button>
-            <p className="mt-3 text-xs leading-5 text-slate-500">
+            <p className="mt-3 text-xs leading-5 text-[#6b6f8c]">
               Set it as your display picture on KingsChat and every social platform you use.
             </p>
           </div>
