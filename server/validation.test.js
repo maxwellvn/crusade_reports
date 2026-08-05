@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
 import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
-import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
+import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
@@ -371,6 +371,29 @@ test("account management middleware rejects every approved user except maxwellvn
     const denied = await run("ordinary-token");
     assert.equal(denied?.code, "SUPER_ADMIN_REQUIRED");
     assert.equal(await run("super-token"), undefined);
+  } finally {
+    global.fetch = originalFetch;
+    db.exec("ROLLBACK");
+  }
+});
+
+test("page access middleware honors the Mission nations permission", async () => {
+  const originalFetch = global.fetch;
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES ('mission.admin', 'test')").run();
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({ profile: { user: { username: "mission.admin" } } }),
+    });
+    const run = () => new Promise((resolve) => requirePageAccess("dashboard/mission-nations")({
+      headers: {},
+      get: (name) => name === "authorization" ? "Bearer mission-page-token" : "",
+    }, {}, (error) => resolve(error)));
+
+    assert.equal((await run())?.code, "PAGE_FORBIDDEN");
+    db.prepare("INSERT INTO dashboard_permissions (username, page_key) VALUES ('mission.admin', 'dashboard/mission-nations')").run();
+    assert.equal(await run(), undefined);
   } finally {
     global.fetch = originalFetch;
     db.exec("ROLLBACK");

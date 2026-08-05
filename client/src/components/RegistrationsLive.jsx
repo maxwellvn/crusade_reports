@@ -290,6 +290,17 @@ function downloadCountryRegistrationsReport(data, format = "word") {
   downloadCountryRegistrationsDocx(data, `registrations-by-continent-and-country-${date}.docx`);
 }
 
+async function copyCountriesWithoutRegistrations() {
+  try {
+    const { countries, total } = await getJSON("/registrations/countries-without-registrations");
+    const list = countries.map((c) => c.name).join("\n");
+    await navigator.clipboard.writeText(list);
+    toast.success(`Copied ${nfull.format(total)} countries without registrations`);
+  } catch {
+    toast.error("Could not copy countries without registrations");
+  }
+}
+
 function timeAgo(sqliteUtc) {
   const s = Math.max(0, (Date.now() - new Date(sqliteUtc.replace(" ", "T") + "Z")) / 1000);
   if (s < 60) return "just now";
@@ -443,12 +454,18 @@ export function RegistrationsLive() {
                       <FileDown className="size-3.5" />
                       <ChevronDown className="ml-1 size-3" />
                     </summary>
-                    <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg">
+                    <div className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-lg">
+                      <p className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Registered countries</p>
                       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50 hover:text-blue-700" onClick={(event) => { downloadCountryRegistrationsReport(data, "pdf"); event.currentTarget.closest("details").open = false; }}>
                         <FileDown className="size-4" /> PDF
                       </button>
                       <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50 hover:text-blue-700" onClick={(event) => { downloadCountryRegistrationsReport(data, "word"); event.currentTarget.closest("details").open = false; }}>
                         <FileText className="size-4" /> Word
+                      </button>
+                      <hr className="my-1 border-slate-200" />
+                      <p className="px-3 py-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Unregistered countries</p>
+                      <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-amber-50 hover:text-amber-700" onClick={(event) => { copyCountriesWithoutRegistrations(); event.currentTarget.closest("details").open = false; }}>
+                        <FileText className="size-4" /> Copy list to clipboard
                       </button>
                     </div>
                   </details>

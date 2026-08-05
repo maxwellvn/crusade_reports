@@ -176,6 +176,22 @@ export async function requireAdmin(req, _res, next) {
   }
 }
 
+// Require an approved dashboard account with access to a specific page. This
+// keeps API access aligned with the page-level access selected in Settings.
+export function requirePageAccess(pageKey) {
+  return async (req, _res, next) => {
+    try {
+      req.admin = await authorizedUser(req);
+      if (!canAccessPage(req.admin, pageKey)) {
+        throw new ApiError(403, "PAGE_FORBIDDEN", "You do not have access to this page.");
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
 export async function requireSuperAdmin(req, _res, next) {
   try {
     req.admin = await authorizedUser(req);

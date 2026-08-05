@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db } from "../db.js";
-import { requireSuperAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { COUNTRIES } from "./countries.js";
 import { ApiError, wrap } from "../logger.js";
 import { missionNationSelectionSchema } from "../validation.js";
@@ -125,12 +125,12 @@ const exportColumns = [
   { header: "Submitted At (UTC)", value: (row) => row.created_at },
 ];
 
-missionNations.get("/admin/export", requireSuperAdmin, wrap(async (req, res) => {
+missionNations.get("/admin/export", requirePageAccess("dashboard/mission-nations"), wrap(async (req, res) => {
   const format = req.query.format === "csv" ? "csv" : "xlsx";
   await sendExport(res, format, "mission-nation-selections", exportColumns, adminSelectionQuery(req.query));
 }));
 
-missionNations.get("/admin", requireSuperAdmin, wrap((req, res) => {
+missionNations.get("/admin", requirePageAccess("dashboard/mission-nations"), wrap((req, res) => {
   const rows = adminSelectionQuery(req.query);
   const preferenceTotal = db.prepare("SELECT COUNT(*) AS count FROM mission_nation_selections").get().count;
   const finalizedTotal = db.prepare("SELECT COUNT(*) AS count FROM mission_nation_selections WHERE assigned_country_code IS NOT NULL").get().count;
@@ -141,7 +141,7 @@ missionNations.get("/admin", requireSuperAdmin, wrap((req, res) => {
   });
 }));
 
-missionNations.put("/admin/:id/assignment", requireSuperAdmin, wrap((req, res) => {
+missionNations.put("/admin/:id/assignment", requirePageAccess("dashboard/mission-nations"), wrap((req, res) => {
   const row = db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Mission nation preference not found.");
   const code = String(req.body.country_code || "").trim().toUpperCase();
@@ -154,14 +154,14 @@ missionNations.put("/admin/:id/assignment", requireSuperAdmin, wrap((req, res) =
   res.json(db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(row.id));
 }));
 
-missionNations.put("/admin/settings", requireSuperAdmin, wrap((req, res) => {
+missionNations.put("/admin/settings", requirePageAccess("dashboard/mission-nations"), wrap((req, res) => {
   if (typeof req.body.selection_open !== "boolean") throw new ApiError(400, "VALIDATION", "selection_open must be true or false.");
   db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('mission_nation_selection_open', ?)")
     .run(req.body.selection_open ? "1" : "0");
   res.json({ selection_open: isOpen() });
 }));
 
-missionNations.delete("/admin/:id", requireSuperAdmin, wrap((req, res) => {
+missionNations.delete("/admin/:id", requirePageAccess("dashboard/mission-nations"), wrap((req, res) => {
   const result = db.prepare("DELETE FROM mission_nation_selections WHERE id = ?").run(req.params.id);
   if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Mission nation selection not found.");
   res.status(204).end();

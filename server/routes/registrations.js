@@ -10,6 +10,7 @@ import { ensureReportingOpen } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
+import { COUNTRIES } from "./countries.js";
 
 export const registrations = Router();
 
@@ -325,6 +326,17 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
        GROUP BY r.id ORDER BY r.created_at DESC, r.id DESC LIMIT 25`
     ).all(),
   });
+}));
+
+// Returns all countries without any registrations.
+registrations.get("/countries-without-registrations", requireAdmin, wrap((_req, res) => {
+  const registeredCountries = new Set(
+    db.prepare(
+      `SELECT DISTINCT country FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
+    ).all().map((row) => row.country)
+  );
+  const missing = COUNTRIES.filter((c) => !registeredCountries.has(c.name)).sort((a, b) => a.name.localeCompare(b.name));
+  res.json({ countries: missing, total: missing.length });
 }));
 
 // Shared WHERE clause for the registrations table and its export.
