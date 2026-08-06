@@ -107,7 +107,7 @@ export function MissionNationSelection() {
             <Field label="Minister name" htmlFor="mission-pastor-name" required error={errors.pastor_name}><Input id="mission-pastor-name" value={form.pastor_name} onChange={(e) => update("pastor_name", e.target.value)} aria-invalid={Boolean(errors.pastor_name)} placeholder="Full name" /></Field>
             {isZonalPastor && <Field label="Zone" htmlFor="mission-zone" required error={errors.zone_name}><Combobox id="mission-zone" value={form.zone_name} fetcher={zonesFetcher} onSelect={(option) => update("zone_name", option.label)} placeholder="Select zone" searchPlaceholder="Search zones…" invalid={Boolean(errors.zone_name)} caps /></Field>}
             {isOtherMinister && <Field label="Ministry or network" htmlFor="mission-ministry-name" required error={errors.ministry_name}><Input id="mission-ministry-name" value={form.ministry_name} onChange={(e) => update("ministry_name", e.target.value)} aria-invalid={Boolean(errors.ministry_name)} placeholder="Enter your ministry or network" /></Field>}
-            <Field label={isZonalPastor ? "Zone home nation" : "Ministry home nation"} htmlFor="mission-home-nation" required error={errors.home_country_code}><Combobox id="mission-home-nation" value={homeNation?.name || ""} fetcher={countriesFetcher} onSelect={(option) => update("home_country_code", option.value)} placeholder="Select home nation" searchPlaceholder="Search 242 nations…" invalid={Boolean(errors.home_country_code)} /></Field>
+            <Field label={isZonalPastor ? "Nation where your zone is" : "Nation where your ministry is"} htmlFor="mission-home-nation" required error={errors.home_country_code}><Combobox id="mission-home-nation" value={homeNation?.name || ""} fetcher={countriesFetcher} onSelect={(option) => update("home_country_code", option.value)} placeholder={isZonalPastor ? "Select the nation where your zone is" : "Select the nation where your ministry is"} searchPlaceholder="Search nations…" invalid={Boolean(errors.home_country_code)} /></Field>
             <Field label="Email" htmlFor="mission-email" required error={errors.contact_email}><Input id="mission-email" type="email" value={form.contact_email} onChange={(e) => update("contact_email", e.target.value)} aria-invalid={Boolean(errors.contact_email)} placeholder="pastor@example.com" /></Field>
             <Field label="Phone" htmlFor="mission-phone" hint="Optional" error={errors.phone_number || errors.phone_country_code}><div className="flex gap-2"><Select className="w-28 shrink-0" value={form.phone_country_code} onChange={(e) => update("phone_country_code", e.target.value)} aria-label="Phone country code"><option value="">Code</option>{PHONE_CODES.map((code) => <option key={code}>{code}</option>)}</Select><Input id="mission-phone" type="tel" value={form.phone_number} onChange={(e) => update("phone_number", e.target.value)} aria-invalid={Boolean(errors.phone_number)} placeholder="Phone number (optional)" /></div></Field>
             <Field label="KingsChat username" htmlFor="mission-kingschat" hint="Optional" error={errors.kingschat_username}><Input id="mission-kingschat" value={form.kingschat_username} onChange={(e) => update("kingschat_username", e.target.value)} aria-invalid={Boolean(errors.kingschat_username)} placeholder="@username" /></Field>
@@ -125,16 +125,71 @@ export function MissionNationSelection() {
         </aside>
 
         <section className="py-12">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-semibold text-blue-700">Mission nation directory</p><h2 className="mt-3 text-3xl font-normal tracking-[-0.03em] text-slate-950">Select one mission nation.</h2><p className="mt-3 text-sm leading-6 text-slate-600">More than one zone or network may prefer the same nation. Your home nation remains unavailable to you.</p></div>{catalogue && <div className="flex gap-6 text-sm"><p><span className="block text-2xl font-medium text-slate-950">{catalogue.total}</span><span className="text-slate-500">Nations</span></p><p><span className="block text-2xl font-medium text-slate-950">{catalogue.preferences}</span><span className="text-slate-500">Preferences</span></p></div>}</div>
+          <div>
+            <p className="text-sm font-semibold text-blue-700">Mission nation directory</p>
+            <h2 className="mt-3 text-3xl font-normal tracking-[-0.03em] text-slate-950">Choose the nation you want to serve.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              Search or filter by continent, then tap one nation. Your home nation is unavailable, and each preference includes a minimum of 1,000 crusades.
+            </p>
+          </div>
           {!catalogue?.selection_open && <div role="alert" className="mt-8 border-y border-amber-300 py-4 text-sm text-amber-900">The selection window is closed. Pastors who did not select a nation may have one designated to their zone.</div>}
-          <div className="mt-8 grid border-y border-slate-200 sm:grid-cols-[1fr_13rem]"><label className="relative flex items-center border-b border-slate-200 sm:border-b-0 sm:border-r"><Search className="absolute left-0 size-5 text-slate-500" /><span className="sr-only">Search nations</span><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search 242 nations" className="h-14 rounded-none border-0 bg-transparent pl-8 pr-10 shadow-none focus-visible:ring-0" />{query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 grid size-10 place-items-center" aria-label="Clear nation search"><X className="size-4" /></button>}</label><Select value={continent} onChange={(e) => setContinent(e.target.value)} className="h-14 rounded-none border-0 bg-transparent shadow-none"><option value="all">All continents</option>{CONTINENTS.map((name) => <option key={name}>{name}</option>)}</Select></div>
-          <p className="min-h-12 py-4 text-sm text-slate-500" aria-live="polite">{catalogue ? `${visibleNations.length} nation${visibleNations.length === 1 ? "" : "s"} shown` : "Loading mission nations…"}</p>
-          {!catalogue ? <div className="grid gap-px bg-slate-200 sm:grid-cols-2"><Skeleton className="h-20 rounded-none" /><Skeleton className="h-20 rounded-none" /><Skeleton className="h-20 rounded-none" /><Skeleton className="h-20 rounded-none" /></div> : visibleNations.length ? <div className="max-h-[34rem] overflow-y-auto overscroll-contain border-y border-slate-200 pr-1 sm:max-h-[38rem]" tabIndex="0" aria-label="Mission nation results">{groupedNations.map((group) => <section key={group.name} aria-labelledby={`continent-${group.name.replaceAll(" ", "-")}`}><h3 id={`continent-${group.name.replaceAll(" ", "-")}`} className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">{group.name} <span className="font-normal text-slate-500">· {group.nations.length}</span></h3><div className="grid sm:grid-cols-2">{group.nations.map((nation) => {
-            const isHome = nation.code === form.home_country_code;
-            const disabled = !catalogue.selection_open || isHome;
-            const active = form.mission_country_code === nation.code;
-            return <button key={nation.code} type="button" disabled={disabled} onClick={() => update("mission_country_code", nation.code)} aria-pressed={active} className={`group flex min-h-20 items-center gap-4 border-b border-slate-200 px-3 py-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:odd:border-r ${active ? "bg-slate-950 text-white" : disabled ? "cursor-not-allowed text-slate-400" : "hover:bg-slate-50"}`}><span className={`grid size-8 shrink-0 place-items-center rounded-full border text-xs font-semibold ${active ? "border-white bg-white text-slate-950" : "border-slate-300"}`}>{active ? <Check className="size-4" /> : nation.code}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{nation.name}</span><span className={`mt-1 block text-xs ${active ? "text-slate-300" : "text-slate-500"}`}>{isHome ? "Your home nation" : `${nation.interest_count} preference${nation.interest_count === 1 ? "" : "s"} · 1,000 crusades minimum`}</span></span>{!disabled && <ArrowRight className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />}</button>;
-          })}</div></section>)}</div> : <div className="border-y border-slate-200 py-14"><p className="font-semibold text-slate-950">No nations match these filters.</p><p className="mt-2 text-sm text-slate-600">Change the search or continent filter.</p></div>}
+          <div className="mt-8 grid border-y border-slate-200 sm:grid-cols-[1fr_13rem]">
+            <label className="relative flex items-center border-b border-slate-200 sm:border-b-0 sm:border-r">
+              <Search className="absolute left-0 size-5 text-slate-500" />
+              <span className="sr-only">Search nations</span>
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search nations…" className="h-14 rounded-none border-0 bg-transparent pl-8 pr-10 shadow-none focus-visible:ring-0" />
+              {query && <button type="button" onClick={() => setQuery("")} className="absolute right-2 grid size-10 place-items-center" aria-label="Clear nation search"><X className="size-4" /></button>}
+            </label>
+            <Select value={continent} onChange={(e) => setContinent(e.target.value)} className="h-14 rounded-none border-0 bg-transparent shadow-none" aria-label="Filter by continent">
+              <option value="all">All continents</option>
+              {CONTINENTS.map((name) => <option key={name}>{name}</option>)}
+            </Select>
+          </div>
+          {!catalogue ? (
+            <div className="mt-4 grid gap-px bg-slate-200 sm:grid-cols-2">
+              <Skeleton className="h-14 rounded-none" /><Skeleton className="h-14 rounded-none" />
+              <Skeleton className="h-14 rounded-none" /><Skeleton className="h-14 rounded-none" />
+            </div>
+          ) : visibleNations.length ? (
+            <div className="mt-4 max-h-[34rem] overflow-y-auto overscroll-contain border-y border-slate-200 pr-1 sm:max-h-[38rem]" tabIndex="0" aria-label="Mission nation results">
+              {groupedNations.map((group) => (
+                <section key={group.name} aria-labelledby={`continent-${group.name.replaceAll(" ", "-")}`}>
+                  <h3 id={`continent-${group.name.replaceAll(" ", "-")}`} className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">{group.name}</h3>
+                  <div className="grid sm:grid-cols-2">
+                    {group.nations.map((nation) => {
+                      const isHome = nation.code === form.home_country_code;
+                      const disabled = !catalogue.selection_open || isHome;
+                      const active = form.mission_country_code === nation.code;
+                      return (
+                        <button
+                          key={nation.code}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => update("mission_country_code", nation.code)}
+                          aria-pressed={active}
+                          className={`group flex min-h-14 items-center gap-3 border-b border-slate-200 px-3 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:odd:border-r ${active ? "bg-slate-950 text-white" : disabled ? "cursor-not-allowed text-slate-400" : "hover:bg-slate-50"}`}
+                        >
+                          <span className={`grid size-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold ${active ? "border-white bg-white text-slate-950" : "border-slate-300"}`}>
+                            {active ? <Check className="size-3.5" /> : nation.code}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{nation.name}</span>
+                            {isHome && <span className={`mt-0.5 block text-xs ${active ? "text-slate-300" : "text-slate-500"}`}>Your home nation</span>}
+                          </span>
+                          {!disabled && <ArrowRight className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 border-y border-slate-200 py-14">
+              <p className="font-semibold text-slate-950">No nations match these filters.</p>
+              <p className="mt-2 text-sm text-slate-600">Change the search or continent filter.</p>
+            </div>
+          )}
           {errors.mission_country_code && <p className="mt-3 text-sm text-red-700">{errors.mission_country_code}</p>}
         </section>
 
