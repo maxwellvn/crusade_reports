@@ -57,13 +57,21 @@ export function AvatarFramer() {
       const photo = photoRef.current;
       if (!photo) return;
       const { cx, cy, r } = hole();
-      const { x, y } = positionRef.current;
+      const ratio = scalePercent / 100;
+      const maxX = Math.max(0, (photo.width * ratio) / 2 - r);
+      const maxY = Math.max(0, (photo.height * ratio) / 2 - r);
+      const requested = positionRef.current;
+      const position = {
+        x: Math.min(maxX, Math.max(-maxX, requested.x)),
+        y: Math.min(maxY, Math.max(-maxY, requested.y)),
+      };
+      positionRef.current = position;
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.clip();
-      ctx.translate(cx + x, cy + y);
-      ctx.scale(scalePercent / 100, scalePercent / 100);
+      ctx.translate(cx + position.x, cy + position.y);
+      ctx.scale(ratio, ratio);
       ctx.drawImage(photo, -photo.width / 2, -photo.height / 2, photo.width, photo.height);
       ctx.restore();
     },
@@ -95,7 +103,7 @@ export function AvatarFramer() {
     const diameter = r * 2;
     const fit = Math.ceil(Math.max(diameter / photo.width, diameter / photo.height) * 100);
     positionRef.current = { x: 0, y: 0 };
-    setScaleRange({ min: Math.max(5, Math.floor(fit * 0.5)), max: Math.ceil(fit * 4), fit });
+    setScaleRange({ min: fit, max: Math.ceil(fit * 4), fit });
     setScale(fit);
     return fit;
   }
