@@ -17,6 +17,8 @@ const MINISTRY_DEPARTMENTS = [
   "Cell Ministry",
 ];
 
+const GROUP_CACHE_TTL_MS = 5 * 60 * 1000;
+
 const COUNTRY_ALIASES = {
   uk: "united kingdom", gb: "united kingdom", britain: "united kingdom", england: "united kingdom",
   usa: "united states", us: "united states", america: "united states",
@@ -64,8 +66,14 @@ export function useOrgData(zone, countryCode) {
   );
   const fetchGroups = React.useCallback(async (q) => {
     if (!zone) return [];
-    if (!groupCache.current[zone]) groupCache.current[zone] = await getJSON(`/zones/groups?zone=${encodeURIComponent(zone)}`);
-    return groupCache.current[zone].filter((g) => g.name.toLowerCase().includes(q.toLowerCase())).map((g) => ({ value: g.id, label: g.name }));
+    const cached = groupCache.current[zone];
+    if (!cached || Date.now() - cached.at >= GROUP_CACHE_TTL_MS) {
+      groupCache.current[zone] = {
+        at: Date.now(),
+        data: await getJSON(`/zones/groups?zone=${encodeURIComponent(zone)}`),
+      };
+    }
+    return groupCache.current[zone].data.filter((g) => g.name.toLowerCase().includes(q.toLowerCase())).map((g) => ({ value: g.id, label: g.name }));
   }, [zone]);
   const fetchNetworks = React.useCallback(
     async (q) => networks.filter((n) => n.name.toLowerCase().includes(q.toLowerCase())).map((n) => ({ value: n.name, label: n.name })),

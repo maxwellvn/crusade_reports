@@ -8,7 +8,7 @@ export const zones = Router();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CACHE_FILE = join(__dirname, "..", "..", "data", "zones_cache.json");
-const TTL_MS = 60 * 60 * 1000; // 1h
+const TTL_MS = 5 * 60 * 1000; // Keep upstream directory changes reasonably fresh.
 
 let cache = { at: 0, data: null };
 

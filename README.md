@@ -8,7 +8,7 @@ Single Node app (Express) serving a React + shadcn form that captures crusade re
 - **Import:** app-generated `.xlsx` template (category dropdown, instructions) → upload → preview + row errors → commit. Template and validator share `client/src/lib/constants.js` so they never drift.
 - **Places:** Google Places API (New) proxied server-side (`GOOGLE_PLACES_API_KEY` in `.env`, never exposed to the browser). City search only; countries are a static ISO list (`/api/countries`).
 - **Translation:** Public pages can be translated through Google Cloud Translation Basic. Requests are proxied server-side (`GOOGLE_TRANSLATE_API_KEY` in `.env`) so the credential is never sent to the browser.
-- **Zones/groups:** fetched from `ZONES_URL`, normalized, cached 1h in memory + `data/zones_cache.json` fallback.
+- **Zones/groups:** fetched from `ZONES_URL`, normalized, cached 5 minutes in memory + `data/zones_cache.json` fallback.
 - **Networks:** stored in SQLite. Edit `server/seed.js` and re-run `npm run seed` to add more.
 
 ## Run
