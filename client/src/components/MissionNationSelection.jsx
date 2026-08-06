@@ -25,7 +25,7 @@ function Receipt({ receipt }) {
       <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">This receipt confirms the ministry's mission-nation preference. The final assignment will be made by the NOTC administration.</p>
       <dl className="mt-10 border-y border-slate-200">{[
         ["Receipt", receipt.receipt_code], ["Minister", receipt.pastor_name], ["Zone or network", receipt.zone_name],
-        ["Home nation", receipt.home_nation], ["Preferred mission nation", receipt.mission_nation],
+        ["Zone/ministry nation", receipt.home_nation], ["Preferred mission nation", receipt.mission_nation],
         ["Minimum commitment", `${receipt.minimum_crusades.toLocaleString()} crusades`], ["Submitted", `${receipt.submitted_at} UTC`],
       ].map(([label, value]) => <div key={label} className="grid gap-1 border-b border-slate-200 py-4 last:border-0 sm:grid-cols-[12rem_1fr]"><dt className="text-sm text-slate-500">{label}</dt><dd className="text-sm font-semibold text-slate-950">{value}</dd></div>)}</dl>
       <div className="mt-8 flex flex-wrap gap-3 print:hidden"><Button onClick={() => window.print()} className="rounded-full"><Printer /> Print receipt</Button><Button variant="outline" className="rounded-full" onClick={() => window.location.reload()}>Make another selection</Button></div>
@@ -84,7 +84,16 @@ export function MissionNationSelection() {
     if (!parsed.success) {
       const next = {};
       parsed.error.issues.forEach((issue) => { if (!next[issue.path[0]]) next[issue.path[0]] = issue.message; });
-      setErrors(next); toast.error("Complete the required details and select a nation."); return;
+      setErrors(next);
+      toast.error("Complete the required details and select a nation.");
+      window.requestAnimationFrame(() => {
+        const firstField = parsed.error.issues[0]?.path[0];
+        const ids = { pastor_name: "mission-pastor-name", zone_name: "mission-zone", ministry_name: "mission-ministry-name", home_country_code: "mission-home-nation", contact_email: "mission-email", mission_country_code: "mission-nation-directory" };
+        const target = document.getElementById(ids[firstField]);
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        target?.focus?.({ preventScroll: true });
+      });
+      return;
     }
     setSubmitting(true);
     try { setReceipt(await postJSON("/mission-nations", parsed.data)); window.scrollTo({ top: 0 }); }
@@ -96,18 +105,18 @@ export function MissionNationSelection() {
   return <div className="min-h-screen bg-white">
     <header className="border-b border-slate-200"><div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6"><Link to="/"><img src="/logo.png" alt="" className="h-11 w-auto" /></Link><span className="hidden min-w-0 truncate text-sm font-semibold text-slate-950 sm:block">National Missions Leadership Initiative</span><Link to="/" className="ml-auto shrink-0 text-sm font-semibold text-slate-700 hover:text-slate-950">Return home</Link></div></header>
     <main>
-      <section className="border-b border-slate-200 bg-slate-950 text-white"><div className="mx-auto grid max-w-6xl lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center"><div className="px-4 py-12 sm:px-6 sm:py-20"><h1 className="max-w-5xl text-4xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl"><span className="mb-4 block text-sm font-semibold leading-5 tracking-normal text-blue-300">NIGHT OF A THOUSAND CRUSADES (NOTC) –</span>NATIONAL MISSIONS LEADERSHIP INITIATIVE</h1><p className="mt-6 max-w-3xl text-lg font-medium text-white">One Minister. One Nation. One Mission. Thousands of Crusades.</p><p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">Ministers serving through zones, networks, churches, and mission structures may express interest in a mission nation outside their home nation. Where multiple ministries share works or interests, the NOTC administration will coordinate the national lead.</p></div><div className="bg-white lg:mr-6"><img src="/national-missions-leadership.png" alt="NOTC National Missions Leadership Initiative" className="aspect-square w-full object-contain" /></div></div></section>
+      <section className="border-b border-slate-200 bg-slate-950 text-white"><div className="mx-auto grid max-w-6xl lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center"><div className="px-4 py-12 sm:px-6 sm:py-20"><h1 className="max-w-5xl text-4xl font-normal leading-[1.02] tracking-[-0.035em] sm:text-6xl"><span className="mb-4 block text-sm font-semibold leading-5 tracking-normal text-blue-300">NIGHT OF A THOUSAND CRUSADES (NOTC) –</span>NATIONAL MISSIONS LEADERSHIP INITIATIVE</h1><p className="mt-6 max-w-3xl text-lg font-medium text-white">One Minister. One Nation. One Mission. Thousands of Crusades.</p><p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">Ministers serving through zones, networks, churches, and mission structures may express interest in a mission nation outside the nation where their zone or ministry is located. Where multiple ministries share works or interests, the NOTC administration will coordinate the national lead.</p></div><div className="bg-white lg:mr-6"><img src="/national-missions-leadership.png" alt="NOTC National Missions Leadership Initiative" className="aspect-square w-full object-contain" /></div></div></section>
 
-      <form onSubmit={submit} className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <form onSubmit={submit} noValidate className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
         <section className="grid gap-8 border-b border-slate-200 pb-10 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-14"><div><p className="text-sm font-semibold text-blue-700">National responsibility</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.025em] text-slate-950">Lead with ownership.</h2></div><div><p className="max-w-3xl text-sm leading-6 text-slate-600">The appointed National Missions Lead will coordinate crusade strategy, sponsorship mobilisation, missions trips, collaboration, accountability, and reporting—working with existing pastors, churches, leaders, and mission structures in the nation.</p><p className="mt-4 text-sm font-medium leading-6 text-slate-950">The objective is unity of purpose, multiplication of impact, and sustained evangelistic reach across all 242 nations.</p></div></section>
         <section className="grid gap-8 border-b border-slate-200 pb-12 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-14">
-          <div><p className="text-sm font-semibold text-blue-700">Minister details</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.025em] text-slate-950">Identify your ministry.</h2><p className="mt-3 text-sm leading-6 text-slate-600">Your declared home nation will be excluded from the mission directory.</p></div>
+          <div><p className="text-sm font-semibold text-blue-700">Minister details</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.025em] text-slate-950">Identify your ministry.</h2><p className="mt-3 text-sm leading-6 text-slate-600">The nation where your zone/ministry is located will be excluded from the mission directory.</p></div>
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Minister type" htmlFor="mission-minister-type" required error={errors.minister_type}><Select id="mission-minister-type" value={form.minister_type} onChange={(e) => { update("minister_type", e.target.value); update("zone_name", ""); update("ministry_name", ""); }}><option value="zonal_pastor">Zonal Pastor</option><option value="ism_minister">ISM Minister</option><option value="reon_minister">REON Minister</option><option value="rim_minister">RIM Minister</option><option value="other">Other</option></Select></Field>
             <Field label="Minister name" htmlFor="mission-pastor-name" required error={errors.pastor_name}><Input id="mission-pastor-name" value={form.pastor_name} onChange={(e) => update("pastor_name", e.target.value)} aria-invalid={Boolean(errors.pastor_name)} placeholder="Full name" /></Field>
             {isZonalPastor && <Field label="Zone" htmlFor="mission-zone" required error={errors.zone_name}><Combobox id="mission-zone" value={form.zone_name} fetcher={zonesFetcher} onSelect={(option) => update("zone_name", option.label)} placeholder="Select zone" searchPlaceholder="Search zones…" invalid={Boolean(errors.zone_name)} caps /></Field>}
             {isOtherMinister && <Field label="Ministry or network" htmlFor="mission-ministry-name" required error={errors.ministry_name}><Input id="mission-ministry-name" value={form.ministry_name} onChange={(e) => update("ministry_name", e.target.value)} aria-invalid={Boolean(errors.ministry_name)} placeholder="Enter your ministry or network" /></Field>}
-            <Field label={isZonalPastor ? "Nation where your zone is" : "Nation where your ministry is"} htmlFor="mission-home-nation" required error={errors.home_country_code}><Combobox id="mission-home-nation" value={homeNation?.name || ""} fetcher={countriesFetcher} onSelect={(option) => update("home_country_code", option.value)} placeholder={isZonalPastor ? "Select the nation where your zone is" : "Select the nation where your ministry is"} searchPlaceholder="Search nations…" invalid={Boolean(errors.home_country_code)} /></Field>
+            <Field label="Nation where your zone/ministry is located" htmlFor="mission-home-nation" required error={errors.home_country_code}><Combobox id="mission-home-nation" value={homeNation?.name || ""} fetcher={countriesFetcher} onSelect={(option) => update("home_country_code", option.value)} placeholder="Select nation" searchPlaceholder="Search nations…" invalid={Boolean(errors.home_country_code)} /></Field>
             <Field label="Email" htmlFor="mission-email" required error={errors.contact_email}><Input id="mission-email" type="email" value={form.contact_email} onChange={(e) => update("contact_email", e.target.value)} aria-invalid={Boolean(errors.contact_email)} placeholder="pastor@example.com" /></Field>
             <Field label="Phone" htmlFor="mission-phone" hint="Optional" error={errors.phone_number || errors.phone_country_code}><div className="flex gap-2"><Select className="w-28 shrink-0" value={form.phone_country_code} onChange={(e) => update("phone_country_code", e.target.value)} aria-label="Phone country code"><option value="">Code</option>{PHONE_CODES.map((code) => <option key={code}>{code}</option>)}</Select><Input id="mission-phone" type="tel" value={form.phone_number} onChange={(e) => update("phone_number", e.target.value)} aria-invalid={Boolean(errors.phone_number)} placeholder="Phone number (optional)" /></div></Field>
             <Field label="KingsChat username" htmlFor="mission-kingschat" hint="Optional" error={errors.kingschat_username}><Input id="mission-kingschat" value={form.kingschat_username} onChange={(e) => update("kingschat_username", e.target.value)} aria-invalid={Boolean(errors.kingschat_username)} placeholder="@username" /></Field>
@@ -124,13 +133,17 @@ export function MissionNationSelection() {
           </div>
         </aside>
 
-        <section className="py-12">
+        <section id="mission-nation-directory" tabIndex={-1} className="scroll-mt-6 py-12 outline-none">
           <div>
             <p className="text-sm font-semibold text-blue-700">Mission nation directory</p>
             <h2 className="mt-3 text-3xl font-normal tracking-[-0.03em] text-slate-950">Choose the nation you want to serve.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Search or filter by continent, then tap one nation. Your home nation is unavailable, and each preference includes a minimum of 1,000 crusades.
+              Search or filter by continent, then tap one nation. The nation where your zone/ministry is located is unavailable, and each preference includes a minimum of 1,000 crusades.
             </p>
+          </div>
+          <div className={`mt-6 flex items-center gap-3 border px-4 py-3 text-sm ${errors.mission_country_code ? "border-red-300 bg-red-50 text-red-800" : selected ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-blue-200 bg-blue-50 text-blue-900"}`} role="status" aria-live="polite">
+            <span className={`grid size-7 shrink-0 place-items-center rounded-full ${selected ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}`}>{selected ? <Check className="size-4" /> : <ArrowRight className="size-4" />}</span>
+            <span className="font-medium">{errors.mission_country_code ? "Select one mission nation before submitting." : selected ? `${selected.name} is selected.` : "Tap one nation in the directory below to select it."}</span>
           </div>
           {!catalogue?.selection_open && <div role="alert" className="mt-8 border-y border-amber-300 py-4 text-sm text-amber-900">The selection window is closed. Pastors who did not select a nation may have one designated to their zone.</div>}
           <div className="mt-8 grid border-y border-slate-200 sm:grid-cols-[1fr_13rem]">
@@ -174,9 +187,9 @@ export function MissionNationSelection() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-semibold">{nation.name}</span>
-                            {isHome && <span className={`mt-0.5 block text-xs ${active ? "text-slate-300" : "text-slate-500"}`}>Your home nation</span>}
+                            {isHome && <span className={`mt-0.5 block text-xs ${active ? "text-slate-300" : "text-slate-500"}`}>Zone/ministry location</span>}
                           </span>
-                          {!disabled && <ArrowRight className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />}
+                          {!disabled && <span className={`shrink-0 text-xs font-semibold ${active ? "text-white" : "text-blue-700"}`}>{active ? "Selected" : "Select"}</span>}
                         </button>
                       );
                     })}
@@ -193,8 +206,8 @@ export function MissionNationSelection() {
           {errors.mission_country_code && <p className="mt-3 text-sm text-red-700">{errors.mission_country_code}</p>}
         </section>
 
-        {selected && <span className="public-mobile-bottom-action hidden" aria-hidden="true" />}
-        <section className={`${selected ? "flex" : "hidden"} sticky bottom-0 z-20 -mx-4 border-t border-slate-300 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:border-y lg:px-0 lg:py-6 lg:backdrop-blur-none`}><div className="hidden lg:block">{selected ? <><p className="text-sm font-semibold text-slate-950">{selected.name} preferred</p><p className="mt-1 text-sm text-slate-500">{form.zone_name || "Your ministry"} proposes at least 1,000 crusades in this nation.</p></> : <><p className="text-sm font-semibold text-slate-950">No nation selected</p><p className="mt-1 text-sm text-slate-500">Complete your details and choose one nation.</p></>}</div><Button type="submit" disabled={submitting || !selected || !catalogue?.selection_open} className="w-full rounded-full lg:w-auto"><ShieldCheck />{submitting ? "Submitting…" : selected ? `Submit ${selected.name} preference` : "Submit nation preference"}</Button></section>
+        <span className="public-mobile-bottom-action hidden" aria-hidden="true" />
+        <section className="sticky bottom-0 z-20 -mx-4 flex border-t border-slate-300 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:border-y lg:px-0 lg:py-6 lg:backdrop-blur-none"><div className="hidden lg:block">{selected ? <><p className="text-sm font-semibold text-slate-950">{selected.name} preferred</p><p className="mt-1 text-sm text-slate-500">{form.zone_name || "Your ministry"} proposes at least 1,000 crusades in this nation.</p></> : <><p className="text-sm font-semibold text-slate-950">No nation selected</p><p className="mt-1 text-sm text-slate-500">Complete your details and choose one nation.</p></>}</div><Button type="submit" disabled={submitting || !catalogue?.selection_open} className="w-full rounded-full lg:w-auto"><ShieldCheck />{submitting ? "Submitting…" : selected ? `Submit ${selected.name} preference` : "Submit nation preference"}</Button></section>
         <p className="mt-5 flex gap-2 text-xs leading-5 text-slate-500"><Info className="mt-0.5 size-3.5 shrink-0" />If a zone does not make a selection during the open window, a mission nation may be designated to that zone.</p>
       </form>
     </main>
