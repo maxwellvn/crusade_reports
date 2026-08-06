@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
-import { db } from "../db.js";
+import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAdmin } from "../auth.js";
 import { registrationCrusadeEditSchema } from "../validation.js";
@@ -9,6 +9,8 @@ import { submitRegisteredCrusadeReport } from "./reports.js";
 import { loadZones } from "./zones.js";
 import { ensureReportingOpen, isReportingOpen } from "../appSettings.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
+import { sendExport } from "./exporter.js";
+import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LABELS, yesNo, phone } from "../labels.js";
 
 export const zonePortal = Router();
 
@@ -72,10 +74,8 @@ const blwCampusZoneMatch = (prefix = "") =>
   `(LOWER(${prefix}zone) LIKE 'blw%')`;
 const YOUTHS_AGLOW = "Youths Aglow";
 
-// GET /api/zone-portal/:token — everything the zone dashboard shows. Every query
-// is scoped to the token's zone; there is no way to reach another zone's rows.
-zonePortal.get("/zone-portal/:token", wrap((req, res) => {
-  const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(req.params.token);
+function resolvePortalScope(tokenValue) {
+  const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(tokenValue);
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
   const col = kind === "network" ? "network_name" : "zone"; // fixed string, never user input
@@ -108,6 +108,71 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   const registrationsWhere = isYouthsAglow
     ? `(r.${col} = ? OR (r.zone IS NOT NULL AND ${blwCampusZoneMatch("r.")}))`
     : `r.${col} = ?`;
+
+  const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || kind;
+  return { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere, slug };
+}
+
+const PORTAL_REGISTRATION_EXPORT_COLUMNS = [
+  { header: "Registered on", value: (row) => (row.registered_at || "").slice(0, 10) },
+  { header: "Crusade date", value: (row) => row.event_date },
+  { header: "Crusade name", value: (row) => row.event_name },
+  { header: "Type", value: (row) => typeLabel(row.event_type) },
+  { header: "Country", value: (row) => row.country },
+  { header: "City", value: (row) => row.city },
+  { header: "Venue / address", value: (row) => row.venue },
+  { header: "Expected attendance", value: (row) => row.expected_attendance },
+  { header: "Ministers", value: (row) => row.minister_name },
+  { header: "Readiness", value: (row) => READINESS_LABELS[row.readiness_status] || row.readiness_status },
+  { header: "Readiness notes", value: (row) => row.readiness_notes },
+  { header: "Report submitted", value: (row) => yesNo(row.report_submitted) },
+  { header: "Registered as", value: (row) => ORG_TYPE_LABELS[row.organization_type] || row.organization_type },
+  { header: "Zone", value: (row) => row.zone },
+  { header: "Group", value: (row) => row.group_name },
+  { header: "Church", value: (row) => row.church_name },
+  { header: "Cell", value: (row) => row.cell_name },
+  { header: "Network", value: (row) => row.network_name },
+  { header: "Contact name", value: (row) => row.contact_name },
+  { header: "Contact email", value: (row) => row.contact_email },
+  { header: "Contact phone", value: (row) => phone(row.phone_country_code, row.phone_number) },
+  { header: "KingsChat", value: (row) => row.kingschat_username },
+  { header: "Crusade collaborators", value: (row) => row.crusade_collaborators },
+  { header: "Zone's contribution", value: (row) => row.zone_contribution },
+  { header: "Estimated budget (Espees)", value: (row) => row.estimated_budget },
+  { header: "Rhapsody copies confirmed", value: (row) => row.rhapsody_copies_confirmed },
+  { header: "Permits obtained", value: (row) => row.permits_obtained },
+  { header: "Media coverage plan", value: (row) => row.media_coverage_plan },
+];
+
+const PORTAL_REPORT_EXPORT_COLUMNS = [
+  { header: "Date held", value: (row) => row.event_date },
+  { header: "Crusade name", value: (row) => row.event_name },
+  { header: "Type", value: (row) => typeLabel(row.event_type, row.other_event_type) },
+  { header: "Format", value: (row) => FORMAT_LABELS[row.format] || row.format },
+  { header: "Country", value: (row) => row.country },
+  { header: "City", value: (row) => row.city },
+  { header: "Venue / address", value: (row) => row.venue },
+  { header: "Ministers", value: (row) => row.minister_name },
+  { header: "Reporting level", value: (row) => ORG_TYPE_LABELS[row.organization_type] || row.organization_type },
+  { header: "Zone", value: (row) => row.zone },
+  { header: "Group", value: (row) => row.group_name },
+  { header: "Church", value: (row) => row.church_name },
+  { header: "Cell", value: (row) => row.cell_name },
+  { header: "Network", value: (row) => row.network_name },
+  { header: "Onsite attendance", value: (row) => row.attendance },
+  { header: "Crusade expense", value: (row) => row.crusade_expense },
+  ...METRIC_FIELDS.map((field) => ({ header: METRIC_LABELS[field] || field, value: (row) => row[field] })),
+  { header: "Contact name", value: (row) => row.contact_name },
+  { header: "Contact email", value: (row) => row.contact_email },
+  { header: "Contact phone", value: (row) => phone(row.phone_country_code, row.phone_number) },
+  { header: "KingsChat", value: (row) => row.kingschat_username },
+  { header: "Had prior registration", value: (row) => yesNo(row.registration_item_id) },
+];
+
+// GET /api/zone-portal/:token — everything the zone dashboard shows. Every query
+// is scoped to the token's zone; there is no way to reach another zone's rows.
+zonePortal.get("/zone-portal/:token", wrap((req, res) => {
+  const { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere } = resolvePortalScope(req.params.token);
 
   const registrations = db.prepare(`
     SELECT r.id, r.created_at, r.organization_type, r.group_name, r.church_name, r.country, r.plan_date,
@@ -155,6 +220,42 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   };
 
   res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, registrations, items, crusades });
+}));
+
+// CSV/Excel export of registered crusades visible on this dashboard.
+zonePortal.get("/zone-portal/:token/export/registrations", wrap(async (req, res) => {
+  const { listWhere, listParams, slug } = resolvePortalScope(req.params.token);
+  const rows = db.prepare(`
+    SELECT i.event_type, i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date, i.venue, i.expected_attendance,
+           i.minister_name, i.country, i.city, i.readiness_status, i.readiness_notes,
+           i.crusade_collaborators, i.zone_contribution, i.estimated_budget, i.rhapsody_copies_confirmed,
+           i.permits_obtained, i.media_coverage_plan,
+           r.created_at AS registered_at, i.organization_type, i.zone, i.group_name, i.church_name, i.cell_name, i.network_name,
+           r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username,
+           EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+    FROM registration_items i
+    JOIN registrations r ON r.id = i.registration_id
+    WHERE ${listWhere("i.")} AND (i.program = 'public' OR i.program IS NULL)
+    ORDER BY COALESCE(i.event_date, i.plan_date), i.id
+  `).all(...listParams);
+  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-registrations`, PORTAL_REGISTRATION_EXPORT_COLUMNS, rows);
+}));
+
+// CSV/Excel export of submitted crusade reports visible on this dashboard.
+zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
+  const { listWhere, listParams, slug } = resolvePortalScope(req.params.token);
+  const rows = db.prepare(`
+    SELECT c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
+           c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
+           c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")},
+           c.minister_name, c.venue, c.registration_item_id,
+           r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
+    FROM crusades c
+    LEFT JOIN reports r ON r.id = c.report_id
+    WHERE ${listWhere("c.")}
+    ORDER BY c.event_date DESC, c.id DESC
+  `).all(...listParams);
+  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-reports`, PORTAL_REPORT_EXPORT_COLUMNS, rows);
 }));
 
 // The capability token may update only individual crusades belonging to its zone/network.

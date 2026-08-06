@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Search, X } from "lucide-react";
+import { Search, X, Download } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,9 +127,16 @@ export function ZonePortal() {
             </div>
 
             {activeTab === "registrations" && <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Registered crusades</CardTitle>
-                <CardDescription>Open a particular crusade to update its readiness and confirmation.</CardDescription>
+              <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+                <div>
+                  <CardTitle className="text-sm">Registered crusades</CardTitle>
+                  <CardDescription>Open a particular crusade to update its readiness and confirmation.</CardDescription>
+                </div>
+                <Button asChild variant="outline" size="sm">
+                  <a href={`/api/zone-portal/${encodeURIComponent(token)}/export/registrations?format=csv`}>
+                    <Download className="size-4" /> Export CSV
+                  </a>
+                </Button>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 {!filteredItems.length ? (
@@ -189,9 +196,16 @@ export function ZonePortal() {
             </CardContent></Card>}
 
             {data.reporting_open && activeTab === "reports" && <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Crusade reports</CardTitle>
-                <CardDescription>Submit outcomes for each registered crusade individually.</CardDescription>
+              <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+                <div>
+                  <CardTitle className="text-sm">Crusade reports</CardTitle>
+                  <CardDescription>Submit outcomes for each registered crusade individually.</CardDescription>
+                </div>
+                <Button asChild variant="outline" size="sm">
+                  <a href={`/api/zone-portal/${encodeURIComponent(token)}/export/reports?format=csv`}>
+                    <Download className="size-4" /> Export CSV
+                  </a>
+                </Button>
               </CardHeader>
               <CardContent className="space-y-4 overflow-x-auto">
                 <div className="flex flex-wrap items-center justify-between gap-3 border p-4">
