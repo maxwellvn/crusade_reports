@@ -14,12 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/ui/field";
 import { Combobox } from "@/components/Combobox";
 import { ImportPanel } from "@/components/ImportPanel";
-import { getJSON, postJSON } from "@/lib/api";
+import { getJSON, postForm, postJSON } from "@/lib/api";
 import { reportSchema, defaultValues } from "@/lib/schema";
 import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES, RABAH_OUTCOMES, PHONE_CODES, emptyCrusade } from "@/lib/constants";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull } from "@/lib/dashboardWidgets";
+import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, totalPhotoBytes } from "@/components/ReportMediaFields";
 import "../landing.css"; // campaign fonts; report theme lives in the .reg-page block
 
 // Post-crusade report form — the twin of the registration form. Same campaign-
@@ -58,6 +59,7 @@ export function ReportForm() {
   const [manualCities, setManualCities] = React.useState(true);
   const [portalScope, setPortalScope] = React.useState(null);
   const [portalError, setPortalError] = React.useState("");
+  const [photos, setPhotos] = React.useState([]);
   const orgType = watch("organization_type");
   const zone = watch("zone");
   const crusades = watch("crusades");
@@ -215,9 +217,16 @@ export function ReportForm() {
 
   async function onSubmit(data) {
     if (step !== STEPS.length - 1) return;
+    if (totalPhotoBytes(photos) > MAX_REPORT_PHOTOS_BYTES) {
+      return toast.error("Photos must total 27MB or less.");
+    }
     try {
-      const { id } = await postJSON("/reports", { ...data, portal_token: portalToken || undefined });
+      const payload = { ...data, portal_token: portalToken || undefined };
+      const { id } = photos.length
+        ? await postForm("/reports", buildReportFormData(payload, photos))
+        : await postJSON("/reports", payload);
       clearStoredDraft();
+      setPhotos([]);
       setDone({ id, n: totals.n, att: totals.att });
       window.scrollTo({ top: 0 });
     } catch (e) {
@@ -229,6 +238,7 @@ export function ReportForm() {
     clearStoredDraft();
     reset(defaultValues);
     setBatchType("");
+    setPhotos([]);
     setStep(0);
     setDone(null);
     applyScope(portalScope);
@@ -238,6 +248,7 @@ export function ReportForm() {
     clearStoredDraft();
     reset(defaultValues);
     setBatchType("");
+    setPhotos([]);
     setStep(0);
     applyScope(portalScope);
     toast.success("Saved draft cleared.");
@@ -446,7 +457,7 @@ export function ReportForm() {
 
                       {crusadeArray.fields.map((f, i) => (
                         <CrusadeRow key={f.id} id={`crusade-card-${i}`} index={i} form={form} errors={errors} fetchCountries={fetchCountries} cityFetcherFor={cityFetcherFor}
-                          onRemove={() => removeCrusade(i)} onClone={() => cloneCrusade(i)} />
+                          manualCities={manualCities} onRemove={() => removeCrusade(i)} onClone={() => cloneCrusade(i)} />
                       ))}
                       {crusadeArray.fields.length > 0 && (
                         <Button type="button" variant="outline" className="w-full" onClick={() => addCrusade()}>
@@ -496,15 +507,22 @@ export function ReportForm() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Highlights & media</CardTitle>
-                      <CardDescription>Optional context for the whole report.</CardDescription>
+                      <CardDescription>Optional — add photos (up to 27MB total), photo links, and video links for this report.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <Field label="Highlights" error={errors.highlights?.message}>
                         <Textarea {...register("highlights")} rows={4} placeholder="Notable testimonies, moments…" />
                       </Field>
-                      <Field label="Media links" error={errors.media_links?.message} hint="One link per line (Google Drive, OneDrive, YouTube…)">
-                        <Textarea {...register("media_links")} rows={3} placeholder="https://drive.google.com/…" />
-                      </Field>
+                      <ReportMediaFields
+                        photos={photos}
+                        onPhotosChange={setPhotos}
+                        photoLinks={watch("photo_links") || ""}
+                        onPhotoLinksChange={(value) => setValue("photo_links", value, { shouldValidate: true })}
+                        videoLinks={watch("video_links") || ""}
+                        onVideoLinksChange={(value) => setValue("video_links", value, { shouldValidate: true })}
+                        photoLinksError={errors.photo_links?.message}
+                        videoLinksError={errors.video_links?.message}
+                      />
                     </CardContent>
                   </Card>
                 </>
@@ -541,7 +559,7 @@ export function ReportForm() {
 
 // One crusade = one event. Country + city per crusade, essentials + core outcomes
 // always visible; extended stats + metadata behind a labelled expander.
-function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, onRemove, onClone }) {
+function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, manualCities, onRemove, onClone }) {
   const { register, control, setValue, watch } = form;
   const [open, setOpen] = React.useState(false);
   const c = watch(`crusades.${index}`) || {};

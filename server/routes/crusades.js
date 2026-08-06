@@ -4,6 +4,7 @@ import { wrap, ApiError } from "../logger.js";
 import { requireAdmin, requireSuperAdmin } from "../auth.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
+import { deleteReportPhotos, listReportPhotos } from "../reportMedia.js";
 
 export const crusades = Router();
 
@@ -14,7 +15,10 @@ export function deleteCrusadeReport(id) {
   return db.transaction(() => {
     db.prepare("DELETE FROM crusades WHERE id = ?").run(row.id);
     const reportDeleted = !db.prepare("SELECT 1 FROM crusades WHERE report_id = ?").get(row.report_id);
-    if (reportDeleted) db.prepare("DELETE FROM reports WHERE id = ?").run(row.report_id);
+    if (reportDeleted) {
+      deleteReportPhotos(row.report_id);
+      db.prepare("DELETE FROM reports WHERE id = ?").run(row.report_id);
+    }
     return { id: row.id, report_id: row.report_id, report_deleted: reportDeleted };
   })();
 }
@@ -134,17 +138,18 @@ const CRUSADE_EDIT_COLS = [
 ];
 const REPORT_EDIT_COLS = [
   "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username",
-  "highlights", "media_links",
+  "highlights", "media_links", "photo_links", "video_links",
 ];
 
 // GET /api/crusades/:id/edit — full crusade + report data for the edit form.
 crusades.get("/:id/edit", requireSuperAdmin, wrap((req, res) => {
   const row = db.prepare(`
     SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
-           r.kingschat_username, r.highlights, r.media_links
+           r.kingschat_username, r.highlights, r.media_links, r.photo_links, r.video_links, r.id AS report_id
     FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
   `).get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+  row.photos = row.report_id ? listReportPhotos(row.report_id) : [];
   res.json(row);
 }));
 
@@ -184,8 +189,9 @@ crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
 
   const updated = db.prepare(`
     SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
-           r.kingschat_username, r.highlights, r.media_links
+           r.kingschat_username, r.highlights, r.media_links, r.photo_links, r.video_links, r.id AS report_id
     FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
   `).get(req.params.id);
+  updated.photos = updated.report_id ? listReportPhotos(updated.report_id) : [];
   res.json(updated);
 }));

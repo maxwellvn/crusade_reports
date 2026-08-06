@@ -53,7 +53,7 @@ export function EditCrusadePage() {
       payload.crusade_expense = Number(data.crusade_expense || 0) || 0;
       // Report fields
       for (const f of ["contact_name", "contact_email", "phone_country_code", "phone_number",
-        "kingschat_username", "highlights", "media_links"]) {
+        "kingschat_username", "highlights", "media_links", "photo_links", "video_links"]) {
         payload[f] = data[f] ?? "";
       }
       await putJSON(`/crusades/${id}`, payload);
@@ -206,14 +206,32 @@ export function EditCrusadePage() {
 
         {/* Highlights & media */}
         <Card>
-          <CardHeader><CardTitle>Highlights & media links</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Highlights & media</CardTitle></CardHeader>
           <CardContent className="grid gap-4">
             <Field label="Highlights">
               <Input value={data.highlights || ""} onChange={(e) => set("highlights", e.target.value)} />
             </Field>
-            <Field label="Media links">
-              <Input value={data.media_links || ""} onChange={(e) => set("media_links", e.target.value)} />
+            <Field label="Photo links">
+              <Input value={data.photo_links || ""} onChange={(e) => set("photo_links", e.target.value)} placeholder="One link per line" />
             </Field>
+            <Field label="Video links">
+              <Input value={data.video_links || ""} onChange={(e) => set("video_links", e.target.value)} placeholder="One link per line" />
+            </Field>
+            {(data.photos || []).length > 0 && (
+              <div>
+                <p className="mb-2 text-sm font-medium">Uploaded photos</p>
+                <ul className="divide-y rounded-md border">
+                  {data.photos.map((photo) => (
+                    <li key={photo.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                      <a href={photo.url} target="_blank" rel="noreferrer" className="min-w-0 truncate text-blue-700 hover:underline">
+                        {photo.original_name}
+                      </a>
+                      <span className="shrink-0 text-xs text-muted-foreground">{Math.round((photo.size_bytes || 0) / 1024)} KB</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
 

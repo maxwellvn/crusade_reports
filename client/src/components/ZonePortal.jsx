@@ -11,11 +11,12 @@ import { Field } from "@/components/ui/field";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/Combobox";
 import { CollaboratorPicker, ContributionChecklist, splitCollaboration } from "@/components/CollaborationFields";
-import { getJSON, postJSON, putJSON } from "@/lib/api";
+import { getJSON, postForm, postJSON, putJSON } from "@/lib/api";
 import { useOrgData } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
+import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, totalPhotoBytes } from "@/components/ReportMediaFields";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
@@ -413,7 +414,9 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
     ...Object.fromEntries(METRIC_KEYS.map((key) => [key, 0])),
   });
   const [highlights, setHighlights] = React.useState("");
-  const [mediaLinks, setMediaLinks] = React.useState("");
+  const [photoLinks, setPhotoLinks] = React.useState("");
+  const [videoLinks, setVideoLinks] = React.useState("");
+  const [photos, setPhotos] = React.useState([]);
   const fetchCities = useCityFetcher(crusade.country);
 
   React.useEffect(() => { ref.current?.showModal(); }, []);
@@ -455,13 +458,18 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
     if (required.some((value) => !String(value || "").trim()) || (report.event_type === "other" && !report.other_event_type.trim())) {
       return toast.error("Please complete all required report details.");
     }
+    if (totalPhotoBytes(photos) > MAX_REPORT_PHOTOS_BYTES) {
+      return toast.error("Photos must total 27MB or less.");
+    }
     setSaving(true);
     try {
       const numericReport = { ...report, attendance: Number(report.attendance) || 0, crusade_expense: Number(report.crusade_expense) || 0 };
       METRIC_KEYS.forEach((key) => { numericReport[key] = Number(report[key]) || 0; });
-      const submitted = await postJSON(savePath || `/zone-portal/${token}/crusades/${crusade.id}/report`, {
-        crusade: numericReport, highlights, media_links: mediaLinks,
-      });
+      const path = savePath || `/zone-portal/${token}/crusades/${crusade.id}/report`;
+      const payload = { crusade: numericReport, highlights, photo_links: photoLinks, video_links: videoLinks };
+      const submitted = photos.length
+        ? await postForm(path, buildReportFormData(payload, photos))
+        : await postJSON(path, payload);
       toast.success("Crusade report submitted.");
       onSubmitted(submitted);
     } catch (error) {
@@ -531,9 +539,11 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
           <Field label="Online attendance">
             <Input type="number" min="0" value={report.online_participation} onChange={(event) => setField("online_participation", event.target.value)} />
           </Field>
-          <Field label="Crusade expense" hint="Optional — amount spent on this crusade">
-            <Input type="number" min="0" step="0.01" value={report.crusade_expense} onChange={(event) => setField("crusade_expense", event.target.value)} />
-          </Field>
+          {report.event_type === "mega" && (
+            <Field label="Crusade expense" hint="Enter the total amount spent on this mega crusade">
+              <Input type="number" min="0" step="0.01" value={report.crusade_expense} onChange={(event) => setField("crusade_expense", event.target.value)} />
+            </Field>
+          )}
         </div>
 
         <div>
@@ -558,14 +568,17 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
           </div>
         </details>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Highlights (optional)">
-            <Textarea rows={4} maxLength={2000} value={highlights} onChange={(event) => setHighlights(event.target.value)} placeholder="Notable testimonies or moments…" />
-          </Field>
-          <Field label="Media links (optional)">
-            <Textarea rows={4} maxLength={4000} value={mediaLinks} onChange={(event) => setMediaLinks(event.target.value)} placeholder="One Google Drive, YouTube or other link per line…" />
-          </Field>
-        </div>
+        <Field label="Highlights (optional)">
+          <Textarea rows={4} maxLength={2000} value={highlights} onChange={(event) => setHighlights(event.target.value)} placeholder="Notable testimonies or moments…" />
+        </Field>
+        <ReportMediaFields
+          photos={photos}
+          onPhotosChange={setPhotos}
+          photoLinks={photoLinks}
+          onPhotoLinksChange={setPhotoLinks}
+          videoLinks={videoLinks}
+          onVideoLinksChange={setVideoLinks}
+        />
         </div>
         <div className="grid shrink-0 grid-cols-2 gap-2 border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex sm:justify-end sm:px-5">
           <Button type="button" variant="outline" onClick={() => ref.current?.close()}>Cancel</Button>

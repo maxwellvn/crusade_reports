@@ -6,14 +6,23 @@ import { requireAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { ensureReportingOpen } from "../appSettings.js";
 import { applyPortalScope } from "../portalScope.js";
+import {
+  composeMediaLinks,
+  listReportPhotos,
+  parseReportPayload,
+  removeUploadedFiles,
+  resolveReportPhotoPath,
+  saveReportPhotos,
+  withReportPhotoUpload,
+} from "../reportMedia.js";
 
 export const reports = Router();
 
 const insertReportStmt = db.prepare(`
   INSERT INTO reports (organization_type, zone, group_name, church_name, cell_name, network_name, network_type, country,
-    contact_name, contact_email, phone_country_code, phone_number, kingschat_username, highlights, media_links)
+    contact_name, contact_email, phone_country_code, phone_number, kingschat_username, highlights, media_links, photo_links, video_links)
   VALUES (@organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @network_type, @country,
-    @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username, @highlights, @media_links)
+    @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username, @highlights, @media_links, @photo_links, @video_links)
 `);
 
 const CRUSADE_COLS = [
@@ -25,12 +34,27 @@ const insertCrusadeStmt = db.prepare(
   `INSERT INTO crusades (${CRUSADE_COLS.join(", ")}) VALUES (${CRUSADE_COLS.map((c) => "@" + c).join(", ")})`
 );
 
+function normalizeMediaFields(data) {
+  const photo_links = String(data.photo_links || "").trim();
+  const video_links = String(data.video_links || "").trim();
+  const legacy = String(data.media_links || "").trim();
+  // Older clients only send media_links — treat that as photo links when the new fields are empty.
+  const photos = photo_links || (!video_links ? legacy : "");
+  const videos = video_links;
+  return {
+    photo_links: photos || null,
+    video_links: videos || null,
+    media_links: composeMediaLinks(photos, videos) || legacy || null,
+  };
+}
+
 // One transaction: the report row + one fact row per crusade. Attribution is copied
 // onto each crusade so dashboards GROUP BY any hierarchy level. Shared by form + import.
 export const insertReport = db.transaction((d) => {
   // Country is per-crusade now; the report row keeps the first crusade's country
   // as its primary (the column is NOT NULL and drives report-level grouping).
   const reportCountry = d.country || d.crusades[0]?.country || "";
+  const media = normalizeMediaFields(d);
   const reportId = insertReportStmt.run({
     organization_type: d.organization_type,
     zone: d.zone || null,
@@ -46,7 +70,9 @@ export const insertReport = db.transaction((d) => {
     phone_number: d.phone_number,
     kingschat_username: d.kingschat_username,
     highlights: d.highlights || null,
-    media_links: d.media_links || null,
+    media_links: media.media_links,
+    photo_links: media.photo_links,
+    video_links: media.video_links,
   }).lastInsertRowid;
 
   for (const c of d.crusades) {
@@ -78,56 +104,99 @@ export const insertReport = db.transaction((d) => {
   return reportId;
 });
 
-export function submitRegisteredCrusadeReport(item, body) {
+export function submitRegisteredCrusadeReport(item, body, files = []) {
   const parsed = portalCrusadeReportSchema.safeParse(body);
-  if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid report details.");
+  if (!parsed.success) {
+    removeUploadedFiles(files);
+    throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid report details.");
+  }
   if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
+    removeUploadedFiles(files);
     throw new ApiError(409, "ALREADY_REPORTED", "A report has already been submitted for this crusade.");
   }
 
-  const reportId = insertReport({
-    organization_type: item.organization_type,
-    zone: item.zone || "",
-    group_name: item.group_name || "",
-    church_name: item.church_name || "",
-    cell_name: item.cell_name || "",
-    network_name: item.network_name || "",
-    country: item.country,
-    contact_name: item.contact_name,
-    contact_email: item.contact_email,
-    phone_country_code: item.phone_country_code,
-    phone_number: item.phone_number,
-    kingschat_username: item.kingschat_username || "",
-    highlights: parsed.data.highlights,
-    media_links: parsed.data.media_links,
-    crusades: [{ ...parsed.data.crusade, registration_item_id: item.id }],
-  });
+  let reportId;
+  try {
+    reportId = insertReport({
+      organization_type: item.organization_type,
+      zone: item.zone || "",
+      group_name: item.group_name || "",
+      church_name: item.church_name || "",
+      cell_name: item.cell_name || "",
+      network_name: item.network_name || "",
+      country: item.country,
+      contact_name: item.contact_name,
+      contact_email: item.contact_email,
+      phone_country_code: item.phone_country_code,
+      phone_number: item.phone_number,
+      kingschat_username: item.kingschat_username || "",
+      highlights: parsed.data.highlights,
+      photo_links: parsed.data.photo_links,
+      video_links: parsed.data.video_links,
+      media_links: parsed.data.media_links,
+      crusades: [{ ...parsed.data.crusade, registration_item_id: item.id }],
+    });
+    saveReportPhotos(reportId, files);
+  } catch (error) {
+    removeUploadedFiles(files);
+    throw error;
+  }
+
   const report = db.prepare(`SELECT id AS report_crusade_id, report_id, created_at AS reported_at,
     attendance AS reported_attendance, crusade_expense AS reported_expense, online_participation AS reported_online_participation,
     salvation AS reported_salvation FROM crusades WHERE registration_item_id = ?`).get(item.id);
   backfillCityCoords().catch(() => {});
-  return { ...report, report_id: reportId };
+  return { ...report, report_id: reportId, photos: listReportPhotos(reportId) };
 }
 
-reports.post("/", wrap((req, res) => {
+reports.post("/", withReportPhotoUpload(wrap((req, res) => {
   ensureReportingOpen();
-  const payload = applyPortalScope(req.body, String(req.body?.portal_token || ""));
+  const files = req.files || [];
+  let payload;
+  try {
+    const body = parseReportPayload(req);
+    payload = applyPortalScope(body, String(body?.portal_token || req.body?.portal_token || ""));
+  } catch (error) {
+    removeUploadedFiles(files);
+    throw error;
+  }
   const parsed = reportSchema.safeParse(payload);
-  if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
-  const id = insertReport(parsed.data);
+  if (!parsed.success) {
+    removeUploadedFiles(files);
+    throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
+  }
+  let id;
+  try {
+    id = insertReport(parsed.data);
+    saveReportPhotos(id, files);
+  } catch (error) {
+    removeUploadedFiles(files);
+    throw error;
+  }
   backfillCityCoords().catch(() => {}); // fire-and-forget; map fills in shortly after submit
-  res.status(201).json({ id });
-}));
+  res.status(201).json({ id, photos: listReportPhotos(id) });
+})));
 
 reports.get("/", requireAdmin, wrap((_req, res) => {
   const rows = db.prepare("SELECT * FROM reports ORDER BY created_at DESC LIMIT 500").all();
   const crus = db.prepare("SELECT * FROM crusades WHERE report_id = ?");
-  res.json(rows.map((r) => ({ ...r, crusades: crus.all(r.id) })));
+  res.json(rows.map((r) => ({ ...r, crusades: crus.all(r.id), photos: listReportPhotos(r.id) })));
+}));
+
+// Authenticated photo download for admins reviewing submitted reports.
+reports.get("/photo-file/:storedName", requireAdmin, wrap((req, res) => {
+  const { row, stream } = resolveReportPhotoPath(req.params.storedName);
+  res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(row.original_name || row.stored_name)}"`);
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  stream.on("error", () => res.destroy());
+  stream.pipe(res);
 }));
 
 reports.get("/:id", requireAdmin, wrap((req, res) => {
   const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found");
   row.crusades = db.prepare("SELECT * FROM crusades WHERE report_id = ?").all(row.id);
+  row.photos = listReportPhotos(row.id);
   res.json(row);
 }));

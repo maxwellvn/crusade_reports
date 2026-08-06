@@ -8,6 +8,7 @@ import { updateRegistrationCrusade } from "./registrations.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { loadZones } from "./zones.js";
 import { ensureReportingOpen, isReportingOpen } from "../appSettings.js";
+import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 
 export const zonePortal = Router();
 
@@ -174,10 +175,14 @@ zonePortal.put("/zone-portal/:token/crusades/:id/readiness", wrap((req, res) => 
 
 // Submit outcomes for one registered crusade. Organization and reporter details
 // come from its registration, so a capability link cannot report as another org.
-zonePortal.post("/zone-portal/:token/crusades/:id/report", wrap((req, res) => {
+zonePortal.post("/zone-portal/:token/crusades/:id/report", withReportPhotoUpload(wrap((req, res) => {
   ensureReportingOpen();
+  const files = req.files || [];
   const token = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(req.params.token);
-  if (!token) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
+  if (!token) {
+    removeUploadedFiles(files);
+    throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
+  }
 
   const col = token.kind === "network" ? "network_name" : "zone";
   const item = db.prepare(`
@@ -185,6 +190,9 @@ zonePortal.post("/zone-portal/:token/crusades/:id/report", wrap((req, res) => {
     FROM registration_items i JOIN registrations r ON r.id = i.registration_id
     WHERE i.id = ? AND i.${col} = ?
   `).get(req.params.id, token.name);
-  if (!item) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");
-  res.status(201).json(submitRegisteredCrusadeReport(item, req.body));
-}));
+  if (!item) {
+    removeUploadedFiles(files);
+    throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");
+  }
+  res.status(201).json(submitRegisteredCrusadeReport(item, parseReportPayload(req), files));
+})));

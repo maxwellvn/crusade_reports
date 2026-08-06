@@ -8,6 +8,7 @@ import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
+import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 import { COUNTRIES } from "./countries.js";
@@ -218,16 +219,20 @@ registrations.delete("/:id", requireSuperAdmin, wrap((req, res) => {
   res.json(deleteRegistrationCrusade(req.params.id));
 }));
 
-registrations.post("/:id/report", requireAdmin, wrap((req, res) => {
+registrations.post("/:id/report", requireAdmin, withReportPhotoUpload(wrap((req, res) => {
   ensureReportingOpen();
+  const files = req.files || [];
   const item = db.prepare(`
     SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
     FROM registration_items i JOIN registrations r ON r.id = i.registration_id
     WHERE i.id = ?
   `).get(req.params.id);
-  if (!item) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
-  res.status(201).json(submitRegisteredCrusadeReport(item, req.body));
-}));
+  if (!item) {
+    removeUploadedFiles(files);
+    throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
+  }
+  res.status(201).json(submitRegisteredCrusadeReport(item, parseReportPayload(req), files));
+})));
 
 // The org display name, dashboard-style: most specific level first.
 const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_name, r.zone, r.organization_type)";

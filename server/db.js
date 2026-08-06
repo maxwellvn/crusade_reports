@@ -591,6 +591,24 @@ if (!crusadeCols.includes("rabah_crusades")) {
 if (!db.prepare("PRAGMA table_info(crusades)").all().some((column) => column.name === "crusade_expense")) {
   db.exec("ALTER TABLE crusades ADD COLUMN crusade_expense REAL NOT NULL DEFAULT 0");
 }
+
+// Report media: photo/video links plus uploaded photo files under data/report-photos.
+const reportCols = new Set(db.prepare("PRAGMA table_info(reports)").all().map((c) => c.name));
+if (!reportCols.has("photo_links")) db.exec("ALTER TABLE reports ADD COLUMN photo_links TEXT");
+if (!reportCols.has("video_links")) db.exec("ALTER TABLE reports ADD COLUMN video_links TEXT");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS report_photos (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id     INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    stored_name   TEXT NOT NULL UNIQUE,
+    original_name TEXT NOT NULL,
+    mime_type     TEXT NOT NULL,
+    size_bytes    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_report_photos_report ON report_photos(report_id);
+`);
+
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
 // This backfill must run after the registration_item_id migration above so
 // production databases from before private-dashboard reporting can boot.

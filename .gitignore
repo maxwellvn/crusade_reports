@@ -4,6 +4,8 @@ data/*.sqlite
 data/*.sqlite-*
 data/backups/
 data/zones_cache.json
+data/report-photos/
+data/resource-files/
 .env
 *.log
 .DS_Store

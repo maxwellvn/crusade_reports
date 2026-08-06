@@ -52,7 +52,9 @@ export const reportSchema = z
     crusades: z.array(crusade).min(1, "Add at least one crusade"),
 
     highlights: z.string().max(2000).optional().default(""),
-    media_links: z.string().max(4000).optional().default(""),
+    photo_links: z.string().max(8000).optional().default(""),
+    video_links: z.string().max(8000).optional().default(""),
+    media_links: z.string().max(8000).optional().default(""),
   })
   .superRefine((d, ctx) => {
     const add = (path, message) => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
@@ -223,5 +225,7 @@ export const defaultValues = {
   kingschat_username: "",
   crusades: [],
   highlights: "",
+  photo_links: "",
+  video_links: "",
   media_links: "",
 };

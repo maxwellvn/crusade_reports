@@ -34,10 +34,17 @@ const crusade = z
     path: ["other_event_type"],
   });
 
+const mediaLinkFields = {
+  highlights: z.string().trim().max(2000).optional().default(""),
+  photo_links: z.string().trim().max(8000).optional().default(""),
+  video_links: z.string().trim().max(8000).optional().default(""),
+  // Kept for older clients / imports; new UI prefers photo_links + video_links.
+  media_links: z.string().trim().max(8000).optional().default(""),
+};
+
 export const portalCrusadeReportSchema = z.object({
   crusade,
-  highlights: z.string().trim().max(2000).optional().default(""),
-  media_links: z.string().trim().max(4000).optional().default(""),
+  ...mediaLinkFields,
 });
 
 export const reportSchema = z
@@ -60,8 +67,7 @@ export const reportSchema = z
     ...contactFields,
     crusades: z.array(crusade).min(1, "At least one crusade is required"),
 
-    highlights: z.string().trim().max(2000).optional().default(""),
-    media_links: z.string().trim().max(4000).optional().default(""),
+    ...mediaLinkFields,
   })
   .superRefine((d, ctx) => {
     const t = d.organization_type;
