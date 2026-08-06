@@ -137,17 +137,47 @@ export function AvatarFramer() {
     };
   }
 
+  /* On mobile, do not steal the gesture immediately — wait for a clear drag intent
+     so a vertical finger swipe over the frame still scrolls the page. */
   function startDrag(event) {
     if (!photoRef.current) return;
     setShowHint(false);
     const point = canvasPoint(event);
-    dragRef.current = { start: point, origin: { ...positionRef.current } };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      start: point,
+      origin: { ...positionRef.current },
+      active: event.pointerType !== "touch",
+    };
+    if (dragRef.current.active) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.style.touchAction = "none";
+    }
   }
 
   function moveDrag(event) {
     const drag = dragRef.current;
-    if (!drag) return;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (!drag.active) {
+      const dx = event.clientX - drag.clientX;
+      const dy = event.clientY - drag.clientY;
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      // Vertical swipe → leave the gesture to the browser for page scroll.
+      if (Math.abs(dy) > Math.abs(dx)) {
+        dragRef.current = null;
+        return;
+      }
+      drag.active = true;
+      drag.start = canvasPoint(event);
+      drag.origin = { ...positionRef.current };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.style.touchAction = "none";
+    }
+
     event.preventDefault();
     const point = canvasPoint(event);
     positionRef.current = {
@@ -158,9 +188,11 @@ export function AvatarFramer() {
   }
 
   function endDrag(event) {
-    if (!dragRef.current) return;
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    event.currentTarget.style.touchAction = "";
+    if (drag.active) event.currentTarget.releasePointerCapture?.(event.pointerId);
   }
 
   function nudge(step) {
@@ -197,7 +229,7 @@ export function AvatarFramer() {
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
             aria-label="Avatar preview"
-            className={`block h-auto w-full touch-none select-none ${hasPhoto ? "cursor-grab active:cursor-grabbing" : ""}`}
+            className={`block h-auto w-full select-none ${hasPhoto ? "cursor-grab touch-pan-y active:cursor-grabbing" : ""}`}
           />
           {!frameReady && !error && (
             <div className="absolute inset-0 grid place-items-center text-sm text-[#6b6f8c]">Loading the frame…</div>
