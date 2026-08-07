@@ -3,22 +3,43 @@
 // browser automatically and never exposed to client JavaScript.
 export async function api(path, options = {}) {
   const isFormData = options.body instanceof FormData;
-  const res = await fetch(`/api${path}`, {
-    ...options,
-    headers: {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...options.headers,
-    },
-  });
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      ...options,
+      headers: {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...options.headers,
+      },
+    });
+  } catch {
+    const err = new Error(isFormData
+      ? "Could not upload the report. Check your connection, keep photos within 30MB total, then try again."
+      : "Could not reach the server. Check your connection and try again.");
+    err.code = "NETWORK";
+    throw err;
+  }
   let body = null;
   try {
     body = await res.json();
   } catch {
-    /* non-JSON (e.g. network/proxy failure) */
+    /* non-JSON (e.g. proxy HTML error page) */
   }
   if (!res.ok) {
-    const err = new Error(body?.error?.message || "Request failed. Please try again.");
-    err.code = body?.error?.code || "NETWORK";
+    let message = body?.error?.message;
+    let code = body?.error?.code || "NETWORK";
+    if (!message && (res.status === 413 || res.status === 502 || res.status === 504)) {
+      message = isFormData
+        ? "The photo upload was rejected as too large. Keep all photos within 30MB total, or use photo links for larger albums."
+        : "The request was rejected as too large. Please try again with a smaller upload.";
+      code = "PHOTOS_TOO_LARGE";
+    }
+    if (!message && isFormData) {
+      message = "Could not upload photos with this report. Keep photos within 30MB total and try again.";
+    }
+    const err = new Error(message || "Request failed. Please try again.");
+    err.code = code;
+    err.status = res.status;
     throw err;
   }
   return body;

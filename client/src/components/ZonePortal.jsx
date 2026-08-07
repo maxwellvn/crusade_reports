@@ -16,7 +16,7 @@ import { useOrgData } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
-import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, totalPhotoBytes } from "@/components/ReportMediaFields";
+import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
@@ -472,8 +472,9 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
     if (required.some((value) => !String(value || "").trim()) || (report.event_type === "other" && !report.other_event_type.trim())) {
       return toast.error("Please complete all required report details.");
     }
-    if (totalPhotoBytes(photos) > MAX_REPORT_PHOTOS_BYTES) {
-      return toast.error("Photos must total 27MB or less.");
+    const photoTotal = totalPhotoBytes(photos);
+    if (photoTotal > MAX_REPORT_PHOTOS_BYTES) {
+      return toast.error(photosOverLimitMessage(photoTotal));
     }
     setSaving(true);
     try {
@@ -487,7 +488,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
       toast.success("Crusade report submitted.");
       onSubmitted(submitted);
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error.message || "Could not submit the crusade report. Please try again.");
     } finally {
       setSaving(false);
     }

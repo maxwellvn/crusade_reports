@@ -11,8 +11,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const REPORT_PHOTOS_DIR = join(__dirname, "..", "data", "report-photos");
 mkdirSync(REPORT_PHOTOS_DIR, { recursive: true });
 
-export const MAX_REPORT_PHOTOS_BYTES = 27 * 1024 * 1024;
+export const MAX_REPORT_PHOTOS_BYTES = 30 * 1024 * 1024;
 export const MAX_REPORT_PHOTO_FILES = 40;
+const MAX_REPORT_PHOTOS_MB = Math.round(MAX_REPORT_PHOTOS_BYTES / (1024 * 1024));
+
+function photosTooLargeMessage() {
+  return `Photos must total ${MAX_REPORT_PHOTOS_MB}MB or less. Remove some photos or share larger albums with photo links instead.`;
+}
+
+function tooManyPhotosMessage() {
+  return `You can upload up to ${MAX_REPORT_PHOTO_FILES} photos per report. Remove some and try again.`;
+}
 
 const ALLOWED_PHOTO_MIME = new Set([
   "image/jpeg",
@@ -82,10 +91,14 @@ export function composeMediaLinks(photoLinks = "", videoLinks = "") {
 }
 
 export function assertPhotoUploadBudget(files = []) {
+  if (files.length > MAX_REPORT_PHOTO_FILES) {
+    removeUploadedFiles(files);
+    throw new ApiError(400, "TOO_MANY_PHOTOS", tooManyPhotosMessage());
+  }
   const total = files.reduce((sum, file) => sum + (file.size || 0), 0);
   if (total > MAX_REPORT_PHOTOS_BYTES) {
     removeUploadedFiles(files);
-    throw new ApiError(400, "PHOTOS_TOO_LARGE", "Photos must total 27MB or less.");
+    throw new ApiError(400, "PHOTOS_TOO_LARGE", photosTooLargeMessage());
   }
   return total;
 }
@@ -162,11 +175,15 @@ export function withReportPhotoUpload(handler) {
   return (req, res, next) => {
     reportPhotoUpload(req, res, (error) => {
       if (error) {
+        removeUploadedFiles(req.files);
         if (error instanceof ApiError) return next(error);
-        if (error.code === "LIMIT_FILE_SIZE" || error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
-          return next(new ApiError(400, "PHOTOS_TOO_LARGE", "Photos must total 27MB or less."));
+        if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
+          return next(new ApiError(400, "TOO_MANY_PHOTOS", tooManyPhotosMessage()));
         }
-        return next(new ApiError(400, "UPLOAD", error.message || "Could not upload photos."));
+        if (error.code === "LIMIT_FILE_SIZE") {
+          return next(new ApiError(400, "PHOTOS_TOO_LARGE", photosTooLargeMessage()));
+        }
+        return next(new ApiError(400, "UPLOAD", "Could not upload photos. Check that each file is an image and the total is within the limit, then try again."));
       }
       Promise.resolve(handler(req, res, next)).catch(next);
     });

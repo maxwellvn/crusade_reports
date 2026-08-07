@@ -1,21 +1,37 @@
 import * as React from "react";
 import { ImagePlus, Link2, Trash2, Video } from "lucide-react";
+import { toast } from "sonner";
 import { Field } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const MAX_REPORT_PHOTOS_BYTES = 27 * 1024 * 1024;
+export const MAX_REPORT_PHOTOS_BYTES = 30 * 1024 * 1024;
+export const MAX_REPORT_PHOTO_FILES = 40;
 
 const nf = new Intl.NumberFormat();
-const formatBytes = (bytes) => {
-  if (bytes < 1024) return `${bytes} B`;
+
+export const formatBytes = (bytes) => {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 export function totalPhotoBytes(files) {
   return (files || []).reduce((sum, file) => sum + (file.size || 0), 0);
+}
+
+export function photosLimitLabel() {
+  return formatBytes(MAX_REPORT_PHOTOS_BYTES);
+}
+
+/** User-facing message when selected photos exceed the combined upload budget. */
+export function photosOverLimitMessage(totalBytes = 0) {
+  return `Selected photos total ${formatBytes(totalBytes)}, which is over the ${photosLimitLabel()} limit. Remove some photos or use photo links for the rest.`;
+}
+
+function isImageFile(file) {
+  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name || "");
 }
 
 /** Shared photo upload + photo/video link fields for every crusade report form. */
@@ -33,14 +49,62 @@ export function ReportMediaFields({
   const inputRef = React.useRef(null);
   const totalBytes = totalPhotoBytes(photos);
   const overLimit = totalBytes > MAX_REPORT_PHOTOS_BYTES;
+  const nearLimit = !overLimit && totalBytes > MAX_REPORT_PHOTOS_BYTES * 0.9;
 
   function addFiles(fileList) {
-    const next = [...photos];
-    for (const file of Array.from(fileList || [])) {
-      if (!file.type.startsWith("image/") && !/\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name)) continue;
-      next.push(file);
+    const selected = Array.from(fileList || []);
+    if (!selected.length) return;
+
+    const accepted = [];
+    const skippedType = [];
+    const skippedLarge = [];
+
+    for (const file of selected) {
+      if (!isImageFile(file)) {
+        skippedType.push(file.name || "file");
+        continue;
+      }
+      if ((file.size || 0) > MAX_REPORT_PHOTOS_BYTES) {
+        skippedLarge.push(`${file.name || "photo"} (${formatBytes(file.size)})`);
+        continue;
+      }
+      accepted.push(file);
     }
+
+    if (skippedType.length) {
+      toast.error(
+        skippedType.length === 1
+          ? `"${skippedType[0]}" is not an image. Upload JPEG, PNG, WebP, GIF or HEIC only — use video links for videos.`
+          : `${skippedType.length} files were skipped because they are not images. Upload JPEG, PNG, WebP, GIF or HEIC only.`
+      );
+    }
+    if (skippedLarge.length) {
+      toast.error(
+        skippedLarge.length === 1
+          ? `${skippedLarge[0]} is larger than ${photosLimitLabel()}. Compress it or share it with a photo link instead.`
+          : `${skippedLarge.length} photos were skipped because each one must be ${photosLimitLabel()} or less.`
+      );
+    }
+    if (!accepted.length) return;
+
+    const next = [...photos, ...accepted];
+    if (next.length > MAX_REPORT_PHOTO_FILES) {
+      toast.error(`You can upload up to ${MAX_REPORT_PHOTO_FILES} photos per report. Remove some before adding more.`);
+      onPhotosChange(next.slice(0, MAX_REPORT_PHOTO_FILES));
+      return;
+    }
+
+    const nextTotal = totalPhotoBytes(next);
     onPhotosChange(next);
+    if (nextTotal > MAX_REPORT_PHOTOS_BYTES) {
+      toast.error(photosOverLimitMessage(nextTotal));
+    } else if (accepted.length) {
+      toast.success(
+        accepted.length === 1
+          ? `Added 1 photo (${formatBytes(accepted[0].size)}). ${formatBytes(nextTotal)} of ${photosLimitLabel()} used.`
+          : `Added ${accepted.length} photos. ${formatBytes(nextTotal)} of ${photosLimitLabel()} used.`
+      );
+    }
   }
 
   function removeAt(index) {
@@ -49,18 +113,25 @@ export function ReportMediaFields({
 
   return (
     <div className={cn("space-y-4", className)}>
-      <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+      <div className={cn(
+        "rounded-lg border p-4",
+        overLimit ? "border-red-300 bg-red-50/70" : "border-slate-200 bg-slate-50/60"
+      )}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="flex items-center gap-2 text-sm font-medium text-slate-900">
               <ImagePlus className="size-4" /> Upload photos
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              JPEG, PNG, WebP, GIF or HEIC. All photos together must be {formatBytes(MAX_REPORT_PHOTOS_BYTES)} or less.
+              JPEG, PNG, WebP, GIF or HEIC. All photos together must be {photosLimitLabel()} or less
+              (up to {MAX_REPORT_PHOTO_FILES} files). Larger albums can be shared as photo links below.
             </p>
           </div>
-          <p className={cn("text-xs font-medium tabular-nums", overLimit ? "text-destructive" : "text-slate-600")}>
-            {nf.format(photos.length)} file{photos.length === 1 ? "" : "s"} · {formatBytes(totalBytes)} / {formatBytes(MAX_REPORT_PHOTOS_BYTES)}
+          <p className={cn(
+            "text-xs font-medium tabular-nums",
+            overLimit ? "text-destructive" : nearLimit ? "text-amber-700" : "text-slate-600"
+          )}>
+            {nf.format(photos.length)} file{photos.length === 1 ? "" : "s"} · {formatBytes(totalBytes)} / {photosLimitLabel()}
           </p>
         </div>
 
@@ -81,8 +152,13 @@ export function ReportMediaFields({
         </Button>
 
         {overLimit && (
-          <p className="mt-2 text-xs font-medium text-destructive">
-            Selected photos exceed 27MB total. Remove some before submitting.
+          <p role="alert" className="mt-2 text-xs font-medium text-destructive">
+            {photosOverLimitMessage(totalBytes)}
+          </p>
+        )}
+        {!overLimit && nearLimit && (
+          <p className="mt-2 text-xs font-medium text-amber-700">
+            Almost at the limit — {formatBytes(MAX_REPORT_PHOTOS_BYTES - totalBytes)} remaining.
           </p>
         )}
 

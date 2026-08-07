@@ -20,7 +20,7 @@ import { CRUSADE_TYPES, FORMATS, ONLINE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES,
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull } from "@/lib/dashboardWidgets";
-import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, totalPhotoBytes } from "@/components/ReportMediaFields";
+import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
 import "../landing.css"; // campaign fonts; report theme lives in the .reg-page block
 
 // Post-crusade report form — the twin of the registration form. Same campaign-
@@ -217,8 +217,9 @@ export function ReportForm() {
 
   async function onSubmit(data) {
     if (step !== STEPS.length - 1) return;
-    if (totalPhotoBytes(photos) > MAX_REPORT_PHOTOS_BYTES) {
-      return toast.error("Photos must total 27MB or less.");
+    const photoTotal = totalPhotoBytes(photos);
+    if (photoTotal > MAX_REPORT_PHOTOS_BYTES) {
+      return toast.error(photosOverLimitMessage(photoTotal));
     }
     try {
       const payload = { ...data, portal_token: portalToken || undefined };
@@ -230,7 +231,7 @@ export function ReportForm() {
       setDone({ id, n: totals.n, att: totals.att });
       window.scrollTo({ top: 0 });
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e.message || "Could not submit the report. Please try again.");
     }
   }
 
@@ -507,7 +508,7 @@ export function ReportForm() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Highlights & media</CardTitle>
-                      <CardDescription>Optional — add photos (up to 27MB total), photo links, and video links for this report.</CardDescription>
+                      <CardDescription>Optional — add photos (up to 30MB total), photo links, and video links for this report.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <Field label="Highlights" error={errors.highlights?.message}>
