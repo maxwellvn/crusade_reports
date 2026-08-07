@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Download, FileDown, FileSpreadsheet, Search, Trash2 } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deleteJSON, getJSON } from "@/lib/api";
-import { buildNotcReportHtml, openPrintReport } from "@/lib/printReportPdf";
+import { downloadNotcReportDocx } from "@/lib/printReportPdf";
 import { nfull } from "@/lib/dashboardWidgets";
 
 export function MissionTripAdmin() {
@@ -17,13 +17,14 @@ export function MissionTripAdmin() {
   const load = React.useCallback(() => getJSON(`/mission-trips/admin?${params}`).then(setData).catch(e => toast.error(e.message)), [params]); React.useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
   async function remove(row) { if (!window.confirm(`Remove ${row.first_name} ${row.last_name}'s volunteer application?`)) return; try { await deleteJSON(`/mission-trips/admin/${row.id}`); await load(); toast.success("Application removed."); } catch (e) { toast.error(e.message); } }
   function exportRows(format) { const p = new URLSearchParams(params); p.set("format", format); window.location.assign(`/api/mission-trips/admin/export?${p}`); }
-  function exportPdf() {
+  function exportWord() {
     if (!data?.rows?.length) {
       toast.error("No volunteer applications to export.");
       return;
     }
     const date = new Date().toISOString().slice(0, 10);
-    const html = buildNotcReportHtml({
+    downloadNotcReportDocx({
+      filename: `mission-trip-volunteer-applications-${date}.docx`,
       eyebrow: "NOTC Global Missions Trip Volunteer Mobilisation",
       title: "Mission-trip volunteer applications",
       meta: `${nfull.format(data.filtered_total)} shown of ${nfull.format(data.total)} volunteer applications.`,
@@ -33,21 +34,20 @@ export function MissionTripAdmin() {
         { label: "Matching filters", value: nfull.format(data.filtered_total) },
       ],
       columns: [
-        { header: "Volunteer", value: (row) => `${row.first_name} ${row.last_name}` },
-        { header: "Designation / reference", value: (row) => `${row.designation} · ${row.reference_code}` },
-        { header: "Passport", value: (row) => `${row.passport_country_name} (expires ${row.passport_expiry})` },
-        { header: "Mission interest", value: (row) => `${row.preferred_destination_name}${row.ready_for_any_destination ? " · Open to reassignment" : " · Preferred only"}${row.sponsor_interest ? " · Sponsor interest" : ""}` },
-        { header: "Ministry", value: (row) => [row.zone_name, row.group_name, row.church_name].filter(Boolean).join(" · ") || "—" },
-        { header: "Contact", value: (row) => `${row.email} · @${row.kingschat_username} · ${row.phone_country_code} ${row.phone_number}` },
-        { header: "Submitted", key: "created_at" },
+        { header: "Volunteer", value: (row) => `${row.first_name} ${row.last_name}`, width: 1400 },
+        { header: "Designation / reference", value: (row) => `${row.designation} · ${row.reference_code}`, width: 1500 },
+        { header: "Passport", value: (row) => `${row.passport_country_name} (expires ${row.passport_expiry})`, width: 1400 },
+        { header: "Mission interest", value: (row) => `${row.preferred_destination_name}${row.ready_for_any_destination ? " · Open to reassignment" : " · Preferred only"}${row.sponsor_interest ? " · Sponsor interest" : ""}`, width: 1600 },
+        { header: "Ministry", value: (row) => [row.zone_name, row.group_name, row.church_name].filter(Boolean).join(" · ") || "—", width: 1400 },
+        { header: "Contact", value: (row) => `${row.email} · @${row.kingschat_username} · ${row.phone_country_code} ${row.phone_number}`, width: 1400 },
+        { header: "Submitted", key: "created_at", width: 1000 },
       ],
       rows: data.rows,
       footer: "Prepared for Night of a Thousand Crusades (NOTC) Global Missions Trip Volunteer Mobilisation reporting.",
     });
-    openPrintReport(html, `mission-trip-volunteer-applications-${date}`);
   }
   const options = data?.filter_options || { zones: [], passports: [], destinations: [] };
-  return <div className="mx-auto max-w-7xl"><Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Mission-trip volunteers" }]} /><header className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-blue-700">NOTC Global Missions Trip Volunteer Mobilisation</p><h2 className="mt-2 text-4xl font-normal tracking-[-0.035em] text-slate-950">Volunteer applications</h2><p className="mt-3 text-sm text-slate-600">Review travel-ready members by passport, accessible nation, and ministry location.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" className="rounded-full" onClick={() => exportRows("csv")} disabled={!data?.filtered_total}><Download /> CSV</Button><Button variant="outline" className="rounded-full" onClick={() => exportRows("xlsx")} disabled={!data?.filtered_total}><FileSpreadsheet /> Excel</Button><Button variant="outline" className="rounded-full" onClick={exportPdf} disabled={!data?.filtered_total}><FileDown /> PDF</Button></div></header>
+  return <div className="mx-auto max-w-7xl"><Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Mission-trip volunteers" }]} /><header className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-blue-700">NOTC Global Missions Trip Volunteer Mobilisation</p><h2 className="mt-2 text-4xl font-normal tracking-[-0.035em] text-slate-950">Volunteer applications</h2><p className="mt-3 text-sm text-slate-600">Review travel-ready members by passport, accessible nation, and ministry location.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" className="rounded-full" onClick={() => exportRows("csv")} disabled={!data?.filtered_total}><Download /> CSV</Button><Button variant="outline" className="rounded-full" onClick={() => exportRows("xlsx")} disabled={!data?.filtered_total}><FileSpreadsheet /> Excel</Button><Button variant="outline" className="rounded-full" onClick={exportWord} disabled={!data?.filtered_total}><FileText /> Word</Button></div></header>
     <section className="border-y border-slate-200 py-6"><div className="grid gap-5 md:grid-cols-2 xl:grid-cols-[1.3fr_repeat(4,auto)] xl:items-end"><Field label="Search"><div className="relative"><Search className="absolute left-0 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={e => setQuery(e.target.value)} className="pl-7" placeholder="Name, email, KingsChat or zone" /></div></Field><Filter label="Zone" value={zone} set={setZone} options={options.zones.map(v => [v,v])} all="All zones" /><Filter label="Passport" value={passport} set={setPassport} options={options.passports.map(v => [v.code,v.name])} all="All passports" /><Filter label="Destination" value={destination} set={setDestination} options={options.destinations.map(v => [v.code,v.name])} all="All destinations" /><Field label="Sort"><Select value={sort} onChange={e => setSort(e.target.value)}><option value="created_at:desc">Newest first</option><option value="created_at:asc">Oldest first</option><option value="name:asc">Name A–Z</option><option value="passport:asc">Passport A–Z</option><option value="destination:asc">Destination A–Z</option></Select></Field></div></section>
     <div className="flex gap-7 py-6 text-sm"><p><strong className="text-2xl font-medium">{data?.total ?? "—"}</strong><span className="ml-2 text-slate-500">applications</span></p><p className="self-center text-slate-500">{data?.filtered_total ?? 0} shown</p></div>
     <div className="border-y border-slate-200">{!data ? <Skeleton className="h-40 rounded-none" /> : data.rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="px-3 py-3">Volunteer</th><th className="px-3 py-3">Passport</th><th className="px-3 py-3">Mission interest</th><th className="px-3 py-3">Ministry</th><th className="px-3 py-3">Contact</th><th className="px-3 py-3">Submitted</th><th className="px-3 py-3">Action</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id} className="border-t border-slate-200 align-top"><td className="px-3 py-4"><p className="font-semibold">{row.first_name} {row.last_name}</p><p className="mt-1 text-xs text-slate-500">{row.designation} · {row.reference_code}</p></td><td className="px-3 py-4"><p>{row.passport_country_name}</p><p className="mt-1 text-xs text-slate-500">Expires {row.passport_expiry}{row.additional_passports ? ` · +${row.additional_passports.split(",").length} more` : ""}</p></td><td className="px-3 py-4"><p>{row.preferred_destination_name}</p><p className="mt-1 text-xs text-slate-500">{row.ready_for_any_destination ? "Open to reassignment" : "Preferred only"}{row.sponsor_interest ? " · Sponsor interest" : ""}</p></td><td className="px-3 py-4"><p>{row.zone_name || "—"}</p><p className="mt-1 text-xs text-slate-500">{[row.group_name,row.church_name].filter(Boolean).join(" · ") || "No group/church"}</p></td><td className="px-3 py-4"><p>{row.email}</p><p className="mt-1 text-xs text-slate-500">@{row.kingschat_username} · {row.phone_country_code} {row.phone_number}</p></td><td className="whitespace-nowrap px-3 py-4 text-xs text-slate-500">{row.created_at}</td><td className="px-3 py-4"><Button variant="ghost" size="sm" className="text-slate-600 hover:text-red-700" onClick={() => remove(row)}><Trash2 /> Remove</Button></td></tr>)}</tbody></table></div> : <div className="py-16 text-center"><p className="font-semibold">No applications found</p><p className="mt-2 text-sm text-slate-500">Change the active filters or wait for new volunteer applications.</p></div>}</div></div>;

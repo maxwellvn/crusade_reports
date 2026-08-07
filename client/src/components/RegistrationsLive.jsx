@@ -275,7 +275,9 @@ function downloadCountryRegistrationsReport(data, format = "word") {
   const date = new Date().toISOString().slice(0, 10);
   const html = buildCountryRegistrationsReportHtml(data);
   if (format === "pdf") {
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=960,height=720");
+    // Avoid "noopener" in window features — Chrome opens about:blank but returns a
+    // window we cannot write into, so the report never appears.
+    const printWindow = window.open("", "_blank", "width=960,height=720");
     if (!printWindow) {
       toast.error("Allow pop-ups to export this report as PDF.");
       return;
@@ -283,6 +285,7 @@ function downloadCountryRegistrationsReport(data, format = "word") {
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
+    printWindow.opener = null;
     printWindow.focus();
     setTimeout(() => printWindow.print(), 300);
     return;

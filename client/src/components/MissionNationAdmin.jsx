@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowUpDown, Download, FileDown, FileSpreadsheet, Search, Trash2, X } from "lucide-react";
+import { ArrowUpDown, Download, FileSpreadsheet, FileText, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Combobox } from "@/components/Combobox";
@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { deleteJSON, getJSON, putJSON } from "@/lib/api";
 import { useAdmin } from "@/components/AdminGate";
-import { buildNotcReportHtml, openPrintReport } from "@/lib/printReportPdf";
+import { downloadNotcReportDocx } from "@/lib/printReportPdf";
 import { nfull } from "@/lib/dashboardWidgets";
 
 export function MissionNationAdmin() {
@@ -63,13 +63,14 @@ export function MissionNationAdmin() {
     document.body.appendChild(link); link.click(); link.remove();
   }
 
-  function exportPdf() {
+  function exportWord() {
     if (!data?.rows?.length) {
       toast.error("No mission nation preferences to export.");
       return;
     }
     const date = new Date().toISOString().slice(0, 10);
-    const html = buildNotcReportHtml({
+    downloadNotcReportDocx({
+      filename: `mission-nation-preferences-${date}.docx`,
       eyebrow: "Night of a Thousand Crusades",
       title: "Mission nation preferences",
       meta: hasFilters
@@ -81,19 +82,18 @@ export function MissionNationAdmin() {
         { label: "Shown in report", value: nfull.format(data.rows.length) },
       ],
       columns: [
-        { header: "Receipt", key: "receipt_code" },
-        { header: "Zone", key: "zone_name" },
-        { header: "Minister", key: "pastor_name" },
-        { header: "Home nation", key: "home_country_name" },
-        { header: "Preferred nation", key: "mission_country_name" },
-        { header: "Final assignment", value: (row) => row.assigned_country_name || "Not assigned" },
-        { header: "Contact", value: (row) => `${row.contact_email} · ${row.phone_country_code} ${row.phone_number}` },
-        { header: "Submitted", key: "created_at" },
+        { header: "Receipt", key: "receipt_code", width: 1100 },
+        { header: "Zone", key: "zone_name", width: 1400 },
+        { header: "Minister", key: "pastor_name", width: 1400 },
+        { header: "Home nation", key: "home_country_name", width: 1200 },
+        { header: "Preferred nation", key: "mission_country_name", width: 1300 },
+        { header: "Final assignment", value: (row) => row.assigned_country_name || "Not assigned", width: 1300 },
+        { header: "Contact", value: (row) => `${row.contact_email} · ${row.phone_country_code} ${row.phone_number}`, width: 1200 },
+        { header: "Submitted", key: "created_at", width: 800 },
       ],
       rows: data.rows,
       footer: "Prepared for Night of a Thousand Crusades (NOTC) mission nation assignment reporting.",
     });
-    openPrintReport(html, `mission-nation-preferences-${date}`);
   }
 
   function setFilter(key, value) { setFilters((current) => ({ ...current, [key]: value })); }
@@ -118,7 +118,7 @@ export function MissionNationAdmin() {
 
   return <div className="mx-auto max-w-6xl">
     <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Mission nations" }]} />
-    <div className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-normal tracking-[-0.03em] text-slate-950 sm:text-4xl">Mission nation preferences</h2><p className="mt-2 text-sm text-slate-600">Review each zone's preference, then make or revise its final assignment.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" className="rounded-full" onClick={() => exportRows("csv")} disabled={!data?.filtered_total}><Download /> CSV</Button><Button variant="outline" className="rounded-full" onClick={() => exportRows("xlsx")} disabled={!data?.filtered_total}><FileSpreadsheet /> Excel</Button><Button variant="outline" className="rounded-full" onClick={exportPdf} disabled={!data?.filtered_total}><FileDown /> PDF</Button></div></div>
+    <div className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-3xl font-normal tracking-[-0.03em] text-slate-950 sm:text-4xl">Mission nation preferences</h2><p className="mt-2 text-sm text-slate-600">Review each zone's preference, then make or revise its final assignment.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" className="rounded-full" onClick={() => exportRows("csv")} disabled={!data?.filtered_total}><Download /> CSV</Button><Button variant="outline" className="rounded-full" onClick={() => exportRows("xlsx")} disabled={!data?.filtered_total}><FileSpreadsheet /> Excel</Button><Button variant="outline" className="rounded-full" onClick={exportWord} disabled={!data?.filtered_total}><FileText /> Word</Button></div></div>
 
     <section className="grid gap-5 border-t border-slate-200 py-8 sm:grid-cols-[15rem_minmax(0,1fr)] sm:gap-10 sm:py-10"><div><h3 className="text-base font-semibold text-slate-950">Selection window</h3><p className="mt-2 text-sm leading-6 text-slate-600">Closing the window blocks new preferences. Existing submissions and final assignments remain unchanged.</p></div><div className="flex items-center justify-between gap-6 border-b border-slate-200 pb-6"><div><p className="text-sm font-semibold text-slate-950">{!data ? "Checking status…" : data.selection_open ? "Selection is open" : "Selection is closed"}</p><p className="mt-1 text-sm text-slate-600">{data?.selection_open ? "Ministers from zones and networks can currently submit a preferred nation." : "Administrators can continue making final assignments."}</p></div>{admin?.is_super_admin && <button type="button" role="switch" aria-checked={Boolean(data?.selection_open)} disabled={!data || savingWindow} onClick={toggleWindow} className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4 disabled:opacity-50 ${data?.selection_open ? "border-slate-950 bg-slate-950" : "border-slate-300 bg-slate-200"}`}><span className={`absolute top-1 block size-4 rounded-full bg-white transition-transform ${data?.selection_open ? "translate-x-6" : "translate-x-1"}`} /><span className="sr-only">{data?.selection_open ? "Close selection" : "Open selection"}</span></button>}</div></section>
 

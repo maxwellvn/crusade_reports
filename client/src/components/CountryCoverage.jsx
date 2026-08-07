@@ -1,12 +1,12 @@
 import * as React from "react";
-import { ChevronDown, ChevronRight, Copy, Download, FileDown, Globe } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Download, FileText, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { BarH, nfull } from "@/lib/dashboardWidgets";
-import { buildNotcReportHtml, openPrintReport } from "@/lib/printReportPdf";
+import { downloadNotcReportDocx } from "@/lib/printReportPdf";
 import { cn } from "@/lib/utils";
 
 const nf = new Intl.NumberFormat();
@@ -28,55 +28,13 @@ function breakdownGroups(gpdZones, networks) {
   ];
 }
 
-function exportCountryCoveragePdf(data) {
+function exportCountryCoverageWord(data) {
   const { summary, unregisteredByContinent, gpdZones, networks } = data;
   const groups = breakdownGroups(gpdZones, networks);
   const date = new Date().toISOString().slice(0, 10);
 
-  const sections = [
-    {
-      title: "Registration breakdown — GPD Zones & networks",
-      intro: "Countries, registered crusades, and registration entries by group.",
-      columns: [
-        { header: "Group", key: "label" },
-        { header: "Countries", key: "countries", align: "right" },
-        { header: "Crusades", key: "crusades", align: "right" },
-        { header: "Registrations", key: "registrations", align: "right" },
-      ],
-      rows: groups,
-    },
-    {
-      title: "GPD Zones — country breakdown",
-      columns: [
-        { header: "Country", key: "country" },
-        { header: "Crusades", key: "crusades", align: "right" },
-        { header: "Registrations", key: "registrations", align: "right" },
-      ],
-      rows: gpdZones.countries,
-    },
-    ...networks.map((n) => ({
-      title: `${n.network} — country breakdown`,
-      columns: [
-        { header: "Country", key: "country" },
-        { header: "Crusades", key: "crusades", align: "right" },
-        { header: "Registrations", key: "registrations", align: "right" },
-      ],
-      rows: n.countries,
-    })),
-    {
-      title: "Countries without registrations",
-      intro: `${nfull.format(summary.unregisteredCount)} countries with no registration entries, grouped by continent.`,
-      columns: [
-        { header: "Continent", key: "continent" },
-        { header: "Country", key: "name" },
-      ],
-      rows: unregisteredByContinent.flatMap((g) =>
-        g.countries.map((c) => ({ continent: g.continent, name: c.name }))
-      ),
-    },
-  ];
-
-  const html = buildNotcReportHtml({
+  downloadNotcReportDocx({
+    filename: `country-coverage-breakdown-${date}.docx`,
     eyebrow: "Night of a Thousand Crusades",
     title: "Country Coverage Analysis",
     meta: "From the Country coverage page. Includes GPD Zones, networks, and countries without registrations.",
@@ -85,11 +43,50 @@ function exportCountryCoveragePdf(data) {
       { label: "With registrations", value: nfull.format(summary.registeredCount) },
       { label: "Without registrations", value: nfull.format(summary.unregisteredCount) },
     ],
-    sections,
+    sections: [
+      {
+        title: "Registration breakdown — GPD Zones & networks",
+        intro: "Countries, registered crusades, and registration entries by group.",
+        columns: [
+          { header: "Group", key: "label", width: 3700 },
+          { header: "Countries", key: "countries", align: "right", width: 2000 },
+          { header: "Crusades", key: "crusades", align: "right", width: 2000 },
+          { header: "Registrations", key: "registrations", align: "right", width: 2000 },
+        ],
+        rows: groups,
+      },
+      {
+        title: "GPD Zones — country breakdown",
+        columns: [
+          { header: "Country", key: "country", width: 4900 },
+          { header: "Crusades", key: "crusades", align: "right", width: 2400 },
+          { header: "Registrations", key: "registrations", align: "right", width: 2400 },
+        ],
+        rows: gpdZones.countries,
+      },
+      ...networks.map((n) => ({
+        title: `${n.network} — country breakdown`,
+        columns: [
+          { header: "Country", key: "country", width: 4900 },
+          { header: "Crusades", key: "crusades", align: "right", width: 2400 },
+          { header: "Registrations", key: "registrations", align: "right", width: 2400 },
+        ],
+        rows: n.countries,
+      })),
+      {
+        title: "Countries without registrations",
+        intro: `${nfull.format(summary.unregisteredCount)} countries with no registration entries, grouped by continent.`,
+        columns: [
+          { header: "Continent", key: "continent", width: 3200 },
+          { header: "Country", key: "name", width: 6500 },
+        ],
+        rows: unregisteredByContinent.flatMap((g) =>
+          g.countries.map((c) => ({ continent: g.continent, name: c.name }))
+        ),
+      },
+    ],
     footer: "Prepared for Night of a Thousand Crusades (NOTC) country coverage and operational reporting.",
   });
-
-  openPrintReport(html, `country-coverage-breakdown-${date}`);
 }
 
 export function CountryCoverage() {
@@ -153,8 +150,8 @@ export function CountryCoverage() {
           <Button variant="outline" size="sm" onClick={exportBreakdownCsv}>
             <Download className="size-4" /> Export CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportCountryCoveragePdf(data)}>
-            <FileDown className="size-4" /> Export PDF
+          <Button variant="outline" size="sm" onClick={() => exportCountryCoverageWord(data)}>
+            <FileText className="size-4" /> Export Word
           </Button>
         </div>
       </header>
@@ -291,7 +288,7 @@ export function CountryCoverage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-slate-500">Click a row to expand country details. CSV and PDF exports include the full breakdown.</p>
+        <p className="text-xs text-slate-500">Click a row to expand country details. CSV and Word exports include the full breakdown.</p>
       </section>
     </div>
   );
