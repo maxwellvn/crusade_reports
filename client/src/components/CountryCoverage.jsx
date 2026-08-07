@@ -1,9 +1,10 @@
 import * as React from "react";
-import { ChevronDown, ChevronRight, Copy, Download, FileText, Globe } from "lucide-react";
+import { Copy, Download, FileText, Globe, Maximize2, Minimize2 } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { BarH, nfull } from "@/lib/dashboardWidgets";
 import { downloadNotcReportDocx } from "@/lib/printReportPdf";
@@ -26,6 +27,15 @@ function breakdownGroups(gpdZones, networks) {
       registrations: n.totalRegistrations,
     })),
   ];
+}
+
+function countryBars(countries) {
+  return (countries || []).map((row) => ({
+    key: row.country,
+    label: row.country,
+    value: row.crusades || 0,
+    sub: `${nfull.format(row.registrations || 0)} regs`,
+  }));
 }
 
 function exportCountryCoverageWord(data) {
@@ -91,17 +101,15 @@ function exportCountryCoverageWord(data) {
 
 export function CountryCoverage() {
   const [data, setData] = React.useState(null);
-  const [expandedNetworks, setExpandedNetworks] = React.useState(new Set());
-  const [showGpdCountries, setShowGpdCountries] = React.useState(false);
-  const [chartsExpanded, setChartsExpanded] = React.useState(false);
+  const [expandedCharts, setExpandedCharts] = React.useState(() => new Set());
 
   React.useEffect(() => {
     getJSON("/country-coverage").then(setData).catch((error) => toast.error(error.message || "Could not load country coverage"));
   }, []);
 
-  const toggleNetwork = (network) => setExpandedNetworks((prev) => {
+  const toggleExpanded = (id) => setExpandedCharts((prev) => {
     const next = new Set(prev);
-    next.has(network) ? next.delete(network) : next.add(network);
+    next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
 
@@ -130,10 +138,20 @@ export function CountryCoverage() {
 
   const { summary, unregisteredByContinent, gpdZones, networks } = data;
   const percent = Math.round((summary.registeredCount / summary.totalCountries) * 100);
-  const groups = breakdownGroups(gpdZones, networks);
-  const crusadeBars = groups.map((g) => ({ label: g.label, value: g.crusades }));
-  const registrationBars = groups.map((g) => ({ label: g.label, value: g.registrations }));
-  const countryBars = groups.map((g) => ({ label: g.label, value: g.countries }));
+  const charts = [
+    {
+      id: "gpd-zones",
+      title: "GPD Zones — by country",
+      meta: `${nfull.format(gpdZones.countryCount)} countries · ${nfull.format(gpdZones.totalCrusades)} crusades · ${nfull.format(gpdZones.totalRegistrations)} registrations`,
+      rows: countryBars(gpdZones.countries),
+    },
+    ...networks.map((n) => ({
+      id: `network-${n.network}`,
+      title: `${n.network} — by country`,
+      meta: `${nfull.format(n.countries.length)} countries · ${nfull.format(n.totalCrusades)} crusades · ${nfull.format(n.totalRegistrations)} registrations`,
+      rows: countryBars(n.countries),
+    })),
+  ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -173,26 +191,42 @@ export function CountryCoverage() {
       </div>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-950">Registration Breakdown</h3>
-            <p className="mt-1 text-sm text-slate-600">GPD Zones and networks — same view as the Live dashboard charts.</p>
-          </div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setChartsExpanded((v) => !v)}>
-            {chartsExpanded ? "Show top rows" : "Show all"}
-          </Button>
+        <div>
+          <h3 className="text-lg font-semibold text-slate-950">Registration Breakdown</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Registered crusades by country for GPD Zones and each network. Expand a chart to see every country.
+          </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <ChartCard title="Registered crusades by group">
-            <BarH rows={crusadeBars} max={9} expanded={chartsExpanded} />
-          </ChartCard>
-          <ChartCard title="Registration entries by group">
-            <BarH rows={registrationBars} max={9} expanded={chartsExpanded} />
-          </ChartCard>
-          <ChartCard title="Countries represented by group">
-            <BarH rows={countryBars} max={9} expanded={chartsExpanded} />
-          </ChartCard>
+        <div className="grid gap-5 sm:grid-cols-2">
+          {charts.map((chart) => {
+            const expanded = expandedCharts.has(chart.id);
+            return (
+              <Card
+                key={chart.id}
+                className={cn("rounded-none border-x-0 border-slate-200 shadow-none", expanded && "sm:col-span-2")}
+              >
+                <CardHeader className="flex-row items-center justify-between space-y-0 bg-slate-50/70 px-4 py-3">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm">{chart.title}</CardTitle>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{chart.meta}</p>
+                  </div>
+                  <button
+                    type="button"
+                    title={expanded ? "Collapse chart" : "Expand chart"}
+                    aria-label={`${expanded ? "Collapse" : "Expand"} ${chart.title}`}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    onClick={() => toggleExpanded(chart.id)}
+                  >
+                    {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  </button>
+                </CardHeader>
+                <CardContent className="px-4 py-5">
+                  <BarH rows={chart.rows} max={8} expanded={expanded} />
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </section>
 
@@ -222,83 +256,6 @@ export function CountryCoverage() {
           ))}
         </div>
       </section>
-
-      <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-slate-950">Breakdown detail</h3>
-
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-slate-50 text-left text-xs font-medium text-slate-500">
-                <th className="px-4 py-3 w-8"></th>
-                <th className="px-4 py-3">Group</th>
-                <th className="px-4 py-3 text-right">Countries</th>
-                <th className="px-4 py-3 text-right">Crusades</th>
-                <th className="px-4 py-3 text-right">Registrations</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                className="border-b cursor-pointer hover:bg-slate-50 transition-colors bg-blue-50/50"
-                onClick={() => setShowGpdCountries(!showGpdCountries)}
-              >
-                <td className="px-4 py-3 text-slate-400">
-                  {showGpdCountries ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                </td>
-                <td className="px-4 py-3 font-semibold text-blue-900">GPD Zones</td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium text-blue-900">{nf.format(gpdZones.countryCount)}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold text-blue-900">{nf.format(gpdZones.totalCrusades)}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-medium text-blue-900">{nf.format(gpdZones.totalRegistrations)}</td>
-              </tr>
-              {showGpdCountries && gpdZones.countries.map((c, i) => (
-                <tr key={`gpd-${c.country}`} className={cn("border-b bg-blue-50/30", i === gpdZones.countries.length - 1 && "border-b-2 border-blue-200")}>
-                  <td className="px-4 py-2"></td>
-                  <td className="px-4 py-2 pl-10 text-slate-600">{c.country}</td>
-                  <td className="px-4 py-2"></td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600">{nf.format(c.crusades)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600">{nf.format(c.registrations)}</td>
-                </tr>
-              ))}
-
-              {networks.map((n) => (
-                <React.Fragment key={n.network}>
-                  <tr
-                    className="border-b cursor-pointer hover:bg-slate-50 transition-colors"
-                    onClick={() => toggleNetwork(n.network)}
-                  >
-                    <td className="px-4 py-3 text-slate-400">
-                      {expandedNetworks.has(n.network) ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{n.network}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{nf.format(n.countries.length)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium">{nf.format(n.totalCrusades)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{nf.format(n.totalRegistrations)}</td>
-                  </tr>
-                  {expandedNetworks.has(n.network) && n.countries.map((c, i) => (
-                    <tr key={`${n.network}-${c.country}`} className={cn("border-b bg-slate-50/50", i === n.countries.length - 1 && "border-b-2")}>
-                      <td className="px-4 py-2"></td>
-                      <td className="px-4 py-2 pl-10 text-slate-600">{c.country}</td>
-                      <td className="px-4 py-2"></td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-600">{nf.format(c.crusades)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-600">{nf.format(c.registrations)}</td>
-                    </tr>
-                  ))}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-slate-500">Click a row to expand country details. CSV and Word exports include the full breakdown.</p>
-      </section>
-    </div>
-  );
-}
-
-function ChartCard({ title, children }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <h4 className="mb-4 text-sm font-semibold text-slate-950">{title}</h4>
-      {children}
     </div>
   );
 }
