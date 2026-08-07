@@ -1,18 +1,102 @@
 import * as React from "react";
-import { ChevronDown, ChevronRight, Copy, Download, Globe } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Download, FileDown, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
+import { BarH, nfull } from "@/lib/dashboardWidgets";
+import { buildNotcReportHtml, openPrintReport } from "@/lib/printReportPdf";
 import { cn } from "@/lib/utils";
 
 const nf = new Intl.NumberFormat();
+
+function breakdownGroups(gpdZones, networks) {
+  return [
+    {
+      label: "GPD Zones",
+      countries: gpdZones.countryCount,
+      crusades: gpdZones.totalCrusades,
+      registrations: gpdZones.totalRegistrations,
+    },
+    ...networks.map((n) => ({
+      label: n.network,
+      countries: n.countries.length,
+      crusades: n.totalCrusades,
+      registrations: n.totalRegistrations,
+    })),
+  ];
+}
+
+function exportCountryCoveragePdf(data) {
+  const { summary, unregisteredByContinent, gpdZones, networks } = data;
+  const groups = breakdownGroups(gpdZones, networks);
+  const date = new Date().toISOString().slice(0, 10);
+
+  const sections = [
+    {
+      title: "Registration breakdown — GPD Zones & networks",
+      intro: "Countries, registered crusades, and registration entries by group.",
+      columns: [
+        { header: "Group", key: "label" },
+        { header: "Countries", key: "countries", align: "right" },
+        { header: "Crusades", key: "crusades", align: "right" },
+        { header: "Registrations", key: "registrations", align: "right" },
+      ],
+      rows: groups,
+    },
+    {
+      title: "GPD Zones — country breakdown",
+      columns: [
+        { header: "Country", key: "country" },
+        { header: "Crusades", key: "crusades", align: "right" },
+        { header: "Registrations", key: "registrations", align: "right" },
+      ],
+      rows: gpdZones.countries,
+    },
+    ...networks.map((n) => ({
+      title: `${n.network} — country breakdown`,
+      columns: [
+        { header: "Country", key: "country" },
+        { header: "Crusades", key: "crusades", align: "right" },
+        { header: "Registrations", key: "registrations", align: "right" },
+      ],
+      rows: n.countries,
+    })),
+    {
+      title: "Countries without registrations",
+      intro: `${nfull.format(summary.unregisteredCount)} countries with no registration entries, grouped by continent.`,
+      columns: [
+        { header: "Continent", key: "continent" },
+        { header: "Country", key: "name" },
+      ],
+      rows: unregisteredByContinent.flatMap((g) =>
+        g.countries.map((c) => ({ continent: g.continent, name: c.name }))
+      ),
+    },
+  ];
+
+  const html = buildNotcReportHtml({
+    eyebrow: "Night of a Thousand Crusades",
+    title: "Country Coverage Analysis",
+    meta: "From the Country coverage page. Includes GPD Zones, networks, and countries without registrations.",
+    summary: [
+      { label: "Total countries", value: nfull.format(summary.totalCountries) },
+      { label: "With registrations", value: nfull.format(summary.registeredCount) },
+      { label: "Without registrations", value: nfull.format(summary.unregisteredCount) },
+    ],
+    sections,
+    footer: "Prepared for Night of a Thousand Crusades (NOTC) country coverage and operational reporting.",
+  });
+
+  openPrintReport(html, `country-coverage-breakdown-${date}`);
+}
 
 export function CountryCoverage() {
   const [data, setData] = React.useState(null);
   const [expandedNetworks, setExpandedNetworks] = React.useState(new Set());
   const [showGpdCountries, setShowGpdCountries] = React.useState(false);
+  const [chartsExpanded, setChartsExpanded] = React.useState(false);
 
   React.useEffect(() => {
     getJSON("/country-coverage").then(setData).catch((error) => toast.error(error.message || "Could not load country coverage"));
@@ -31,7 +115,7 @@ export function CountryCoverage() {
     toast.success(`Copied ${nf.format(data.summary.unregisteredCount)} countries to clipboard`);
   };
 
-  const exportBreakdown = () => {
+  const exportBreakdownCsv = () => {
     const link = Object.assign(document.createElement("a"), { href: "/api/country-coverage/export" });
     document.body.appendChild(link);
     link.click();
@@ -49,6 +133,10 @@ export function CountryCoverage() {
 
   const { summary, unregisteredByContinent, gpdZones, networks } = data;
   const percent = Math.round((summary.registeredCount / summary.totalCountries) * 100);
+  const groups = breakdownGroups(gpdZones, networks);
+  const crusadeBars = groups.map((g) => ({ label: g.label, value: g.crusades }));
+  const registrationBars = groups.map((g) => ({ label: g.label, value: g.registrations }));
+  const countryBars = groups.map((g) => ({ label: g.label, value: g.countries }));
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -61,12 +149,16 @@ export function CountryCoverage() {
             View countries without registrations and breakdown by GPD zones and networks.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={exportBreakdown}>
-          <Download className="size-4" /> Export breakdown (CSV)
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={exportBreakdownCsv}>
+            <Download className="size-4" /> Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportCountryCoveragePdf(data)}>
+            <FileDown className="size-4" /> Export PDF
+          </Button>
+        </div>
       </header>
 
-      {/* Summary Stats */}
       <section className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total Countries" value={summary.totalCountries} icon={<Globe className="size-5 text-blue-600" />} />
         <StatCard label="Countries with Registrations" value={summary.registeredCount} className="bg-emerald-50" valueClass="text-emerald-700" />
@@ -83,7 +175,30 @@ export function CountryCoverage() {
         </div>
       </div>
 
-      {/* Unregistered Countries by Continent */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-950">Registration Breakdown</h3>
+            <p className="mt-1 text-sm text-slate-600">GPD Zones and networks — same view as the Live dashboard charts.</p>
+          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setChartsExpanded((v) => !v)}>
+            {chartsExpanded ? "Show top rows" : "Show all"}
+          </Button>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <ChartCard title="Registered crusades by group">
+            <BarH rows={crusadeBars} max={9} expanded={chartsExpanded} />
+          </ChartCard>
+          <ChartCard title="Registration entries by group">
+            <BarH rows={registrationBars} max={9} expanded={chartsExpanded} />
+          </ChartCard>
+          <ChartCard title="Countries represented by group">
+            <BarH rows={countryBars} max={9} expanded={chartsExpanded} />
+          </ChartCard>
+        </div>
+      </section>
+
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-950">Countries without Registrations</h3>
@@ -111,9 +226,8 @@ export function CountryCoverage() {
         </div>
       </section>
 
-      {/* GPD Zones & Networks Summary */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-slate-950">Registration Breakdown</h3>
+        <h3 className="text-lg font-semibold text-slate-950">Breakdown detail</h3>
 
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -127,7 +241,6 @@ export function CountryCoverage() {
               </tr>
             </thead>
             <tbody>
-              {/* GPD Zones as single group */}
               <tr
                 className="border-b cursor-pointer hover:bg-slate-50 transition-colors bg-blue-50/50"
                 onClick={() => setShowGpdCountries(!showGpdCountries)}
@@ -150,7 +263,6 @@ export function CountryCoverage() {
                 </tr>
               ))}
 
-              {/* Networks */}
               {networks.map((n) => (
                 <React.Fragment key={n.network}>
                   <tr
@@ -179,8 +291,17 @@ export function CountryCoverage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-slate-500">Click a row to expand and see country details. Export includes all data in separate sheets.</p>
+        <p className="text-xs text-slate-500">Click a row to expand country details. CSV and PDF exports include the full breakdown.</p>
       </section>
+    </div>
+  );
+}
+
+function ChartCard({ title, children }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <h4 className="mb-4 text-sm font-semibold text-slate-950">{title}</h4>
+      {children}
     </div>
   );
 }
