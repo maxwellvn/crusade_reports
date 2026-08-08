@@ -418,7 +418,47 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_mission_trip_zone ON mission_trip_volunteers(zone_name COLLATE NOCASE);
   CREATE INDEX IF NOT EXISTS idx_mission_trip_passport ON mission_trip_volunteers(passport_country_code);
   CREATE INDEX IF NOT EXISTS idx_mission_trip_destination ON mission_trip_volunteers(preferred_destination_code);
+
+  CREATE TABLE IF NOT EXISTS upcoming_crusade_interests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_code TEXT NOT NULL UNIQUE,
+    full_name TEXT NOT NULL,
+    zone_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    group_name TEXT,
+    email TEXT NOT NULL,
+    kingschat_username TEXT NOT NULL,
+    phone_country_code TEXT NOT NULL,
+    phone_number TEXT NOT NULL,
+    passport_country_code TEXT NOT NULL,
+    passport_country_name TEXT NOT NULL,
+    passport_expiry TEXT NOT NULL,
+    opportunity_code TEXT NOT NULL,
+    opportunity_nation TEXT NOT NULL,
+    opportunity_dates TEXT NOT NULL,
+    opportunity_names TEXT NOT NULL,
+    opportunity_types TEXT NOT NULL,
+    opportunity_cities TEXT NOT NULL,
+    second_opportunity_code TEXT,
+    second_opportunity_nation TEXT,
+    second_opportunity_dates TEXT,
+    second_opportunity_names TEXT,
+    second_opportunity_types TEXT,
+    second_opportunity_cities TEXT,
+    valid_passport INTEGER NOT NULL DEFAULT 1,
+    destination_access INTEGER NOT NULL DEFAULT 1,
+    available_to_travel INTEGER NOT NULL DEFAULT 1,
+    additional_information TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_upcoming_interest_created ON upcoming_crusade_interests(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_upcoming_interest_destination ON upcoming_crusade_interests(opportunity_code);
+  CREATE INDEX IF NOT EXISTS idx_upcoming_interest_passport ON upcoming_crusade_interests(passport_country_code);
 `);
+
+const upcomingInterestColumns = new Set(db.prepare("PRAGMA table_info(upcoming_crusade_interests)").all().map((column) => column.name));
+for (const column of ["second_opportunity_code", "second_opportunity_nation", "second_opportunity_dates", "second_opportunity_names", "second_opportunity_types", "second_opportunity_cities"]) {
+  if (!upcomingInterestColumns.has(column)) db.exec(`ALTER TABLE upcoming_crusade_interests ADD COLUMN ${column} TEXT`);
+}
 
 // Custom media roles require removing the original three-role CHECK while
 // preserving every existing trainee and its registration relationship.

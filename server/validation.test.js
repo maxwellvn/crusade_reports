@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
-import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema } from "./validation.js";
+import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema, upcomingCrusadeInterestSchema } from "./validation.js";
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { registrationProgress } from "./routes/stats.js";
@@ -173,6 +173,20 @@ test("mission-trip volunteers identify their passport and accept partnership ter
   assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, kingschat_username: "" }).success, true);
   assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, passport_country_code: "" }).success, false);
   assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, partnership_acknowledged: false }).success, false);
+});
+
+test("upcoming crusade interest requires zone identity and confirmed travel access", () => {
+  const interest = {
+    full_name: "Pastor Example", zone_name: "LAGOS ZONE 1", group_name: "", email: "pastor@example.com",
+    kingschat_username: "pastorexample", phone_country_code: "+234", phone_number: "8012345678",
+    passport_country_code: "NG", passport_expiry: "2028-08", opportunity_codes: ["KE", "GH"],
+    valid_passport: true, destination_access: true, available_to_travel: true, additional_information: "",
+  };
+  assert.equal(upcomingCrusadeInterestSchema.safeParse(interest).success, true);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, zone_name: "" }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, destination_access: false }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: [] }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE", "GH", "AO"] }).success, false);
 });
 
 test("media training accepts an individual trainee and supports admin filtering", () => {

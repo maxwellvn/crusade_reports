@@ -253,6 +253,23 @@ export const missionTripVolunteerSchema = z.object({
   additional_information: z.string().trim().max(2000).optional().default(""),
 });
 
+export const upcomingCrusadeInterestSchema = z.object({
+  full_name: z.string().trim().min(2, "Full name is required").max(200),
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  group_name: z.string().trim().max(250).optional().default(""),
+  email: z.string().trim().email("Enter a valid email address").max(254),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter a valid KingsChat username"),
+  phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  passport_country_code: z.string().length(2, "Select your passport country").toUpperCase(),
+  passport_expiry: z.string().regex(/^\d{4}-\d{2}$/, "Enter the passport expiry month"),
+  opportunity_codes: z.array(z.string().length(2).toUpperCase()).min(1, "Select at least one upcoming crusade").max(2, "Select no more than two upcoming crusades").refine((codes) => new Set(codes).size === codes.length, "Choose two different upcoming crusades"),
+  valid_passport: z.literal(true, { errorMap: () => ({ message: "Confirm that you hold a valid passport" }) }),
+  destination_access: z.literal(true, { errorMap: () => ({ message: "Confirm your visa or visa-free access to this destination" }) }),
+  available_to_travel: z.literal(true, { errorMap: () => ({ message: "Confirm that you are available to travel" }) }),
+  additional_information: z.string().trim().max(2000).optional().default(""),
+});
+
 // Admin reconciliation of manually-typed org names: map a registration's zone
 // and/or group to the real directory entry. Zone is required; group is optional
 // (some org types don't have groups). Both clear the manual flags on save.

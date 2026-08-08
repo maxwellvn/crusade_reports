@@ -11,6 +11,7 @@ const PAGES = [
   [/^\/select-nation\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Ministers can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", "/select-nation", "/national-missions-leadership.png"],
   [/^\/media-training\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", "/media-training", "/media-training-mobilisation.png"],
   [/^\/mission-trips\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", "/mission-trips", "/global-missions-trip-volunteer.png"],
+  [/^\/upcoming-crusades\/?$/, "UPCOMING NIGHT OF A THOUSAND CRUSADES (NOTC) CRUSADES", "Zonal pastors with valid passports and destination access can select up to two planned international crusades they would like to attend.", "/upcoming-crusades", "/logo.png"],
   [/^\/avatar\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", "/avatar", "/notc-avatar-frame.jpg"],
 ];
 

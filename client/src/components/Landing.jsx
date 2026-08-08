@@ -120,6 +120,14 @@ const INITIATIVES = [
     tone: "cyan",
   },
   {
+    to: "/upcoming-crusades",
+    title: "Upcoming Crusades",
+    copy: "We have crusades planned across nations and cities. Zonal pastors with valid passports and destination access can select up to two nations they would like to visit.",
+    action: "Choose an upcoming crusade",
+    image: "/assets/globe.webp",
+    tone: "cyan",
+  },
+  {
     to: "/mission-trips",
     title: "Global Missions Trip Volunteer Mobilisation",
     copy: "We are mobilising volunteers from across our churches, zones, and networks to participate in missions trips and support the global outreach efforts.",
@@ -497,6 +505,7 @@ export function Landing() {
               <Link to="/select-nation" onClick={closeNav}>Select a Nation</Link>
               <Link to="/media-training" onClick={closeNav}>Media Training</Link>
               <Link to="/mission-trips" onClick={closeNav}>Mission Trips</Link>
+              <Link to="/upcoming-crusades" onClick={closeNav}>Upcoming Crusades</Link>
               <Link to="/avatar" onClick={closeNav}>Campaign Avatar</Link>
             </div>
             <div className="nav-pill">
@@ -628,6 +637,7 @@ export function Landing() {
                 <Link to="/select-nation">Select a nation</Link>
                 <Link to="/media-training">Media training</Link>
                 <Link to="/mission-trips">Mission trips</Link>
+                <Link to="/upcoming-crusades">Upcoming crusades</Link>
                 <Link to="/avatar">Campaign avatar</Link>
                 <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer">Donate</a>
               </div>

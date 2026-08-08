@@ -171,6 +171,23 @@ export const missionTripVolunteerSchema = z.object({
   valid_passport: z.literal(true, { errorMap: () => ({ message: "Confirm that your passport is valid" }) }), covers_travel_expenses: z.literal(true, { errorMap: () => ({ message: "Confirm your independent travel access and expenses" }) }), medically_fit: z.literal(true, { errorMap: () => ({ message: "Confirm your medical readiness" }) }), sponsor_interest: z.boolean().default(false), partnership_acknowledged: z.literal(true, { errorMap: () => ({ message: "Acknowledge the partnership information" }) }), additional_information: z.string().max(2000).optional().default(""),
 });
 
+export const upcomingCrusadeInterestSchema = z.object({
+  full_name: z.string().trim().min(2, "Full name is required").max(200),
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  group_name: z.string().trim().max(250).optional().default(""),
+  email: z.string().trim().email("Enter a valid email address").max(254),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter a valid KingsChat username"),
+  phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  passport_country_code: z.string().length(2, "Select your passport country"),
+  passport_expiry: z.string().regex(/^\d{4}-\d{2}$/, "Enter the passport expiry month"),
+  opportunity_codes: z.array(z.string().length(2)).min(1, "Select at least one upcoming crusade").max(2, "Select no more than two upcoming crusades"),
+  valid_passport: z.literal(true, { errorMap: () => ({ message: "Confirm that you hold a valid passport" }) }),
+  destination_access: z.literal(true, { errorMap: () => ({ message: "Confirm your visa or visa-free access to this destination" }) }),
+  available_to_travel: z.literal(true, { errorMap: () => ({ message: "Confirm that you are available to travel" }) }),
+  additional_information: z.string().trim().max(2000).optional().default(""),
+});
+
 // ---- Loveworld Blue Elite staff registration ------------------------------
 // Mirrors server/validation.js#blueEliteRegistrationSchema. Org side is fixed
 // (zone with optional group/church, no cell/network selector), KingsChat username and

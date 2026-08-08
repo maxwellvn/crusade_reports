@@ -34,6 +34,7 @@ const ASSIGNABLE_PAGES = [
   { key: "dashboard/mission-nations", label: "Mission nations" },
   { key: "dashboard/media-training", label: "Media training" },
   { key: "dashboard/mission-trips", label: "Mission trips" },
+  { key: "dashboard/upcoming-crusades", label: "Upcoming crusades" },
   { key: "dashboard/resources", label: "Resources admin" },
   { key: "dashboard/blue-elite", label: "Blue Elite" },
   { key: "registrations/blue-elite", label: "Blue Elite registrations" },

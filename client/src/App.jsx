@@ -26,6 +26,8 @@ import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistratio
 import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
 import { MissionTripRegistration } from "@/components/MissionTripRegistration";
 import { MissionTripAdmin } from "@/components/MissionTripAdmin";
+import { UpcomingCrusades } from "@/components/UpcomingCrusades";
+import { UpcomingCrusadesAdmin } from "@/components/UpcomingCrusadesAdmin";
 import { AvatarFrame } from "@/components/AvatarFrame";
 import { PublicTranslator } from "@/components/PublicTranslator";
 import { CrusadeCoverage } from "@/components/CrusadeCoverage";
@@ -51,6 +53,7 @@ const PAGE_META = [
   [/^\/select-nation$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Ministers can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", true, "/select-nation", "/national-missions-leadership.png"],
   [/^\/media-training$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", true, "/media-training", "/media-training-mobilisation.png"],
   [/^\/mission-trips$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", true, "/mission-trips", "/global-missions-trip-volunteer.png"],
+  [/^\/upcoming-crusades$/, "UPCOMING NIGHT OF A THOUSAND CRUSADES (NOTC) CRUSADES", "Zonal pastors with valid passports and destination access can select up to two planned international crusades they would like to attend.", true, "/upcoming-crusades"],
   [/^\/avatar$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", true, "/avatar", "/notc-avatar-frame.jpg"],
   [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
@@ -230,6 +233,7 @@ export default function App() {
         <Route path="/select-nation" element={<MissionNationSelection />} />
         <Route path="/media-training" element={<MediaTrainingRegistration />} />
         <Route path="/mission-trips" element={<MissionTripRegistration />} />
+        <Route path="/upcoming-crusades" element={<UpcomingCrusades />} />
         <Route path="/avatar" element={<AvatarFrame />} />
 
         {/* /admin lands on the configured default landing page */}
@@ -241,7 +245,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage", false, true], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage", false, true], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
           <Route path="/crusades" element={<PageGuard pageKey="crusades"><CrusadesTable /></PageGuard>} />
@@ -258,6 +262,7 @@ export default function App() {
           <Route path="/dashboard/mission-nations" element={<PageGuard pageKey="dashboard/mission-nations"><MissionNationAdmin /></PageGuard>} />
           <Route path="/dashboard/media-training" element={<PageGuard pageKey="dashboard/media-training"><MediaTrainingAdmin /></PageGuard>} />
           <Route path="/dashboard/mission-trips" element={<PageGuard pageKey="dashboard/mission-trips"><MissionTripAdmin /></PageGuard>} />
+          <Route path="/dashboard/upcoming-crusades" element={<PageGuard pageKey="dashboard/upcoming-crusades"><UpcomingCrusadesAdmin /></PageGuard>} />
           <Route path="/dashboard/blue-elite" element={<PageGuard pageKey="dashboard/blue-elite"><BlueEliteDashboard /></PageGuard>} />
           <Route path="/registrations/blue-elite" element={<PageGuard pageKey="registrations/blue-elite"><BlueEliteRegistrationsTable /></PageGuard>} />
         </Route>

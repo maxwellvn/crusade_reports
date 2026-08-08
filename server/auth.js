@@ -24,6 +24,7 @@ export const ASSIGNABLE_PAGES = [
   { key: "dashboard/mission-nations", label: "Mission nations", path: "/dashboard/mission-nations" },
   { key: "dashboard/media-training", label: "Media training", path: "/dashboard/media-training" },
   { key: "dashboard/mission-trips", label: "Mission trips", path: "/dashboard/mission-trips" },
+  { key: "dashboard/upcoming-crusades", label: "Upcoming crusades", path: "/dashboard/upcoming-crusades" },
   { key: "dashboard/resources", label: "Resources admin", path: "/dashboard/resources" },
   { key: "dashboard/blue-elite", label: "Blue Elite", path: "/dashboard/blue-elite" },
   { key: "registrations/blue-elite", label: "Blue Elite registrations", path: "/registrations/blue-elite" },
