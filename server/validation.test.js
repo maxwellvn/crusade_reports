@@ -8,6 +8,7 @@ import Database from "better-sqlite3";
 import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema, upcomingCrusadeInterestSchema } from "./validation.js";
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
+import { applyTranslationGlossary } from "./routes/translation.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
 import { deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
@@ -186,6 +187,12 @@ test("upcoming crusade interest requires zone identity and confirmed travel acce
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: [] }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE", "GH"] }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, designation: "" }).success, false);
+});
+
+test("Indonesian translations use the approved term for crusade", () => {
+  assert.equal(applyTranslationGlossary("id", "Perang Salib besar"), "Kebaktian Kebangunan Rohani (KKR) besar");
+  assert.equal(applyTranslationGlossary("id", "perang   salib"), "Kebaktian Kebangunan Rohani (KKR)");
+  assert.equal(applyTranslationGlossary("ms", "Perang Salib"), "Perang Salib");
 });
 
 test("media training accepts an individual trainee and supports admin filtering", () => {

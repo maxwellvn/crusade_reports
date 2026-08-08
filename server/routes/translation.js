@@ -19,6 +19,11 @@ const CODES = new Set(LANGUAGES.map(({ code }) => code));
 const cache = new Map();
 const usage = new Map();
 
+export function applyTranslationGlossary(target, value) {
+  if (target !== "id") return value;
+  return String(value).replace(/\bperang\s+salib\b/gi, "Kebaktian Kebangunan Rohani (KKR)");
+}
+
 function publicIp(value) {
   const ip = String(value || "").split(",")[0].trim().replace(/^::ffff:/, "");
   if (!ip || ip === "::1" || ip.startsWith("10.") || ip.startsWith("127.") || ip.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return "";
@@ -62,7 +67,11 @@ translation.post("/translate", wrap(async (req, res) => {
     if (!response.ok) throw new ApiError(502, "TRANSLATION_FAILED", body?.error?.message || "Google could not translate this page right now.");
     const results = body?.data?.translations || [];
     if (results.length !== missing.length) throw new ApiError(502, "TRANSLATION_FAILED", "Google returned an incomplete translation.");
-    results.forEach((item, position) => { const value = String(item.translatedText || ""); translated[indexes[position]] = value; cache.set(`${target}\0${missing[position]}`, value); });
+    results.forEach((item, position) => {
+      const value = applyTranslationGlossary(target, item.translatedText || "");
+      translated[indexes[position]] = value;
+      cache.set(`${target}\0${missing[position]}`, value);
+    });
     if (cache.size > 5000) cache.delete(cache.keys().next().value);
   }
   res.json({ translations: translated });
