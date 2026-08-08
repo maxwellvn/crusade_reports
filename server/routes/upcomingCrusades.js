@@ -37,9 +37,6 @@ upcomingCrusades.post("/interests", wrap(async (req, res) => {
 
   const zone = (await loadZones()).find((item) => item.zone.toLowerCase() === data.zone_name.toLowerCase());
   if (!zone) throw new ApiError(400, "INVALID_ZONE", "Choose a zone from the official directory.");
-  const group = data.group_name ? zone.groups.find((item) => item.name.toLowerCase() === data.group_name.toLowerCase()) : null;
-  if (data.group_name && !group) throw new ApiError(400, "INVALID_GROUP", "Choose a group that belongs to the selected zone, or leave group blank.");
-
   const reference = `UC-${new Date().getUTCFullYear()}-${randomBytes(4).toString("hex").toUpperCase()}`;
   try {
     db.prepare(`INSERT INTO upcoming_crusade_interests
@@ -52,7 +49,7 @@ upcomingCrusades.post("/interests", wrap(async (req, res) => {
        @passport_code, @passport_name, @passport_expiry, @opportunity_code, @nation, @dates, @names, @types, @cities,
        @second_code, @second_nation, @second_dates, @second_names, @second_types, @second_cities, @notes)`)
       .run({
-        reference, ...data, zone: zone.zone, group_name: group?.name || null,
+        reference, ...data, zone: zone.zone, group_name: null,
         kingschat_username: data.kingschat_username.replace(/^@/, ""),
         passport_code: passport.code, passport_name: passport.name,
         opportunity_code: opportunity.code, nation: opportunity.nation, dates: opportunity.dates, names: opportunity.names,
@@ -67,7 +64,7 @@ upcomingCrusades.post("/interests", wrap(async (req, res) => {
   }
   res.status(201).json({
     reference_code: reference, full_name: data.full_name, zone_name: zone.zone,
-    group_name: group?.name || "", opportunities: selected.map(({ code, nation, dates, names, cities }) => ({ code, nation, dates, names, cities })),
+    opportunities: selected.map(({ code, nation, dates, names, cities }) => ({ code, nation, dates, names, cities })),
   });
 }));
 

@@ -177,8 +177,8 @@ test("mission-trip volunteers identify their passport and accept partnership ter
 
 test("upcoming crusade interest requires zone identity and confirmed travel access", () => {
   const interest = {
-    full_name: "Pastor Example", zone_name: "LAGOS ZONE 1", group_name: "", email: "pastor@example.com",
-    kingschat_username: "pastorexample", phone_country_code: "+234", phone_number: "8012345678",
+    full_name: "Pastor Example", zone_name: "LAGOS ZONE 1", email: "pastor@example.com",
+    kingschat_username: "pastorexample", phone_country_code: "", phone_number: "",
     passport_country_code: "NG", passport_expiry: "2028-08", opportunity_codes: ["KE", "GH"],
     valid_passport: true, destination_access: true, available_to_travel: true, additional_information: "",
   };
@@ -187,6 +187,7 @@ test("upcoming crusade interest requires zone identity and confirmed travel acce
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, destination_access: false }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: [] }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE", "GH", "AO"] }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, phone_country_code: "+234", phone_number: "" }).success, false);
 });
 
 test("media training accepts an individual trainee and supports admin filtering", () => {

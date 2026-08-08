@@ -256,11 +256,10 @@ export const missionTripVolunteerSchema = z.object({
 export const upcomingCrusadeInterestSchema = z.object({
   full_name: z.string().trim().min(2, "Full name is required").max(200),
   zone_name: z.string().trim().min(2, "Select your zone").max(250),
-  group_name: z.string().trim().max(250).optional().default(""),
   email: z.string().trim().email("Enter a valid email address").max(254),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter a valid KingsChat username"),
-  phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"),
-  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  phone_country_code: z.string().refine((value) => value === "" || /^\+\d{1,4}$/.test(value), "Select a country code").optional().default(""),
+  phone_number: z.string().trim().refine((value) => value === "" || /^[\d ()-]{6,24}$/.test(value), "Enter a valid phone number").optional().default(""),
   passport_country_code: z.string().length(2, "Select your passport country").toUpperCase(),
   passport_expiry: z.string().regex(/^\d{4}-\d{2}$/, "Enter the passport expiry month"),
   opportunity_codes: z.array(z.string().length(2).toUpperCase()).min(1, "Select at least one upcoming crusade").max(2, "Select no more than two upcoming crusades").refine((codes) => new Set(codes).size === codes.length, "Choose two different upcoming crusades"),
@@ -268,6 +267,8 @@ export const upcomingCrusadeInterestSchema = z.object({
   destination_access: z.literal(true, { errorMap: () => ({ message: "Confirm your visa or visa-free access to this destination" }) }),
   available_to_travel: z.literal(true, { errorMap: () => ({ message: "Confirm that you are available to travel" }) }),
   additional_information: z.string().trim().max(2000).optional().default(""),
+}).superRefine((data, ctx) => {
+  if (Boolean(data.phone_number) !== Boolean(data.phone_country_code)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [data.phone_number ? "phone_country_code" : "phone_number"], message: "Enter both phone number and country code, or leave both blank" });
 });
 
 // Admin reconciliation of manually-typed org names: map a registration's zone
