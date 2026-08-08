@@ -1,5 +1,5 @@
 // Source: "LIST OF UPCOMING CRUSADES BY NETWORKS – NOTC NATIONS & CONTINENTS EDITION.pdf"
-// Multiple crusades for the same country are grouped into one selectable country card.
+// Source rows are expanded below so every selectable card represents one crusade.
 const CRUSADES = [
   { code: "AO", nation: "Angola", dates: "29 Aug", names: "Night of a Thousand Crusades - Jesus Alive", types: "Mega Crusade", cities: "Luanda" },
   { code: "AR", nation: "Argentina", dates: "29 Aug & 18 Sep", names: "Rhapsody Women Crusade; Light Up Argentina", types: "Leading Ladies; Mega Crusades", cities: "Formosa" },
@@ -18,7 +18,7 @@ const CRUSADES = [
   { code: "DO", nation: "Dominican Republic", dates: "Sep (date TBC)", names: "Dominican Republic for Jesus", types: "Other", cities: "Santo Domingo" },
   { code: "EG", nation: "Egypt", dates: "28 Aug", names: "Egypt Crusade", types: "Street Crusades", cities: "Balat" },
   { code: "GQ", nation: "Equatorial Guinea", dates: "29 Aug", names: "Night of a Thousand Crusades - Malabo", types: "Mega Crusades", cities: "Malabo" },
-  { code: "FJ", nation: "Fiji", dates: "29 Aug & 5 Sep", names: "Rugby Crusade; Rugby Nadi Crusade; Teaching Crusade", types: "Other; Community Crusades", cities: "Sigatoka, Nadi" },
+  { code: "FJ", nation: "Fiji", dates: "29 Aug, 29 Aug & 5 Sep", names: "Rugby Crusade; Rugby Nadi Crusade; Teaching Crusade", types: "Other; Community Crusades", cities: "Sigatoka, Nadi, Nadi" },
   { code: "FI", nation: "Finland", dates: "9 Aug", names: "Cell Crusade", types: "Street Crusades", cities: "Helsinki" },
   { code: "FR", nation: "France", dates: "15 Aug", names: "Eiffel Tower", types: "Street Crusades", cities: "Paris" },
   { code: "GT", nation: "Guatemala", dates: "28 Aug", names: "Light Up Guatemala", types: "Mega Crusades", cities: "San Juan Sacatepequez" },
@@ -27,8 +27,8 @@ const CRUSADES = [
   { code: "HT", nation: "Haiti", dates: "28 Aug", names: "Haiti for Jesus", types: "Other", cities: "Cap-Haitien" },
   { code: "HN", nation: "Honduras", dates: "13 Aug & 29 Aug", names: "Ministers Teaching Crusade; Rhapsody Crusade Honduras", types: "Mega Crusades", cities: "Santa Rosa de Copan, San Pedro Sula" },
   { code: "IN", nation: "India", dates: "23 Aug", names: "India Crusade", types: "Mega Crusades", cities: "Chennai" },
-  { code: "ID", nation: "Indonesia", dates: "29 Aug", names: "Bangkal Indonesia Crusade; Seruyan Indonesia Crusade; Cibubur Indonesia Crusade; Jakarta Indonesia Crusade; Manado Indonesia Crusade; Purukcahu Indonesia Crusade; Rambakulu Indonesia Crusade; Tumbang Jalemo Indonesia Crusade", types: "Mega Crusades", cities: "Bangkal, Cibubur, Jakarta, Manado, Purukcahu, Rambakulu City, Tumbang Jalemo" },
-  { code: "KE", nation: "Kenya", dates: "12 Aug, 21 Aug, 23 Aug, 27 Aug, 28 Aug, 30 Aug, 4 Sep & 6 Sep", names: "Kakamega County; Youth Aglow Crusade; Kisii University; Rongo University; Kodiaga Prison Crusade; Kitale Prison Crusade; Kisumu Prophetic Crusade; Tom Mboya University; Great Lakes University; Jaramogi Oginga Odinga University", types: "Street; Youths Aglow; Prison; Mega Crusades", cities: "Kakamega, Kisumu, Kisii, Rongo, Kitale, Homa Bay Town, Bondo" },
+  { code: "ID", nation: "Indonesia", dates: "29 Aug", names: "Bangkal Indonesia Crusade; Seruyan Indonesia Crusade; Cibubur Indonesia Crusade; Jakarta Indonesia Crusade; Manado Indonesia Crusade; Purukcahu Indonesia Crusade; Rambakulu Indonesia Crusade; Tumbang Jalemo Indonesia Crusade", types: "Mega Crusades", cities: "Bangkal, Bangkal, Cibubur, Jakarta, Manado, Purukcahu, Rambakulu City, Tumbang Jalemo" },
+  { code: "KE", nation: "Kenya", dates: "12 Aug, 21 Aug, 23 Aug, 23 Aug, 27 Aug, 27 Aug, 28 Aug, 30 Aug, 4 Sep & 6 Sep", names: "Kakamega County; Youth Aglow Crusade; Kisii University; Rongo University; Kodiaga Prison Crusade; Kitale Prison Crusade; Kisumu Prophetic Crusade; Tom Mboya University; Great Lakes University; Jaramogi Oginga Odinga University", types: "Street; Youths Aglow; Prison; Mega Crusades", cities: "Kakamega, Kisumu, Kisii, Rongo, Kisumu, Kitale, Kisumu, Homa Bay Town, Kisumu, Bondo" },
   { code: "MW", nation: "Malawi", dates: "30 Aug", names: "Chiradzulu Youths Aglow Crusade", types: "Community; Youths Aglow Crusades", cities: "Blantyre" },
   { code: "MU", nation: "Mauritius", dates: "28 Aug & 29 Aug", names: "Mauritius; Night of a Thousand Crusades - Mauritius", types: "Youths Aglow; No One Left Behind Crusades", cities: "Port Louis, Mahebourg" },
   { code: "ME", nation: "Montenegro", dates: "4 Sep", names: "Night of a Thousand Crusades Montenegro", types: "Community Crusades", cities: "Podgorica" },
@@ -38,7 +38,7 @@ const CRUSADES = [
   { code: "PK", nation: "Pakistan", dates: "23 Aug, 25 Aug & 29 Aug", names: "Rhapsody End-Time Crusades; Healing Crusade", types: "Mega; Village; Street; Football Stadium Crusades", cities: "Multiple cities across Pakistan" },
   { code: "PA", nation: "Panama", dates: "6 Sep", names: "Panama City Crusade", types: "Mega Crusades", cities: "Panama City" },
   { code: "PG", nation: "Papua New Guinea", dates: "15 Aug, 20 Aug, 23 Aug, 29 Aug, 31 Aug & 5 Sep", names: "Mile Community; Gaire Village Crusade; Tubusereia Village; Papua New Guinea Mega Crusade 1; Boroka; Mega Crusade", types: "Community; Village; Mega; Other", cities: "Port Moresby" },
-  { code: "PY", nation: "Paraguay", dates: "23 Aug, 29 Aug & 30 Aug", names: "Rhapsody Crusade; Rhapsody Military Crusade; Rhapsody Prison Crusades; Rhapsody Crusade Encarnacion", types: "Mega; Prison Crusades", cities: "Lambaré, Ypané, Asunción, Encarnacion" },
+  { code: "PY", nation: "Paraguay", dates: "23 Aug, 29 Aug, 30 Aug & 30 Aug", names: "Rhapsody Crusade; Rhapsody Military Crusade; Rhapsody Prison Crusades; Rhapsody Crusade Encarnacion", types: "Mega; Prison Crusades", cities: "Lambaré, Ypané, Asunción, Encarnacion" },
   { code: "PR", nation: "Puerto Rico", dates: "28 Aug", names: "Puerto Rico for Jesus", types: "Other", cities: "San Juan" },
   { code: "WS", nation: "Samoa", dates: "29 Aug", names: "Teaching Crusade", types: "Community Crusades", cities: "Apia" },
   { code: "SG", nation: "Singapore", dates: "29 Aug", names: "Singapore Crusade", types: "Mega Crusades", cities: "Singapore" },
@@ -51,7 +51,7 @@ const CRUSADES = [
   { code: "GB", nation: "United Kingdom", dates: "30 Aug", names: "Night of a Thousand Crusades Scotland", types: "Mega Crusades", cities: "Scotlandwell" },
   { code: "VU", nation: "Vanuatu", dates: "30 Aug", names: "Vanuatu for Jesus", types: "Community Crusades", cities: "Port Vila" },
   { code: "VE", nation: "Venezuela", dates: "28 Aug & Sep (date TBC)", names: "Light Up Barquisimeto; Night of a Thousand Crusades - Maximum Impact Zulia City", types: "Mega Crusades", cities: "Barquisimeto, Zulia City" },
-  { code: "VN", nation: "Vietnam", dates: "24 Aug, 25 Aug, 26 Aug & 29 Aug", names: "Light Up Vietnam", types: "Village Crusades", cities: "Ca Mau City, Ho Chi Minh City, Bac Lieu, Can Tho, Daklak" },
+  { code: "VN", nation: "Vietnam", dates: "24 Aug, 25 Aug, 26 Aug, 26 Aug & 29 Aug", names: "Light Up Vietnam", types: "Village Crusades", cities: "Ca Mau City, Ho Chi Minh City, Bac Lieu, Can Tho, Daklak" },
 ];
 
 const MONTHS = { Aug: 7, Sep: 8, Oct: 9 };
@@ -68,5 +68,31 @@ function arrivalDates(dates) {
   return arrivals.length ? arrivals.join(", ") : "One week before the confirmed date";
 }
 
-export const UPCOMING_CRUSADES = CRUSADES.map((item) => ({ ...item, year: 2026, arrival_dates: arrivalDates(item.dates) }));
+function split(value, separator) {
+  return String(value).split(separator).map((part) => part.trim()).filter(Boolean);
+}
+
+function expandCrusades(item) {
+  const names = split(item.names, /\s*;\s*/);
+  const dates = split(item.dates, /\s*(?:,|&)\s*/);
+  const cities = split(item.cities, /\s*,\s*/);
+  const count = Math.max(names.length, dates.length, cities.length);
+  const valueAt = (values, index) => values.length === 1 ? values[0] : values[Math.min(index, values.length - 1)];
+
+  return Array.from({ length: count }, (_, index) => {
+    const crusadeDate = valueAt(dates, index);
+    return {
+      ...item,
+      code: `${item.code}-${String(index + 1).padStart(2, "0")}`,
+      country_code: item.code,
+      names: valueAt(names, index),
+      dates: crusadeDate,
+      cities: valueAt(cities, index),
+      year: 2026,
+      arrival_dates: arrivalDates(crusadeDate),
+    };
+  });
+}
+
+export const UPCOMING_CRUSADES = CRUSADES.flatMap(expandCrusades);
 export const upcomingCrusadeByCode = new Map(UPCOMING_CRUSADES.map((item) => [item.code, item]));

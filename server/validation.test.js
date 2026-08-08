@@ -9,6 +9,7 @@ import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrat
 import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { applyTranslationGlossary } from "./routes/translation.js";
+import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
 import { deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
@@ -179,14 +180,20 @@ test("mission-trip volunteers identify their passport and accept partnership ter
 test("upcoming crusade interest requires zone identity and confirmed travel access", () => {
   const interest = {
     designation: "Zonal Pastor", full_name: "Pastor Example", zone_name: "LAGOS ZONE 1", group_name: "",
-    passport_country_code: "NG", opportunity_codes: ["KE"],
+    passport_country_code: "NG", opportunity_codes: ["KE-01"],
     additional_information: "",
   };
   assert.equal(upcomingCrusadeInterestSchema.safeParse(interest).success, true);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, zone_name: "" }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: [] }).success, false);
-  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE", "GH"] }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE-01", "GH-01"] }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, designation: "" }).success, false);
+});
+
+test("upcoming crusades are offered as individual choices", () => {
+  assert.equal(new Set(UPCOMING_CRUSADES.map(({ code }) => code)).size, UPCOMING_CRUSADES.length);
+  assert.equal(UPCOMING_CRUSADES.some(({ names }) => names.includes(";")), false);
+  assert.equal(UPCOMING_CRUSADES.some(({ dates }) => /[,&]/.test(dates)), false);
 });
 
 test("Indonesian translations use the approved term for crusade", () => {

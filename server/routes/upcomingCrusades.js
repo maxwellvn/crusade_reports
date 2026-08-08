@@ -98,7 +98,7 @@ upcomingCrusades.get("/admin", requirePageAccess("dashboard/upcoming-crusades"),
     filter_options: {
       zones: db.prepare("SELECT DISTINCT zone_name name FROM upcoming_crusade_interests ORDER BY name COLLATE NOCASE").all().map((row) => row.name),
       passports: db.prepare("SELECT DISTINCT passport_country_code code, passport_country_name name FROM upcoming_crusade_interests ORDER BY name COLLATE NOCASE").all(),
-      destinations: UPCOMING_CRUSADES.map(({ code, nation }) => ({ code, name: nation })),
+      destinations: UPCOMING_CRUSADES.map(({ code, nation, names, cities }) => ({ code, name: `${nation} — ${names} — ${cities}` })),
     },
   });
 }));
