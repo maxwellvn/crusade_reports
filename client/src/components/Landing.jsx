@@ -122,7 +122,7 @@ const INITIATIVES = [
   {
     to: "/upcoming-crusades",
     title: "Upcoming Crusades",
-    copy: "We have crusades planned across nations and cities. Zonal pastors with valid passports and destination access can select up to two nations they would like to visit.",
+    copy: "We have crusades planned across nations and cities. Participants can select one preferred crusade and review the relevant travel details.",
     action: "Choose an upcoming crusade",
     image: "/assets/globe.webp",
     tone: "cyan",

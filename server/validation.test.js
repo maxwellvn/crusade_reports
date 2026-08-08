@@ -177,17 +177,15 @@ test("mission-trip volunteers identify their passport and accept partnership ter
 
 test("upcoming crusade interest requires zone identity and confirmed travel access", () => {
   const interest = {
-    full_name: "Pastor Example", zone_name: "LAGOS ZONE 1", email: "pastor@example.com",
-    kingschat_username: "pastorexample", phone_country_code: "", phone_number: "",
-    passport_country_code: "NG", passport_expiry: "2028-08", opportunity_codes: ["KE", "GH"],
-    valid_passport: true, destination_access: true, available_to_travel: true, additional_information: "",
+    designation: "Zonal Pastor", full_name: "Pastor Example", zone_name: "LAGOS ZONE 1", group_name: "",
+    passport_country_code: "NG", opportunity_codes: ["KE"],
+    additional_information: "",
   };
   assert.equal(upcomingCrusadeInterestSchema.safeParse(interest).success, true);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, zone_name: "" }).success, false);
-  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, destination_access: false }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: [] }).success, false);
-  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE", "GH", "AO"] }).success, false);
-  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, phone_country_code: "+234", phone_number: "" }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE", "GH"] }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, designation: "" }).success, false);
 });
 
 test("media training accepts an individual trainee and supports admin filtering", () => {

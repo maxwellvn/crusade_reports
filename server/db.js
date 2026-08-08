@@ -422,6 +422,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS upcoming_crusade_interests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     reference_code TEXT NOT NULL UNIQUE,
+    designation TEXT NOT NULL DEFAULT '',
     full_name TEXT NOT NULL,
     zone_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
     group_name TEXT,
@@ -459,6 +460,7 @@ const upcomingInterestColumns = new Set(db.prepare("PRAGMA table_info(upcoming_c
 for (const column of ["second_opportunity_code", "second_opportunity_nation", "second_opportunity_dates", "second_opportunity_names", "second_opportunity_types", "second_opportunity_cities"]) {
   if (!upcomingInterestColumns.has(column)) db.exec(`ALTER TABLE upcoming_crusade_interests ADD COLUMN ${column} TEXT`);
 }
+if (!upcomingInterestColumns.has("designation")) db.exec("ALTER TABLE upcoming_crusade_interests ADD COLUMN designation TEXT NOT NULL DEFAULT ''");
 
 // Custom media roles require removing the original three-role CHECK while
 // preserving every existing trainee and its registration relationship.

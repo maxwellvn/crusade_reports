@@ -33,24 +33,24 @@ upcomingCrusades.post("/interests", wrap(async (req, res) => {
   const passport = countries.get(data.passport_country_code);
   if (selected.some((item) => !item)) throw new ApiError(400, "INVALID_CRUSADE", "Choose upcoming crusades from the published list.");
   if (!passport) throw new ApiError(400, "INVALID_PASSPORT", "Choose your passport country from the provided list.");
-  if (data.passport_expiry < new Date().toISOString().slice(0, 7)) throw new ApiError(400, "PASSPORT_EXPIRED", "Your passport expiry must be in the future.");
-
   const zone = (await loadZones()).find((item) => item.zone.toLowerCase() === data.zone_name.toLowerCase());
   if (!zone) throw new ApiError(400, "INVALID_ZONE", "Choose a zone from the official directory.");
+  const group = data.group_name ? zone.groups.find((item) => item.name.toLowerCase() === data.group_name.toLowerCase()) : null;
+  if (data.group_name && !group) throw new ApiError(400, "INVALID_GROUP", "Choose a group that belongs to the selected zone, or leave group blank.");
   const reference = `UC-${new Date().getUTCFullYear()}-${randomBytes(4).toString("hex").toUpperCase()}`;
   try {
     db.prepare(`INSERT INTO upcoming_crusade_interests
-      (reference_code, full_name, zone_name, group_name, email, kingschat_username, phone_country_code, phone_number,
+      (reference_code, designation, full_name, zone_name, group_name, email, kingschat_username, phone_country_code, phone_number,
        passport_country_code, passport_country_name, passport_expiry, opportunity_code, opportunity_nation,
        opportunity_dates, opportunity_names, opportunity_types, opportunity_cities, second_opportunity_code,
        second_opportunity_nation, second_opportunity_dates, second_opportunity_names, second_opportunity_types,
        second_opportunity_cities, additional_information)
-      VALUES (@reference, @full_name, @zone, @group_name, @email, @kingschat_username, @phone_country_code, @phone_number,
+      VALUES (@reference, @designation, @full_name, @zone, @group_name, @email, @kingschat_username, @phone_country_code, @phone_number,
        @passport_code, @passport_name, @passport_expiry, @opportunity_code, @nation, @dates, @names, @types, @cities,
        @second_code, @second_nation, @second_dates, @second_names, @second_types, @second_cities, @notes)`)
       .run({
-        reference, ...data, zone: zone.zone, group_name: null,
-        kingschat_username: data.kingschat_username.replace(/^@/, ""),
+        reference, ...data, zone: zone.zone, group_name: group?.name || null, passport_expiry: "",
+        email: "", kingschat_username: "", phone_country_code: "", phone_number: "",
         passport_code: passport.code, passport_name: passport.name,
         opportunity_code: opportunity.code, nation: opportunity.nation, dates: opportunity.dates, names: opportunity.names,
         types: opportunity.types, cities: opportunity.cities, notes: data.additional_information || null,
@@ -64,7 +64,7 @@ upcomingCrusades.post("/interests", wrap(async (req, res) => {
   }
   res.status(201).json({
     reference_code: reference, full_name: data.full_name, zone_name: zone.zone,
-    opportunities: selected.map(({ code, nation, dates, names, cities }) => ({ code, nation, dates, names, cities })),
+    group_name: group?.name || "", opportunities: selected.map(({ code, nation, dates, arrival_dates, names, cities }) => ({ code, nation, dates, arrival_dates, names, cities })),
   });
 }));
 
@@ -76,7 +76,7 @@ const SORTS = {
 function rows(query = {}) {
   const where = []; const params = {};
   const q = String(query.q || "").trim().slice(0, 100);
-  if (q) { where.push("(full_name LIKE @q OR zone_name LIKE @q OR group_name LIKE @q OR email LIKE @q OR kingschat_username LIKE @q OR opportunity_nation LIKE @q OR reference_code LIKE @q)"); params.q = `%${q}%`; }
+  if (q) { where.push("(full_name LIKE @q OR designation LIKE @q OR zone_name LIKE @q OR group_name LIKE @q OR opportunity_nation LIKE @q OR reference_code LIKE @q)"); params.q = `%${q}%`; }
   for (const [key, column] of [["zone", "zone_name"], ["destination", "opportunity_code"], ["passport", "passport_country_code"]]) {
     const value = String(query[key] || "").trim().slice(0, 250);
     if (value) {
@@ -104,13 +104,12 @@ upcomingCrusades.get("/admin", requirePageAccess("dashboard/upcoming-crusades"),
 }));
 
 const columns = [
-  { header: "Reference", value: (row) => row.reference_code }, { header: "Name", value: (row) => row.full_name },
+  { header: "Reference", value: (row) => row.reference_code }, { header: "Designation", value: (row) => row.designation }, { header: "Name", value: (row) => row.full_name },
   { header: "Zone", value: (row) => row.zone_name }, { header: "Group", value: (row) => row.group_name },
   { header: "Selected nations", value: (row) => [row.opportunity_nation, row.second_opportunity_nation].filter(Boolean).join("; ") }, { header: "Crusade dates", value: (row) => [row.opportunity_dates, row.second_opportunity_dates].filter(Boolean).join("; ") },
   { header: "Crusades", value: (row) => [row.opportunity_names, row.second_opportunity_names].filter(Boolean).join("; ") }, { header: "Cities", value: (row) => [row.opportunity_cities, row.second_opportunity_cities].filter(Boolean).join("; ") },
-  { header: "Passport", value: (row) => row.passport_country_name }, { header: "Passport expiry", value: (row) => row.passport_expiry },
-  { header: "Email", value: (row) => row.email }, { header: "Phone", value: (row) => `${row.phone_country_code} ${row.phone_number}` },
-  { header: "KingsChat", value: (row) => `@${row.kingschat_username}` }, { header: "Additional information", value: (row) => row.additional_information },
+  { header: "Passport", value: (row) => row.passport_country_name },
+  { header: "Additional information", value: (row) => row.additional_information },
   { header: "Submitted at (UTC)", value: (row) => row.created_at },
 ];
 
