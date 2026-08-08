@@ -4,7 +4,7 @@ import { db } from "../db.js";
 import { requirePageAccess } from "../auth.js";
 import { ApiError, wrap } from "../logger.js";
 import { upcomingCrusadeInterestSchema } from "../validation.js";
-import { UPCOMING_CRUSADES, upcomingCrusadeByCode } from "../upcomingCrusadesData.js";
+import { arrivalDates, UPCOMING_CRUSADES, upcomingCrusadeByCode } from "../upcomingCrusadesData.js";
 import { COUNTRIES } from "./countries.js";
 import { loadZones } from "./zones.js";
 import { sendExport } from "./exporter.js";
@@ -12,26 +12,39 @@ import { sendExport } from "./exporter.js";
 export const upcomingCrusades = Router();
 const countries = new Map(COUNTRIES.map((item) => [item.code, item]));
 
-function catalogue() {
+export function upcomingCrusadeCatalogue({ includeRemoved = false } = {}) {
   const totals = new Map(db.prepare(`SELECT code, COUNT(*) count FROM (
     SELECT opportunity_code code FROM upcoming_crusade_interests
     UNION ALL SELECT second_opportunity_code code FROM upcoming_crusade_interests WHERE second_opportunity_code IS NOT NULL
   ) GROUP BY code`).all().map((row) => [row.code, row.count]));
-  return UPCOMING_CRUSADES.map((item) => ({ ...item, interest_count: totals.get(item.code) || 0 }));
+  const assigned = new Set(db.prepare("SELECT opportunity_code FROM upcoming_crusade_assignments").all().map((row) => row.opportunity_code));
+  const removed = new Set(db.prepare("SELECT opportunity_code FROM upcoming_crusade_removed").all().map((row) => row.opportunity_code));
+  const overrides = new Map(db.prepare("SELECT * FROM upcoming_crusade_overrides").all().map((row) => [row.opportunity_code, row]));
+  return UPCOMING_CRUSADES
+    .filter((item) => includeRemoved || !removed.has(item.code))
+    .map((item) => {
+      const override = overrides.get(item.code);
+      const details = override ? { nation: override.nation, names: override.names, dates: override.dates, cities: override.cities, arrival_dates: arrivalDates(override.dates) } : {};
+      return { ...item, ...details, interest_count: totals.get(item.code) || 0, assigned: assigned.has(item.code), removed: removed.has(item.code) };
+    });
 }
 
 upcomingCrusades.get("/", wrap((_req, res) => {
-  res.json({ opportunities: catalogue(), total: UPCOMING_CRUSADES.length });
+  const opportunities = upcomingCrusadeCatalogue();
+  res.json({ opportunities, total: opportunities.length });
 }));
 
 upcomingCrusades.post("/interests", wrap(async (req, res) => {
   const parsed = upcomingCrusadeInterestSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, "VALIDATION", parsed.error.issues[0]?.message || "Check the required details.");
   const data = parsed.data;
-  const selected = data.opportunity_codes.map((code) => upcomingCrusadeByCode.get(code));
+  const currentCatalogue = new Map(upcomingCrusadeCatalogue({ includeRemoved: true }).map((item) => [item.code, item]));
+  const selected = data.opportunity_codes.map((code) => currentCatalogue.get(code));
   const [opportunity, secondOpportunity] = selected;
   const passport = countries.get(data.passport_country_code);
   if (selected.some((item) => !item)) throw new ApiError(400, "INVALID_CRUSADE", "Choose upcoming crusades from the published list.");
+  if (selected.some((item) => item.assigned)) throw new ApiError(409, "CRUSADE_ASSIGNED", "That crusade has already been assigned. Please choose another crusade.");
+  if (selected.some((item) => item.removed)) throw new ApiError(409, "CRUSADE_REMOVED", "That crusade is no longer available. Please choose another crusade.");
   if (!passport) throw new ApiError(400, "INVALID_PASSPORT", "Choose your passport country from the provided list.");
   const zone = (await loadZones()).find((item) => item.zone.toLowerCase() === data.zone_name.toLowerCase());
   if (!zone) throw new ApiError(400, "INVALID_ZONE", "Choose a zone from the official directory.");
@@ -95,12 +108,44 @@ upcomingCrusades.get("/admin", requirePageAccess("dashboard/upcoming-crusades"),
     rows: result,
     total: db.prepare("SELECT COUNT(*) count FROM upcoming_crusade_interests").get().count,
     filtered_total: result.length,
+    opportunities: upcomingCrusadeCatalogue({ includeRemoved: true }),
     filter_options: {
       zones: db.prepare("SELECT DISTINCT zone_name name FROM upcoming_crusade_interests ORDER BY name COLLATE NOCASE").all().map((row) => row.name),
       passports: db.prepare("SELECT DISTINCT passport_country_code code, passport_country_name name FROM upcoming_crusade_interests ORDER BY name COLLATE NOCASE").all(),
       destinations: UPCOMING_CRUSADES.map(({ code, nation, names, cities }) => ({ code, name: `${nation} — ${names} — ${cities}` })),
     },
   });
+}));
+
+upcomingCrusades.patch("/admin/opportunities/:code", requirePageAccess("dashboard/upcoming-crusades"), wrap((req, res) => {
+  const opportunity = upcomingCrusadeByCode.get(String(req.params.code).toUpperCase());
+  if (!opportunity) throw new ApiError(404, "INVALID_CRUSADE", "Crusade not found.");
+  if (typeof req.body?.assigned !== "boolean" && typeof req.body?.removed !== "boolean" && !req.body?.details) throw new ApiError(400, "VALIDATION", "Choose crusade details or a status to update.");
+  if (req.body.assigned === true) {
+    db.prepare("INSERT OR IGNORE INTO upcoming_crusade_assignments (opportunity_code) VALUES (?)").run(opportunity.code);
+  } else if (req.body.assigned === false) {
+    db.prepare("DELETE FROM upcoming_crusade_assignments WHERE opportunity_code = ?").run(opportunity.code);
+  }
+  if (req.body.removed === false) db.prepare("DELETE FROM upcoming_crusade_removed WHERE opportunity_code = ?").run(opportunity.code);
+  if (req.body.details) {
+    const details = Object.fromEntries(["nation", "names", "dates", "cities"].map((key) => [key, String(req.body.details[key] || "").trim()]));
+    if (Object.values(details).some((value) => value.length < 2 || value.length > 250)) throw new ApiError(400, "VALIDATION", "Complete the nation, crusade name, date, and city fields.");
+    db.prepare(`INSERT INTO upcoming_crusade_overrides (opportunity_code, nation, names, dates, cities, updated_at)
+      VALUES (@code, @nation, @names, @dates, @cities, datetime('now'))
+      ON CONFLICT(opportunity_code) DO UPDATE SET nation = excluded.nation, names = excluded.names, dates = excluded.dates, cities = excluded.cities, updated_at = excluded.updated_at`)
+      .run({ code: opportunity.code, ...details });
+  }
+  res.json({ code: opportunity.code, assigned: req.body.assigned, removed: req.body.removed, updated: Boolean(req.body.details) });
+}));
+
+upcomingCrusades.delete("/admin/opportunities/:code", requirePageAccess("dashboard/upcoming-crusades"), wrap((req, res) => {
+  const opportunity = upcomingCrusadeByCode.get(String(req.params.code).toUpperCase());
+  if (!opportunity) throw new ApiError(404, "INVALID_CRUSADE", "Crusade not found.");
+  db.transaction(() => {
+    db.prepare("INSERT OR IGNORE INTO upcoming_crusade_removed (opportunity_code) VALUES (?)").run(opportunity.code);
+    db.prepare("DELETE FROM upcoming_crusade_assignments WHERE opportunity_code = ?").run(opportunity.code);
+  })();
+  res.status(204).end();
 }));
 
 const columns = [

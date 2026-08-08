@@ -57,7 +57,7 @@ const CRUSADES = [
 const MONTHS = { Aug: 7, Sep: 8, Oct: 9 };
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function arrivalDates(dates) {
+export function arrivalDates(dates) {
   const arrivals = [...dates.matchAll(/(\d{1,2})(?:-(\d{1,2}))?\s+(Aug|Sep|Oct)/g)].map((match) => {
     const arrival = (day) => {
       const date = new Date(Date.UTC(2026, MONTHS[match[3]], Number(day) - 7));

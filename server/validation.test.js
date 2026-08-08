@@ -10,6 +10,7 @@ import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, 
 import { db } from "./db.js";
 import { applyTranslationGlossary } from "./routes/translation.js";
 import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
+import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
 import { deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
@@ -194,6 +195,26 @@ test("upcoming crusades are offered as individual choices", () => {
   assert.equal(new Set(UPCOMING_CRUSADES.map(({ code }) => code)).size, UPCOMING_CRUSADES.length);
   assert.equal(UPCOMING_CRUSADES.some(({ names }) => names.includes(";")), false);
   assert.equal(UPCOMING_CRUSADES.some(({ dates }) => /[,&]/.test(dates)), false);
+});
+
+test("upcoming crusade admin states control and edit the public catalogue", () => {
+  const code = UPCOMING_CRUSADES[0].code;
+  const cleanup = () => {
+    db.prepare("DELETE FROM upcoming_crusade_assignments WHERE opportunity_code = ?").run(code);
+    db.prepare("DELETE FROM upcoming_crusade_removed WHERE opportunity_code = ?").run(code);
+    db.prepare("DELETE FROM upcoming_crusade_overrides WHERE opportunity_code = ?").run(code);
+  };
+  cleanup();
+  try {
+    db.prepare("INSERT INTO upcoming_crusade_assignments (opportunity_code) VALUES (?)").run(code);
+    db.prepare("INSERT INTO upcoming_crusade_removed (opportunity_code) VALUES (?)").run(code);
+    db.prepare("INSERT INTO upcoming_crusade_overrides (opportunity_code, nation, names, dates, cities) VALUES (?, ?, ?, ?, ?)").run(code, "Edited nation", "Edited crusade", "29 Aug", "Edited city");
+    assert.equal(upcomingCrusadeCatalogue().some((item) => item.code === code), false);
+    const managed = upcomingCrusadeCatalogue({ includeRemoved: true }).find((item) => item.code === code);
+    assert.deepEqual({ assigned: managed.assigned, removed: managed.removed, nation: managed.nation, names: managed.names, dates: managed.dates, cities: managed.cities, arrival_dates: managed.arrival_dates }, { assigned: true, removed: true, nation: "Edited nation", names: "Edited crusade", dates: "29 Aug", cities: "Edited city", arrival_dates: "22 Aug" });
+  } finally {
+    cleanup();
+  }
 });
 
 test("Indonesian translations use the approved term for crusade", () => {

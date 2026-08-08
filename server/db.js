@@ -454,6 +454,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_upcoming_interest_created ON upcoming_crusade_interests(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_upcoming_interest_destination ON upcoming_crusade_interests(opportunity_code);
   CREATE INDEX IF NOT EXISTS idx_upcoming_interest_passport ON upcoming_crusade_interests(passport_country_code);
+
+  CREATE TABLE IF NOT EXISTS upcoming_crusade_assignments (
+    opportunity_code TEXT PRIMARY KEY,
+    assigned_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS upcoming_crusade_removed (
+    opportunity_code TEXT PRIMARY KEY,
+    removed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS upcoming_crusade_overrides (
+    opportunity_code TEXT PRIMARY KEY,
+    nation TEXT NOT NULL,
+    names TEXT NOT NULL,
+    dates TEXT NOT NULL,
+    cities TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 const upcomingInterestColumns = new Set(db.prepare("PRAGMA table_info(upcoming_crusade_interests)").all().map((column) => column.name));
