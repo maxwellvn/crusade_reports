@@ -197,6 +197,20 @@ test("upcoming crusades are offered as individual choices", () => {
   assert.equal(UPCOMING_CRUSADES.some(({ dates }) => /[,&]/.test(dates)), false);
 });
 
+test("upcoming crusade corrections preserve the approved individual schedule", () => {
+  const country = (code) => UPCOMING_CRUSADES.filter((item) => item.country_code === code);
+  assert.deepEqual(country("CG").map(({ names, dates }) => [names, dates]), [["Makelele City Wide Crusade", "28 Aug"]]);
+  assert.deepEqual(country("FJ").map(({ names, dates, cities }) => [names, dates, cities]), [["Rhapsody End-Time Crusade", "29 Aug", "Sigatoka"], ["Rhapsody End-Time Crusade", "5 Sep", "Nadi"]]);
+  assert.equal(country("FI").length, 0);
+  assert.equal(country("FR")[0].names, "Eiffel Tower Crusade");
+  assert.equal(country("IN")[0].names, "Rhapsody End-Time Crusade, India");
+  assert.equal(country("KE").length, 10);
+  assert.deepEqual(country("MU").map(({ names }) => names), ["Youths Aglow Crusade Mauritius", "Rhapsody End-Time Crusade - Mauritius"]);
+  assert.equal(country("PK").length, 14);
+  assert.equal(country("PG").length, 5);
+  assert.deepEqual(country("VN").map(({ names }) => names), ["Light Up Ca Mau City", "Light Up Ho Chi Minh", "Light Up Bac Lieu", "Light Up Can Tho", "Light Up Daklak"]);
+});
+
 test("upcoming crusade admin states control and edit the public catalogue", () => {
   const code = UPCOMING_CRUSADES[0].code;
   const cleanup = () => {
