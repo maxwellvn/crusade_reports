@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
 import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema, upcomingCrusadeInterestSchema } from "./validation.js";
-import { isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
+import { createDashboardSession, dashboardSessionUser, DASHBOARD_SESSION_MAX_AGE_MS, isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { applyTranslationGlossary } from "./routes/translation.js";
 import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
@@ -428,6 +428,21 @@ test("only maxwellvn is recognized as the super admin", () => {
   assert.equal(isSuperAdminUsername(" @MaxwellVN "), true);
   assert.equal(isSuperAdminUsername("another.admin"), false);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM dashboard_accounts WHERE username = 'maxwellvn' COLLATE NOCASE").get().n, 1);
+});
+
+test("dashboard sessions remain valid for exactly one week", () => {
+  const now = Date.UTC(2026, 7, 10);
+  db.exec("BEGIN");
+  try {
+    const token = createDashboardSession({ username: "session.admin", name: "Session Admin" }, now);
+    assert.equal(DASHBOARD_SESSION_MAX_AGE_MS, 7 * 24 * 60 * 60 * 1000);
+    assert.equal(dashboardSessionUser(token, now + DASHBOARD_SESSION_MAX_AGE_MS - 1)?.username, "session.admin");
+    assert.equal(dashboardSessionUser(token, now + DASHBOARD_SESSION_MAX_AGE_MS), null);
+    const stored = db.prepare("SELECT token_hash FROM dashboard_sessions WHERE username = 'session.admin'").get();
+    assert.notEqual(stored.token_hash, token);
+  } finally {
+    db.exec("ROLLBACK");
+  }
 });
 
 test("account management middleware rejects every approved user except maxwellvn", async () => {

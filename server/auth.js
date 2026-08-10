@@ -1,10 +1,13 @@
 import { Router } from "express";
+import { createHash, randomBytes } from "node:crypto";
 import { db } from "./db.js";
 import { ApiError, wrap } from "./logger.js";
 import { getDefaultLandingPage } from "./appSettings.js";
 
 export const auth = Router();
-const COOKIE = "kc_access_token";
+const KINGSCHAT_COOKIE = "kc_access_token";
+const SESSION_COOKIE = "dashboard_session";
+export const DASHBOARD_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const profileCache = new Map();
 export const SUPER_ADMIN_USERNAME = "maxwellvn";
 
@@ -63,7 +66,30 @@ function cookie(req, name) {
 
 function accessToken(req) {
   const bearer = String(req.get("authorization") || "");
-  return cookie(req, COOKIE) || (bearer.startsWith("Bearer ") ? bearer.slice(7) : "");
+  return cookie(req, KINGSCHAT_COOKIE) || (bearer.startsWith("Bearer ") ? bearer.slice(7) : "");
+}
+
+const sessionTokenHash = (token) => createHash("sha256").update(token).digest("hex");
+
+export function createDashboardSession(user, now = Date.now()) {
+  const token = randomBytes(32).toString("base64url");
+  db.prepare(`
+    INSERT INTO dashboard_sessions (token_hash, username, name, user_id, avatar, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(sessionTokenHash(token), user.username, user.name || "", user.user_id || "", user.avatar || "", now + DASHBOARD_SESSION_MAX_AGE_MS);
+  db.prepare("DELETE FROM dashboard_sessions WHERE expires_at <= ?").run(now);
+  return token;
+}
+
+export function dashboardSessionUser(token, now = Date.now()) {
+  if (!token) return null;
+  const row = db.prepare(`
+    SELECT username, name, user_id, avatar
+    FROM dashboard_sessions
+    WHERE token_hash = ? AND expires_at > ?
+  `).get(sessionTokenHash(token), now);
+  if (!row) return null;
+  return { ...row, is_super_admin: isSuperAdminUsername(row.username) };
 }
 
 async function fetchKingsChatProfile(token) {
@@ -157,9 +183,15 @@ export async function lookupKingsChatUser(token, requestedUsername, signedInUser
 }
 
 async function authorizedUser(req) {
-  const token = accessToken(req);
-  if (!token) throw new ApiError(401, "UNAUTHORIZED", "Sign in with KingsChat to continue.");
-  const user = await fetchKingsChatProfile(token);
+  const sessionToken = cookie(req, SESSION_COOKIE);
+  let user = dashboardSessionUser(sessionToken);
+  // Bearer tokens and pre-deployment cookies remain supported until users next
+  // sign in, while normal browser sessions use the persistent portal session.
+  if (!user) {
+    const token = accessToken(req);
+    if (!token) throw new ApiError(401, "UNAUTHORIZED", "Sign in with KingsChat to continue.");
+    user = await fetchKingsChatProfile(token);
+  }
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
     throw new ApiError(403, "FORBIDDEN", `@${user.username} does not have dashboard access.`);
   }
@@ -255,27 +287,37 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
   if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
     return res.redirect(`${landing}?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
   }
-  res.cookie(COOKIE, token, {
+  const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: DASHBOARD_SESSION_MAX_AGE_MS,
     path: "/",
-  });
+  };
+  res.cookie(KINGSCHAT_COOKIE, token, cookieOptions);
+  res.cookie(SESSION_COOKIE, createDashboardSession(user), cookieOptions);
   res.redirect(landing);
 }));
 
 auth.get("/me", wrap(async (req, res) => res.json(await authorizedUser(req))));
 
-auth.post("/logout", (_req, res) => {
-  res.clearCookie(COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+function clearSession(req, res) {
+  const token = cookie(req, SESSION_COOKIE);
+  if (token) db.prepare("DELETE FROM dashboard_sessions WHERE token_hash = ?").run(sessionTokenHash(token));
+  const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" };
+  res.clearCookie(KINGSCHAT_COOKIE, options);
+  res.clearCookie(SESSION_COOKIE, options);
+}
+
+auth.post("/logout", (req, res) => {
+  clearSession(req, res);
   res.json({ ok: true });
 });
 
 // GET logout — clears the session cookie and redirects to the configured landing
 // page. Lets you log out by visiting a URL directly (e.g. /api/auth/logout).
-auth.get("/logout", (_req, res) => {
-  res.clearCookie(COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" });
+auth.get("/logout", (req, res) => {
+  clearSession(req, res);
   res.redirect(getDefaultLandingPage());
 });
 

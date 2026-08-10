@@ -224,6 +224,19 @@ db.exec(`
     PRIMARY KEY (username, page_key)
   );
 
+  -- First-party dashboard sessions outlive the short KingsChat access token.
+  -- Only a SHA-256 hash of the opaque browser token is persisted.
+  CREATE TABLE IF NOT EXISTS dashboard_sessions (
+    token_hash TEXT PRIMARY KEY,
+    username   TEXT NOT NULL COLLATE NOCASE,
+    name       TEXT,
+    user_id    TEXT,
+    avatar     TEXT,
+    expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_expiry ON dashboard_sessions(expires_at);
+
   CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
