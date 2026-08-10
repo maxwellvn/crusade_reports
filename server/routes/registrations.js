@@ -258,6 +258,20 @@ function cellularRegistrationsBy(column) {
   ).all();
 }
 
+export function cellRegistrationsByZone() {
+  return db.prepare(
+    `SELECT zone, group_name, church_name, cell_name AS key, COALESCE(SUM(planned_count), 0) AS planned,
+            COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items i
+     WHERE ${PUBLIC_PROGRAM_FILTER}
+       AND organization_type = 'cell'
+       AND zone IS NOT NULL AND TRIM(zone) <> ''
+       AND cell_name IS NOT NULL AND TRIM(cell_name) <> ''
+     GROUP BY zone COLLATE NOCASE, group_name COLLATE NOCASE, church_name COLLATE NOCASE, cell_name COLLATE NOCASE
+     ORDER BY zone COLLATE NOCASE, group_name COLLATE NOCASE, planned DESC, key COLLATE NOCASE`
+  ).all();
+}
+
 export function buildZoneCrusadeBreakdown(typeRows, cellularRows) {
   const zones = new Map();
   const ensure = (zone) => {
@@ -303,6 +317,7 @@ function crusadeAnalysisData() {
       by_zone: cellularByZone,
       by_group: cellularRegistrationsBy("group_name"),
       by_church: cellularRegistrationsBy("church_name"),
+      by_cell: cellRegistrationsByZone(),
     },
     zone_type_breakdown: zoneTypeBreakdown,
     active_types: CRUSADE_TYPES.filter(([key]) => typeRows.some((row) => row.event_type === key)),
@@ -324,6 +339,16 @@ registrations.get("/crusade-analysis/export", requireAdmin, wrap(async (req, res
       { header: "Registered crusades", value: (row) => row.planned, align: "right" },
       { header: "Registration entries", value: (row) => row.registrations, align: "right" },
     ], rows);
+  }
+  if (req.query.view === "cells") {
+    return sendExport(res, format, "cellular-crusades-by-cell-and-zone", [
+      { header: "Zone", value: (row) => row.zone, pdfWidth: 2.5 },
+      { header: "Group", value: (row) => row.group_name || "Not specified", pdfWidth: 2 },
+      { header: "Church", value: (row) => row.church_name || "Not specified", pdfWidth: 2 },
+      { header: "Cell", value: (row) => row.key, pdfWidth: 2.5 },
+      { header: "Registered crusades", value: (row) => row.planned, align: "right" },
+      { header: "Registration entries", value: (row) => row.registrations, align: "right" },
+    ], data.cellular.by_cell);
   }
 
   const typeColumns = [

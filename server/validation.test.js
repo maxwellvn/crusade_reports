@@ -13,7 +13,7 @@ import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
-import { buildZoneCrusadeBreakdown, deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
+import { buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
@@ -717,6 +717,32 @@ test("registered crusades are broken down by type and cellular level for each zo
     { zone: "Zone B", total: 5, cellular: 1, types: { street: 5 } },
     { zone: "Zone A", total: 4, cellular: 3, types: { mega: 2, online: 2 } },
   ]);
+});
+
+test("cell analysis is structured by zone, group, church, and cell", () => {
+  const marker = `Cell Analysis ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    const registrationId = db.prepare(
+      `INSERT INTO registrations (organization_type, zone, group_name, church_name, cell_name, country, plan_date)
+       VALUES ('cell', ?, 'Test Group', 'Test Church', 'Test Cell', 'Nigeria', '2026-08-28')`
+    ).run(marker).lastInsertRowid;
+    db.prepare(
+      `INSERT INTO registration_items
+       (registration_id, organization_type, zone, group_name, church_name, cell_name, country, plan_date, event_type, planned_count)
+       VALUES (?, 'cell', ?, 'Test Group', 'Test Church', 'Test Cell', 'Nigeria', '2026-08-28', 'cellular', 3)`
+    ).run(registrationId, marker);
+    assert.deepEqual(cellRegistrationsByZone().filter((row) => row.zone === marker), [{
+      zone: marker,
+      group_name: "Test Group",
+      church_name: "Test Church",
+      key: "Test Cell",
+      planned: 3,
+      registrations: 1,
+    }]);
+  } finally {
+    db.exec("ROLLBACK");
+  }
 });
 
 test("PDF exports download as readable multi-page documents", async () => {

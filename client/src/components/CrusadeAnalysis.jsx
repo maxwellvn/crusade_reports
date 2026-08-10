@@ -92,6 +92,17 @@ function downloadAnalysisWord(data) {
       cellularSection("zone", "Zone"),
       cellularSection("group", "Group"),
       cellularSection("church", "Church"),
+      {
+        title: "Cell breakdown by zone and group",
+        columns: [
+          { header: "Zone", key: "zone", width: 2600 },
+          { header: "Group", key: "group_name", width: 2200 },
+          { header: "Church", key: "church_name", width: 2200 },
+          { header: "Cell", key: "key", width: 2400 },
+          { header: "Crusades", key: "planned", align: "right", width: 1300 },
+        ],
+        rows: data.cellular.by_cell,
+      },
     ],
     footer: "Prepared for NOTC campaign tracking and e-card production.",
   });
@@ -121,9 +132,10 @@ export function CrusadeAnalysis() {
   const zoneRows = data.zone_type_breakdown.filter((row) => !needle || row.zone.toLowerCase().includes(needle));
   const levelConfig = LEVELS.find(([key]) => key === level);
   const cellularRows = data.cellular[`by_${level}`].filter((row) => !needle || row.key.toLowerCase().includes(needle));
+  const cellRows = data.cellular.by_cell.filter((row) => !needle || [row.zone, row.group_name, row.church_name, row.key].some((value) => String(value || "").toLowerCase().includes(needle)));
   const openRegistrations = (filters) => navigate(`/registrations?${new URLSearchParams(filters).toString()}`);
   const exportCurrent = (format) => {
-    const params = new URLSearchParams({ view: tab === "zones" ? "zones" : "cellular", format });
+    const params = new URLSearchParams({ view: tab, format });
     if (tab === "cellular") params.set("level", level);
     const link = Object.assign(document.createElement("a"), { href: `/api/registrations/crusade-analysis/export?${params}` });
     document.body.appendChild(link); link.click(); link.remove();
@@ -162,10 +174,10 @@ export function CrusadeAnalysis() {
         </dl>
       </section>
 
-      <div className="flex w-full border-b border-slate-200" role="tablist" aria-label="Crusade analysis view">
-        {[["zones", "Zone breakdown"], ["cellular", "Cellular Crusades"]].map(([key, label]) => (
+      <div className="flex w-full overflow-x-auto border-b border-slate-200" role="tablist" aria-label="Crusade analysis view">
+        {[["zones", "Zone breakdown"], ["cellular", "Cellular Crusades"], ["cells", "Cell breakdown"]].map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setQuery(""); }}
-            className={cn("border-b-2 px-4 py-2.5 text-sm font-medium", tab === key ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900")}>{label}</button>
+            className={cn("shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium", tab === key ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900")}>{label}</button>
         ))}
       </div>
 
@@ -174,7 +186,7 @@ export function CrusadeAnalysis() {
           <ReportToolbar title="Crusade types by zone" count={`${nfull.format(zoneRows.length)} zones`} query={query} setQuery={setQuery} placeholder="Search zones..." />
           <ZoneTable rows={zoneRows} types={types} onSelect={openRegistrations} />
         </section>
-      ) : (
+      ) : tab === "cellular" ? (
         <section aria-labelledby="cellular-breakdown-heading" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -188,6 +200,15 @@ export function CrusadeAnalysis() {
           </div>
           <ReportToolbar count={`${nfull.format(cellularRows.length)} ${levelConfig[0]} entries`} query={query} setQuery={setQuery} placeholder={`Search ${levelConfig[0]}s...`} />
           <CellularTable rows={cellularRows} level={levelConfig} onSelect={openRegistrations} />
+        </section>
+      ) : (
+        <section aria-labelledby="cell-breakdown-heading" className="space-y-4">
+          <div>
+            <h3 id="cell-breakdown-heading" className="text-base font-semibold text-slate-950">Cell breakdown by zone and group</h3>
+            <p className="mt-1 text-sm text-slate-500">See how many cells registered crusades in every zone, organised under their groups.</p>
+          </div>
+          <ReportToolbar count={`${nfull.format(cellRows.length)} cells`} query={query} setQuery={setQuery} placeholder="Search zone, group, church or cell..." />
+          <CellBreakdown rows={cellRows} onSelect={openRegistrations} />
         </section>
       )}
     </div>
@@ -214,4 +235,26 @@ function ZoneTable({ rows, types, onSelect }) {
 function CellularTable({ rows, level, onSelect }) {
   if (!rows.length) return <div className="border-y border-slate-200 py-14 text-center text-sm text-slate-500">No entries match this search.</div>;
   return <div className="overflow-hidden border-y border-slate-200 bg-white"><table className="w-full text-sm"><thead><tr className="border-b bg-slate-50/80 text-left text-xs text-slate-500"><th className="px-5 py-3 font-medium">{level[1].replace("By ", "")}</th><th className="px-5 py-3 text-right font-medium">Registered crusades</th><th className="hidden px-5 py-3 text-right font-medium sm:table-cell">Registration entries</th></tr></thead><tbody>{rows.map((row) => <tr key={row.key} className="border-b last:border-0 hover:bg-slate-50/50"><td className="px-5 py-3 font-medium text-slate-900">{row.key}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ organization_type: "cell", [level[2]]: row.key }} label={`${row.key} Cellular Crusades`} onSelect={onSelect} /></td><td className="hidden px-5 py-3 text-right tabular-nums text-slate-600 sm:table-cell">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>;
+}
+
+function CellBreakdown({ rows, onSelect }) {
+  if (!rows.length) return <div className="border-y border-slate-200 py-14 text-center text-sm text-slate-500">No cells match this search.</div>;
+  const zones = new Map();
+  for (const row of rows) {
+    if (!zones.has(row.zone)) zones.set(row.zone, new Map());
+    const group = row.group_name || "Group not specified";
+    if (!zones.get(row.zone).has(group)) zones.get(row.zone).set(group, []);
+    zones.get(row.zone).get(group).push(row);
+  }
+  return <div className="space-y-7">{[...zones].map(([zone, groups]) => {
+    const zoneRows = [...groups.values()].flat();
+    const zoneCrusades = zoneRows.reduce((sum, row) => sum + Number(row.planned || 0), 0);
+    return <section key={zone} className="overflow-hidden border border-slate-200 bg-white" aria-label={`${zone} cell breakdown`}>
+      <header className="flex flex-wrap items-baseline justify-between gap-2 bg-slate-950 px-5 py-4 text-white"><h4 className="text-base font-semibold">{zone}</h4><p className="text-xs text-slate-300">{nfull.format(zoneRows.length)} registered cells · {nfull.format(zoneCrusades)} crusades</p></header>
+      {[...groups].map(([group, groupRows]) => <div key={group} className="border-t border-slate-200 first:border-0">
+        <div className="flex items-baseline justify-between gap-3 bg-blue-50 px-5 py-3"><h5 className="text-sm font-semibold text-blue-950">{group}</h5><span className="text-xs text-blue-700">{nfull.format(groupRows.length)} cell{groupRows.length === 1 ? "" : "s"}</span></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[38rem] text-sm"><thead><tr className="border-b text-left text-xs text-slate-500"><th className="px-5 py-2.5 font-medium">Cell</th><th className="px-5 py-2.5 font-medium">Church</th><th className="px-5 py-2.5 text-right font-medium">Registered crusades</th><th className="px-5 py-2.5 text-right font-medium">Entries</th></tr></thead><tbody>{groupRows.map((row) => <tr key={`${row.church_name || ""}-${row.key}`} className="border-b last:border-0"><td className="px-5 py-3 font-medium text-slate-950">{row.key}</td><td className="px-5 py-3 text-slate-600">{row.church_name || "Not specified"}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ organization_type: "cell", zone: row.zone, group_name: row.group_name || "", cell_name: row.key }} label={`${row.key} Cellular Crusades`} onSelect={onSelect} /></td><td className="px-5 py-3 text-right tabular-nums text-slate-600">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>
+      </div>)}
+    </section>;
+  })}</div>;
 }
