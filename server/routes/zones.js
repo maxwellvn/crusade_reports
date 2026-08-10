@@ -8,9 +8,8 @@ export const zones = Router();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CACHE_FILE = join(__dirname, "..", "..", "data", "zones_cache.json");
-const TTL_MS = 5 * 60 * 1000; // Keep upstream directory changes reasonably fresh.
-
-let cache = { at: 0, data: null };
+const DEFAULT_ZONES_URL = "http://churches-api.rorportal.org/api/v1/hierarchy";
+let lastGoodData = null;
 
 // Upstream shape: { "Region N": { "Zone Name": { name, groups } } } where groups
 // is EITHER an array of {name,id} OR an object keyed by number. Normalize to a
@@ -26,9 +25,9 @@ function toGroups(groupsRaw) {
 }
 // ponytail: leftover test/placeholder zones from the upstream admin tool. Denylist
 // by exact name — move to a config/env list if upstream keeps adding junk.
-const JUNK_ZONES = new Set(["new", "new zone", "zone a", "zone b"]);
+const JUNK_ZONES = new Set(["new", "new zone", "zone a", "zone b", "removed"]);
 
-function normalize(raw) {
+export function normalizeZones(raw) {
   const out = [];
   const pushZone = (region, z) => {
     if (!z || typeof z !== "object" || !z.name) return;
@@ -47,25 +46,26 @@ function normalize(raw) {
 }
 
 async function load() {
-  const now = Date.now();
-  if (cache.data && now - cache.at < TTL_MS) return cache.data;
-
-  const url = process.env.ZONES_URL;
+  const upstream = new URL(process.env.ZONES_URL || DEFAULT_ZONES_URL);
+  upstream.searchParams.set("_fresh", String(Date.now()));
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const resp = await fetch(upstream, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      signal: AbortSignal.timeout(8000),
+    });
     if (!resp.ok) throw new Error(`upstream ${resp.status}`);
-    const data = normalize(await resp.json());
+    const data = normalizeZones(await resp.json());
     if (!data.length) throw new Error("empty after normalize");
-    cache = { at: now, data };
+    lastGoodData = data;
     writeFile(CACHE_FILE, JSON.stringify(data)).catch(() => {}); // best-effort fallback snapshot
     return data;
   } catch (err) {
     logger.warn({ err }, "zones fetch failed — trying cache file");
-    if (cache.data) return cache.data;
+    if (lastGoodData) return lastGoodData;
     try {
-      const disk = JSON.parse(await readFile(CACHE_FILE, "utf8"));
-      cache = { at: now, data: disk };
-      return disk;
+      lastGoodData = JSON.parse(await readFile(CACHE_FILE, "utf8"));
+      return lastGoodData;
     } catch {
       throw new ApiError(503, "ZONES_UNAVAILABLE", "Zones list is temporarily unavailable");
     }
@@ -77,6 +77,7 @@ export const loadZones = load;
 
 zones.get("/", wrap(async (_req, res) => {
   const data = await load();
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   // zones only (groups fetched via the zone-scoped endpoint to keep payloads small)
   res.json(data.map(({ region, zone }) => ({ region, zone })));
 }));
@@ -86,5 +87,6 @@ zones.get("/groups", wrap(async (req, res) => {
   if (!zoneName) throw new ApiError(400, "BAD_REQUEST", "zone query param is required");
   const data = await load();
   const match = data.find((z) => z.zone === zoneName);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.json(match ? match.groups : []);
 }));

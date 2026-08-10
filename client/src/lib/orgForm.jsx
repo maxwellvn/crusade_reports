@@ -17,8 +17,6 @@ const MINISTRY_DEPARTMENTS = [
   "Cell Ministry",
 ];
 
-const GROUP_CACHE_TTL_MS = 5 * 60 * 1000;
-
 const COUNTRY_ALIASES = {
   uk: "united kingdom", gb: "united kingdom", britain: "united kingdom", england: "united kingdom",
   usa: "united states", us: "united states", america: "united states",
@@ -32,7 +30,6 @@ export function useOrgData(zone, countryCode) {
   const [allCountries, setAllCountries] = React.useState([]);
   const [zones, setZones] = React.useState([]);
   const [networks, setNetworks] = React.useState([]);
-  const groupCache = React.useRef({});
 
   React.useEffect(() => {
     getJSON("/zones").then(setZones).catch(() => toast.error("Could not load zones"));
@@ -60,20 +57,15 @@ export function useOrgData(zone, countryCode) {
     return r.map((p) => ({ value: p.place_id, label: p.main, sublabel: p.secondary }));
   }, [countryCode]);
 
-  const fetchZones = React.useCallback(
-    async (q) => zones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone, sublabel: z.region })),
-    [zones]
-  );
+  const fetchZones = React.useCallback(async (q) => {
+    const currentZones = await getJSON("/zones");
+    setZones(currentZones);
+    return currentZones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone, sublabel: z.region }));
+  }, []);
   const fetchGroups = React.useCallback(async (q) => {
     if (!zone) return [];
-    const cached = groupCache.current[zone];
-    if (!cached || Date.now() - cached.at >= GROUP_CACHE_TTL_MS) {
-      groupCache.current[zone] = {
-        at: Date.now(),
-        data: await getJSON(`/zones/groups?zone=${encodeURIComponent(zone)}`),
-      };
-    }
-    return groupCache.current[zone].data.filter((g) => g.name.toLowerCase().includes(q.toLowerCase())).map((g) => ({ value: g.id, label: g.name }));
+    const groups = await getJSON(`/zones/groups?zone=${encodeURIComponent(zone)}`);
+    return groups.filter((g) => g.name.toLowerCase().includes(q.toLowerCase())).map((g) => ({ value: g.id, label: g.name }));
   }, [zone]);
   const fetchNetworks = React.useCallback(
     async (q) => networks.filter((n) => n.name.toLowerCase().includes(q.toLowerCase())).map((n) => ({ value: n.name, label: n.name })),
@@ -93,7 +85,7 @@ export function useOrgData(zone, countryCode) {
     ];
   }, [zones, networks]);
 
-  const clearGroupCache = React.useCallback(() => { groupCache.current = {}; }, []);
+  const clearGroupCache = React.useCallback(() => {}, []);
 
   return { fetchCountries, countryCodeOf, fetchCities, fetchZones, fetchGroups, fetchNetworks, fetchCollaborators, networks, setNetworks, clearGroupCache };
 }

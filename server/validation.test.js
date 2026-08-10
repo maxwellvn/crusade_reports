@@ -16,6 +16,7 @@ import { deleteCrusadeReport } from "./routes/crusades.js";
 import { buildZoneCrusadeBreakdown, deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
+import { normalizeZones } from "./routes/zones.js";
 import { COUNTRIES } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
@@ -116,6 +117,20 @@ test("coverage compares the complete ministry directory with registered crusades
     { name: "GROUP TWO", zone: "ZONE ALPHA", status: "not_registered", crusades: 0 },
     { name: "GROUP THREE", zone: "ZONE BETA", status: "not_registered", crusades: 0 },
   ]);
+});
+
+test("the live churches directory includes additions and excludes removed zones", () => {
+  const directory = normalizeZones({
+    "Region 1": {
+      current: { name: "USA Zone 3 Region 1", groups: [{ id: "g1", name: "New Group" }] },
+      deleted: { name: "REMOVED", groups: [] },
+    },
+  });
+  assert.deepEqual(directory, [{
+    region: "Region 1",
+    zone: "USA ZONE 3 REGION 1",
+    groups: [{ id: "g1", name: "NEW GROUP" }],
+  }]);
 });
 
 test("city selection keeps place ids for suggestions and clears them for manual cities", () => {
