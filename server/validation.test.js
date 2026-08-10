@@ -13,7 +13,7 @@ import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
 import { deleteCrusadeReport } from "./routes/crusades.js";
-import { deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
+import { buildZoneCrusadeBreakdown, deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { COUNTRIES } from "./routes/countries.js";
@@ -682,6 +682,22 @@ test("private dashboard tokens lock submissions to their zone or network", () =>
   } finally {
     db.exec("ROLLBACK");
   }
+});
+
+test("registered crusades are broken down by type and cellular level for each zone", () => {
+  const rows = buildZoneCrusadeBreakdown([
+    { zone: "Zone A", event_type: "mega", planned: 2 },
+    { zone: "Zone A", event_type: "online", planned: 2 },
+    { zone: "Zone B", event_type: "street", planned: 5 },
+  ], [
+    { zone: "Zone A", planned: 3 },
+    { zone: "Zone B", planned: 1 },
+  ]);
+
+  assert.deepEqual(rows, [
+    { zone: "Zone B", total: 5, cellular: 1, types: { street: 5 } },
+    { zone: "Zone A", total: 4, cellular: 3, types: { mega: 2, online: 2 } },
+  ]);
 });
 
 test("PDF exports download as readable multi-page documents", async () => {

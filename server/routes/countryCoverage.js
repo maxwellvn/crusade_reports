@@ -56,6 +56,26 @@ function getGpdZonesCountryBreakdown() {
   };
 }
 
+function getCellCrusadesCountryBreakdown() {
+  const countries = db.prepare(`
+    SELECT i.country, SUM(i.planned_count) AS crusades, COUNT(DISTINCT i.registration_id) AS registrations
+    FROM registration_items i
+    WHERE ${PUBLIC_PROGRAM_FILTER}
+      AND i.organization_type = 'cell'
+      AND i.country IS NOT NULL
+    GROUP BY i.country
+    ORDER BY crusades DESC, i.country COLLATE NOCASE
+  `).all();
+
+  return {
+    name: "Cell Crusades",
+    countryCount: countries.length,
+    totalCrusades: countries.reduce((sum, row) => sum + row.crusades, 0),
+    totalRegistrations: countries.reduce((sum, row) => sum + row.registrations, 0),
+    countries,
+  };
+}
+
 function getNetworkCountryBreakdown() {
   const rows = db.prepare(`
     SELECT 
@@ -101,6 +121,7 @@ countryCoverage.get("/", requireSuperAdmin, wrap((_req, res) => {
     },
     unregisteredByContinent: groupByContinent(unregistered),
     gpdZones: getGpdZonesCountryBreakdown(),
+    cellCrusades: getCellCrusadesCountryBreakdown(),
     networks: getNetworkCountryBreakdown(),
   });
 }));
@@ -108,6 +129,7 @@ countryCoverage.get("/", requireSuperAdmin, wrap((_req, res) => {
 // CSV export with all data combined
 countryCoverage.get("/export", requireSuperAdmin, wrap((_req, res) => {
   const gpdZones = getGpdZonesCountryBreakdown();
+  const cellCrusades = getCellCrusadesCountryBreakdown();
   const networks = getNetworkCountryBreakdown();
 
   const escapeCSV = (value) => {
@@ -121,6 +143,7 @@ countryCoverage.get("/export", requireSuperAdmin, wrap((_req, res) => {
   lines.push("=== SUMMARY ===");
   lines.push("Group,Countries,Crusades,Registrations");
   lines.push(`${escapeCSV("GPD Zones")},${gpdZones.countryCount},${gpdZones.totalCrusades},${gpdZones.totalRegistrations}`);
+  lines.push(`${escapeCSV("Cell Crusades")},${cellCrusades.countryCount},${cellCrusades.totalCrusades},${cellCrusades.totalRegistrations}`);
   for (const n of networks) {
     lines.push(`${escapeCSV(n.network)},${n.countries.length},${n.totalCrusades},${n.totalRegistrations}`);
   }
@@ -130,6 +153,13 @@ countryCoverage.get("/export", requireSuperAdmin, wrap((_req, res) => {
   lines.push("=== GPD ZONES - COUNTRY BREAKDOWN ===");
   lines.push("Country,Crusades,Registrations");
   for (const c of gpdZones.countries) {
+    lines.push(`${escapeCSV(c.country)},${c.crusades},${c.registrations}`);
+  }
+
+  lines.push("");
+  lines.push("=== CELL CRUSADES - COUNTRY BREAKDOWN ===");
+  lines.push("Country,Crusades,Registrations");
+  for (const c of cellCrusades.countries) {
     lines.push(`${escapeCSV(c.country)},${c.crusades},${c.registrations}`);
   }
 

@@ -12,6 +12,7 @@ import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "
 import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 import { COUNTRIES } from "./countries.js";
+import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
 
 export const registrations = Router();
 
@@ -241,6 +242,108 @@ const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_
 // Scoped to program='public' (or NULL for rows that pre-date the column) so the
 // Blue Elite module's data never leaks into the original admin views.
 const PUBLIC_PROGRAM_FILTER = "(i.program = 'public' OR i.program IS NULL)";
+
+const CELLULAR_DIMENSIONS = new Set(["zone", "group_name", "church_name"]);
+function cellularRegistrationsBy(column) {
+  if (!CELLULAR_DIMENSIONS.has(column)) throw new Error(`Unsupported cellular dimension: ${column}`);
+  return db.prepare(
+    `SELECT ${column} AS key, COALESCE(SUM(planned_count), 0) AS planned,
+            COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items i
+     WHERE ${PUBLIC_PROGRAM_FILTER}
+       AND organization_type = 'cell'
+       AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
+     GROUP BY ${column} COLLATE NOCASE
+     ORDER BY planned DESC, key COLLATE NOCASE`
+  ).all();
+}
+
+export function buildZoneCrusadeBreakdown(typeRows, cellularRows) {
+  const zones = new Map();
+  const ensure = (zone) => {
+    if (!zones.has(zone)) zones.set(zone, { zone, total: 0, cellular: 0, types: {} });
+    return zones.get(zone);
+  };
+  for (const row of typeRows) {
+    const zone = ensure(row.zone);
+    const planned = Number(row.planned) || 0;
+    zone.types[row.event_type] = planned;
+    zone.total += planned;
+  }
+  for (const row of cellularRows) ensure(row.zone).cellular = Number(row.planned) || 0;
+  return [...zones.values()].sort((a, b) => b.total - a.total || a.zone.localeCompare(b.zone));
+}
+
+function crusadeAnalysisData() {
+  const typeRows = db.prepare(
+    `SELECT zone, event_type, COALESCE(SUM(planned_count), 0) AS planned
+     FROM registration_items i
+     WHERE ${PUBLIC_PROGRAM_FILTER}
+       AND zone IS NOT NULL AND TRIM(zone) <> ''
+       AND event_type IS NOT NULL AND TRIM(event_type) <> ''
+     GROUP BY zone COLLATE NOCASE, event_type
+     ORDER BY zone COLLATE NOCASE, planned DESC`
+  ).all();
+  const cellularByZone = cellularRegistrationsBy("zone");
+  const zoneTypeBreakdown = buildZoneCrusadeBreakdown(
+    typeRows,
+    cellularByZone.map((row) => ({ zone: row.key, planned: row.planned }))
+  );
+  const summary = db.prepare(
+    `SELECT COALESCE(SUM(planned_count), 0) AS total,
+            COALESCE(SUM(CASE WHEN event_type = 'mega' THEN planned_count ELSE 0 END), 0) AS mega,
+            COALESCE(SUM(CASE WHEN event_type = 'online' THEN planned_count ELSE 0 END), 0) AS online,
+            COALESCE(SUM(CASE WHEN organization_type = 'cell' THEN planned_count ELSE 0 END), 0) AS cellular,
+            COUNT(DISTINCT CASE WHEN zone IS NOT NULL AND TRIM(zone) <> '' THEN zone END) AS zones
+     FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}`
+  ).get();
+  return {
+    summary,
+    cellular: {
+      by_zone: cellularByZone,
+      by_group: cellularRegistrationsBy("group_name"),
+      by_church: cellularRegistrationsBy("church_name"),
+    },
+    zone_type_breakdown: zoneTypeBreakdown,
+    active_types: CRUSADE_TYPES.filter(([key]) => typeRows.some((row) => row.event_type === key)),
+  };
+}
+
+registrations.get("/crusade-analysis", requireAdmin, wrap((_req, res) => {
+  res.json(crusadeAnalysisData());
+}));
+
+registrations.get("/crusade-analysis/export", requireAdmin, wrap(async (req, res) => {
+  const data = crusadeAnalysisData();
+  const format = ["xlsx", "pdf"].includes(req.query.format) ? req.query.format : "csv";
+  if (req.query.view === "cellular") {
+    const level = ["group", "church"].includes(req.query.level) ? req.query.level : "zone";
+    const rows = data.cellular[`by_${level}`];
+    return sendExport(res, format, `cellular-crusades-by-${level}`, [
+      { header: level[0].toUpperCase() + level.slice(1), value: (row) => row.key, pdfWidth: 3 },
+      { header: "Registered crusades", value: (row) => row.planned, align: "right" },
+      { header: "Registration entries", value: (row) => row.registrations, align: "right" },
+    ], rows);
+  }
+
+  const typeColumns = [
+    ["online", "Online Crusades"],
+    ...(format === "pdf" ? [] : data.active_types.filter(([key]) => !["mega", "online"].includes(key))),
+  ];
+  await sendExport(res, format, "registered-crusade-types-by-zone", [
+    { header: "Zone", value: (row) => row.zone, pdfWidth: 2.5 },
+    { header: "Mega", value: (row) => row.types.mega || 0, align: "right" },
+    { header: "Cellular", value: (row) => row.cellular || 0, align: "right" },
+    ...typeColumns.map(([key, label]) => ({
+      header: label.replace(/ Crusades.*$/, ""), value: (row) => row.types[key] || 0, align: "right",
+    })),
+    { header: "Total", value: (row) => row.total, align: "right" },
+  ], data.zone_type_breakdown, {
+    title: "Registered Crusade Types by Zone",
+    subtitle: format === "pdf" ? "Mega, Cellular, Online, and total registered crusades" : undefined,
+  });
+}));
+
 registrations.get("/live", requireAdmin, wrap((_req, res) => {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,

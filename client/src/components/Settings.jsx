@@ -27,6 +27,7 @@ const ASSIGNABLE_PAGES = [
   { key: "crusades", label: "Reports" },
   { key: "registrations", label: "Registered crusades" },
   { key: "registrations/live", label: "Live registrations" },
+  { key: "dashboard/crusade-analysis", label: "Crusade analysis" },
   { key: "dashboard/zone-links", label: "Zone links" },
   { key: "dashboard/coverage", label: "Coverage map" },
   { key: "crusades/edit", label: "Edit reports" },

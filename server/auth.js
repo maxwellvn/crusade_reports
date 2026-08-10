@@ -20,6 +20,7 @@ export const ASSIGNABLE_PAGES = [
   { key: "crusades", label: "Reports", path: "/crusades" },
   { key: "registrations", label: "Registered crusades", path: "/registrations" },
   { key: "registrations/live", label: "Live registrations", path: "/registrations/live" },
+  { key: "dashboard/crusade-analysis", label: "Crusade analysis", path: "/dashboard/crusade-analysis" },
   { key: "dashboard/zone-links", label: "Zone links", path: "/dashboard/zone-links" },
   { key: "dashboard/coverage", label: "Coverage map", path: "/dashboard/coverage" },
   { key: "crusades/edit", label: "Edit reports", path: "/crusades" },
@@ -40,6 +41,7 @@ export const DEFAULT_PAGE_KEYS = [
   "crusades",
   "registrations",
   "registrations/live",
+  "dashboard/crusade-analysis",
   "dashboard/zone-links",
   "dashboard/coverage",
 ];

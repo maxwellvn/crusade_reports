@@ -12,13 +12,19 @@ import { cn } from "@/lib/utils";
 
 const nf = new Intl.NumberFormat();
 
-function breakdownGroups(gpdZones, networks) {
+function breakdownGroups(gpdZones, cellCrusades, networks) {
   return [
     {
       label: "GPD Zones",
       countries: gpdZones.countryCount,
       crusades: gpdZones.totalCrusades,
       registrations: gpdZones.totalRegistrations,
+    },
+    {
+      label: "Cell Crusades",
+      countries: cellCrusades.countryCount,
+      crusades: cellCrusades.totalCrusades,
+      registrations: cellCrusades.totalRegistrations,
     },
     ...networks.map((n) => ({
       label: n.network,
@@ -39,15 +45,15 @@ function countryBars(countries) {
 }
 
 function exportCountryCoverageWord(data) {
-  const { summary, unregisteredByContinent, gpdZones, networks } = data;
-  const groups = breakdownGroups(gpdZones, networks);
+  const { summary, unregisteredByContinent, gpdZones, cellCrusades, networks } = data;
+  const groups = breakdownGroups(gpdZones, cellCrusades, networks);
   const date = new Date().toISOString().slice(0, 10);
 
   downloadNotcReportDocx({
     filename: `country-coverage-breakdown-${date}.docx`,
     eyebrow: "Night of a Thousand Crusades",
     title: "Country Coverage Analysis",
-    meta: "From the Country coverage page. Includes GPD Zones, networks, and countries without registrations.",
+    meta: "From the Country coverage page. Includes GPD Zones, Cell Crusades, networks, and countries without registrations.",
     summary: [
       { label: "Total countries", value: nfull.format(summary.totalCountries) },
       { label: "With registrations", value: nfull.format(summary.registeredCount) },
@@ -55,7 +61,7 @@ function exportCountryCoverageWord(data) {
     ],
     sections: [
       {
-        title: "Registration breakdown — GPD Zones & networks",
+        title: "Registration breakdown — GPD Zones, Cell Crusades & networks",
         intro: "Countries, registered crusades, and registration entries by group.",
         columns: [
           { header: "Group", key: "label", width: 3700 },
@@ -73,6 +79,15 @@ function exportCountryCoverageWord(data) {
           { header: "Registrations", key: "registrations", align: "right", width: 2400 },
         ],
         rows: gpdZones.countries,
+      },
+      {
+        title: "Cell Crusades — country breakdown",
+        columns: [
+          { header: "Country", key: "country", width: 4900 },
+          { header: "Crusades", key: "crusades", align: "right", width: 2400 },
+          { header: "Registrations", key: "registrations", align: "right", width: 2400 },
+        ],
+        rows: cellCrusades.countries,
       },
       ...networks.map((n) => ({
         title: `${n.network} — country breakdown`,
@@ -136,7 +151,7 @@ export function CountryCoverage() {
     );
   }
 
-  const { summary, unregisteredByContinent, gpdZones, networks } = data;
+  const { summary, unregisteredByContinent, gpdZones, cellCrusades, networks } = data;
   const percent = Math.round((summary.registeredCount / summary.totalCountries) * 100);
   const charts = [
     {
@@ -144,6 +159,12 @@ export function CountryCoverage() {
       title: "GPD Zones — by country",
       meta: `${nfull.format(gpdZones.countryCount)} countries · ${nfull.format(gpdZones.totalCrusades)} crusades · ${nfull.format(gpdZones.totalRegistrations)} registrations`,
       rows: countryBars(gpdZones.countries),
+    },
+    {
+      id: "cell-crusades",
+      title: "Cell Crusades — by country",
+      meta: `${nfull.format(cellCrusades.countryCount)} countries · ${nfull.format(cellCrusades.totalCrusades)} crusades · ${nfull.format(cellCrusades.totalRegistrations)} registrations`,
+      rows: countryBars(cellCrusades.countries),
     },
     ...networks.map((n) => ({
       id: `network-${n.network}`,
@@ -161,7 +182,7 @@ export function CountryCoverage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Country Coverage Analysis</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            View countries without registrations and breakdown by GPD zones and networks.
+            View countries without registrations and breakdown by GPD Zones, Cell Crusades, and networks.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -194,7 +215,7 @@ export function CountryCoverage() {
         <div>
           <h3 className="text-lg font-semibold text-slate-950">Registration Breakdown</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Registered crusades by country for GPD Zones and each network. Expand a chart to see every country.
+            Registered crusades by country for GPD Zones, Cell Crusades, and each network. Expand a chart to see every country.
           </p>
         </div>
 

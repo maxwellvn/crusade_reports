@@ -6,6 +6,7 @@ import { WidgetDetail } from "@/components/WidgetDetail";
 import { CrusadesTable } from "@/components/CrusadesTable";
 import { EditCrusadePage } from "@/components/EditCrusadePage";
 import { RegistrationsLive } from "@/components/RegistrationsLive";
+import { CrusadeAnalysis } from "@/components/CrusadeAnalysis";
 import { RegistrationsTable } from "@/components/RegistrationsTable";
 import { ZoneLinks } from "@/components/ZoneLinks";
 import { ZonePortal } from "@/components/ZonePortal";
@@ -245,13 +246,14 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage", false, true], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage", false, true], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
           <Route path="/crusades" element={<PageGuard pageKey="crusades"><CrusadesTable /></PageGuard>} />
           <Route path="/crusades/:id/edit" element={<PageGuard pageKey="crusades/edit"><EditCrusadePage /></PageGuard>} />
           <Route path="/registrations" element={<PageGuard pageKey="registrations"><RegistrationsTable /></PageGuard>} />
           <Route path="/registrations/live" element={<PageGuard pageKey="registrations/live"><RegistrationsLive /></PageGuard>} />
+          <Route path="/dashboard/crusade-analysis" element={<PageGuard pageKey="dashboard/crusade-analysis"><CrusadeAnalysis /></PageGuard>} />
           <Route path="/registrations/manual-organizations" element={<PageGuard pageKey="registrations/manual-organizations"><ManualOrganizations /></PageGuard>} />
           <Route path="/dashboard/zone-links" element={<PageGuard pageKey="dashboard/zone-links"><ZoneLinks /></PageGuard>} />
           <Route path="/dashboard/coverage" element={<PageGuard pageKey="dashboard/coverage"><CrusadeCoverage /></PageGuard>} />

@@ -309,6 +309,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
 `);
 
+// Keep access aligned with Live registrations for existing explicitly scoped users.
+db.exec(`
+  INSERT OR IGNORE INTO dashboard_permissions (username, page_key)
+  SELECT username, 'dashboard/crusade-analysis'
+  FROM dashboard_permissions
+  WHERE page_key = 'registrations/live'
+`);
+
 // Mission-nation preferences were initially exclusive per nation. Rebuild once
 // so many zones can express interest in the same nation while admins make a
 // separate final assignment decision.
