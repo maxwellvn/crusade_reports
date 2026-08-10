@@ -8,7 +8,10 @@ export const zones = Router();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CACHE_FILE = join(__dirname, "..", "..", "data", "zones_cache.json");
-const DEFAULT_ZONES_URL = "http://churches-api.rorportal.org/api/v1/hierarchy";
+// This is the canonical live directory endpoint. Do not use the legacy
+// ZONES_URL deployment variable: an older production value can silently point
+// Coverage and selectors at a stale hierarchy even while the API itself is current.
+const CHURCHES_DIRECTORY_URL = "https://churches-api.rorportal.org/api/v1/hierarchy";
 let lastGoodData = null;
 
 // Upstream shape: { "Region N": { "Zone Name": { name, groups } } } where groups
@@ -46,7 +49,7 @@ export function normalizeZones(raw) {
 }
 
 async function load() {
-  const upstream = new URL(process.env.ZONES_URL || DEFAULT_ZONES_URL);
+  const upstream = new URL(CHURCHES_DIRECTORY_URL);
   upstream.searchParams.set("_fresh", String(Date.now()));
   try {
     const resp = await fetch(upstream, {
