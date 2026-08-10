@@ -85,7 +85,7 @@ function DonateLink({ onClick }) {
     <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer"
       className="nav-link donate-link" onClick={onClick}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      Donate
+      Donate / Sponsor
       <span className="donate-icon" aria-hidden="true">
         {hover && <i key={idx} className={`${DONATE_ICONS[idx]} donate-cycle`} />}
       </span>
@@ -334,6 +334,29 @@ function Countdown() {
   );
 }
 
+function SponsorshipSection() {
+  const impactPoints = [
+    "Support crusades in regions with limited resources",
+    "Fund outreach materials and equipment for evangelism",
+    "Enable distribution of Bibles and spiritual materials",
+  ];
+  return (
+    <section className="sponsorship-section" aria-labelledby="sponsorship-title">
+      <div className="sponsorship-intro">
+        <span className="sponsorship-eyebrow">Partner with us</span>
+        <h2 id="sponsorship-title">Join Us in Reaching the World</h2>
+        <p>Your generous support enables us to reach millions with the Gospel through our global crusades. Every contribution makes a significant impact in transforming lives and communities around the world.</p>
+        <a href="https://rhapsodycrusades.org/sponsor" target="_blank" rel="noreferrer" className="sponsorship-action">
+          Donate / Sponsor <i className="ri-arrow-right-up-line" aria-hidden="true" />
+        </a>
+      </div>
+      <ul className="sponsorship-impact" aria-label="How your support helps">
+        {impactPoints.map((point) => <li key={point}><i className="ri-check-line" aria-hidden="true" /><span>{point}</span></li>)}
+      </ul>
+    </section>
+  );
+}
+
 export function Landing() {
   const [navOpen, setNavOpen] = React.useState(false);
   const closeNav = () => setNavOpen(false);
@@ -432,6 +455,7 @@ export function Landing() {
             });
 
         reveal(".resources-preview-intro > *, .resource-preview-grid, .resources-preview-action", { trigger: ".resources-preview", start: "top 82%", y: 38, blur: 10, stagger: 0.12, duration: 0.85 });
+        reveal(".sponsorship-intro > *, .sponsorship-impact li", { trigger: ".sponsorship-section", start: "top 82%", y: 38, blur: 10, stagger: 0.1, duration: 0.85 });
         reveal(".event-calendar-head > *, .event-calendar-item", { trigger: ".event-calendar", start: "top 82%", y: 38, blur: 10, stagger: 0.1, duration: 0.8 });
         gsap.utils.toArray(".initiative-feature").forEach((feature) => {
           reveal(feature, { trigger: feature, start: "top 84%", y: 48, blur: 12, duration: 0.95 });
@@ -561,6 +585,9 @@ export function Landing() {
 
       {/* ===== Countdown (right after the hero) ===== */}
       <Countdown />
+
+      {/* ===== Sponsorship ===== */}
+      <SponsorshipSection />
 
       {/* ===== Approved resources preview ===== */}
       <ResourcesPreview />
