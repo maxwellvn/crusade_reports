@@ -80,7 +80,6 @@ export function ZonePortal() {
           </div>
           {data && <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:flex-wrap">
             <Button asChild variant="outline" size="sm"><Link to={`/crusade-registration/register?portal=${encodeURIComponent(token)}`}>Register crusades</Link></Button>
-            {data.reporting_open && <Button asChild size="sm"><Link to={`/report?portal=${encodeURIComponent(token)}`}>Report unregistered crusade</Link></Button>}
           </div>}
         </div>
       </header>
@@ -217,13 +216,6 @@ export function ZonePortal() {
                 </Button>
               </CardHeader>
               <CardContent className="space-y-4 overflow-x-auto">
-                <div className="flex flex-wrap items-center justify-between gap-3 border p-4">
-                  <div>
-                    <p className="text-sm font-medium">Didn’t register a crusade?</p>
-                    <p className="text-xs text-muted-foreground">Report every unregistered crusade you held using the standalone form.</p>
-                  </div>
-                  <Button asChild variant="outline" size="sm"><Link to={`/report?portal=${encodeURIComponent(token)}`}>Report unregistered crusade</Link></Button>
-                </div>
                 {!filteredItems.length ? (
                   <p className="py-10 text-center text-sm text-muted-foreground">No registered crusades match your search and filters.</p>
                 ) : (

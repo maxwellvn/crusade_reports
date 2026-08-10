@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export const MAX_REPORT_PHOTOS_BYTES = 30 * 1024 * 1024;
+export const MAX_REPORT_PHOTOS_BYTES = 50 * 1024 * 1024;
 export const MAX_REPORT_PHOTO_FILES = 40;
 
 const nf = new Intl.NumberFormat();
@@ -181,9 +181,9 @@ export function ReportMediaFields({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
-          label="Photo links"
+          label="Photo or Google Drive links"
           error={photoLinksError}
-          hint="Optional — Google Drive or other photo album links, one per line"
+          hint="Optional — paste Google Drive or other photo album links, one per line"
         >
           <Textarea
             rows={4}
@@ -195,9 +195,9 @@ export function ReportMediaFields({
           <span className="mt-1 flex items-center gap-1 text-[11px] text-slate-400"><Link2 className="size-3" /> Links for photos you did not upload here</span>
         </Field>
         <Field
-          label="Video links"
+          label="Video or Google Drive links"
           error={videoLinksError}
-          hint="Optional — Drive, YouTube or other video links only (no video file uploads), one per line"
+          hint="Optional — paste Google Drive, YouTube, or other video links, one per line (no video file uploads)"
         >
           <Textarea
             rows={4}

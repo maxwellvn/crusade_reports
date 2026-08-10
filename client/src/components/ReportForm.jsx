@@ -508,7 +508,7 @@ export function ReportForm() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Highlights & media</CardTitle>
-                      <CardDescription>Optional — add photos (up to 30MB total), photo links, and video links for this report.</CardDescription>
+                      <CardDescription>Optional — upload photos up to 50MB total, or add Google Drive and other links for photos and videos.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <Field label="Highlights" error={errors.highlights?.message}>

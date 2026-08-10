@@ -11,7 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const REPORT_PHOTOS_DIR = join(__dirname, "..", "data", "report-photos");
 mkdirSync(REPORT_PHOTOS_DIR, { recursive: true });
 
-export const MAX_REPORT_PHOTOS_BYTES = 30 * 1024 * 1024;
+export const MAX_REPORT_PHOTOS_BYTES = 50 * 1024 * 1024;
 export const MAX_REPORT_PHOTO_FILES = 40;
 const MAX_REPORT_PHOTOS_MB = Math.round(MAX_REPORT_PHOTOS_BYTES / (1024 * 1024));
 

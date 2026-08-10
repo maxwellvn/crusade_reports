@@ -14,7 +14,7 @@ export async function api(path, options = {}) {
     });
   } catch {
     const err = new Error(isFormData
-      ? "Could not upload the report. Check your connection, keep photos within 30MB total, then try again."
+      ? "Could not upload the report. Check your connection, keep photos within 50MB total, then try again."
       : "Could not reach the server. Check your connection and try again.");
     err.code = "NETWORK";
     throw err;
@@ -30,12 +30,12 @@ export async function api(path, options = {}) {
     let code = body?.error?.code || "NETWORK";
     if (!message && (res.status === 413 || res.status === 502 || res.status === 504)) {
       message = isFormData
-        ? "The photo upload was rejected as too large. Keep all photos within 30MB total, or use photo links for larger albums."
+        ? "The photo upload was rejected as too large. Keep all photos within 50MB total, or use photo links for larger albums."
         : "The request was rejected as too large. Please try again with a smaller upload.";
       code = "PHOTOS_TOO_LARGE";
     }
     if (!message && isFormData) {
-      message = "Could not upload photos with this report. Keep photos within 30MB total and try again.";
+      message = "Could not upload photos with this report. Keep photos within 50MB total and try again.";
     }
     const err = new Error(message || "Request failed. Please try again.");
     err.code = code;

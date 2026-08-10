@@ -23,6 +23,7 @@ import { updateCampaignSettings } from "./routes/campaignSettings.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
 import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
+import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
 import {
   assertPersistentDatabasePath,
@@ -176,6 +177,12 @@ test("mission-trip volunteers identify their passport and accept partnership ter
   assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, kingschat_username: "" }).success, true);
   assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, passport_country_code: "" }).success, false);
   assert.equal(missionTripVolunteerSchema.safeParse({ ...volunteer, partnership_acknowledged: false }).success, false);
+});
+
+test("report photo uploads allow up to 50MB combined", () => {
+  assert.equal(MAX_REPORT_PHOTOS_BYTES, 50 * 1024 * 1024);
+  assert.equal(assertPhotoUploadBudget([{ size: 30 * 1024 * 1024 }, { size: 20 * 1024 * 1024 }]), MAX_REPORT_PHOTOS_BYTES);
+  assert.throws(() => assertPhotoUploadBudget([{ size: MAX_REPORT_PHOTOS_BYTES + 1 }]), (error) => error.code === "PHOTOS_TOO_LARGE");
 });
 
 test("upcoming crusade interest requires zone identity and confirmed travel access", () => {
