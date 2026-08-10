@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { GripVertical, X, Plus, Maximize2, Minimize2, RotateCcw, Search, FileDown } from "lucide-react";
+import { GripVertical, X, Plus, Maximize2, Minimize2, RotateCcw, Search, Printer } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -107,8 +107,8 @@ export function Dashboard() {
           <Button type="button" size="sm" onClick={() => navigate("/crusade-registration/register")}>
             <Plus /> Register crusades
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => window.print()} title="Export this dashboard as a PDF">
-            <FileDown /> Export PDF
+          <Button type="button" variant="outline" size="sm" onClick={() => window.print()} title="Open the print dialog for this dashboard">
+            <Printer /> Print dashboard
           </Button>
           {/* Global search: lands on /crusades backed by FTS5 across every field */}
           <form className="relative hidden sm:block"

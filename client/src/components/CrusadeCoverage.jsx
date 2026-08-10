@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Download, FileSpreadsheet, Printer, Search, CheckCircle2, CircleDashed } from "lucide-react";
+import { Download, FileDown, FileSpreadsheet, FileText, Search, CheckCircle2, CircleDashed } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,10 @@ export function CrusadeCoverage() {
     const matchesQuery = !needle || [row.name, row.zone, row.region].some((value) => String(value || "").toLowerCase().includes(needle));
     return matchesStatus && matchesQuery;
   }), [data, type, status, query]);
+  const unregisteredZones = React.useMemo(
+    () => (data?.zones || []).filter((row) => row.status === "not_registered"),
+    [data]
+  );
   const summary = data?.summary?.[type];
   const percent = summary?.total ? Math.round((summary.registered / summary.total) * 100) : 0;
 
@@ -35,6 +39,13 @@ export function CrusadeCoverage() {
     if (status) params.set("status", status);
     if (query.trim()) params.set("q", query.trim());
     const link = Object.assign(document.createElement("a"), { href: `/api/coverage/export?${params}` });
+    document.body.appendChild(link); link.click(); link.remove();
+  }
+
+  function downloadUnregisteredZones(format) {
+    const link = Object.assign(document.createElement("a"), {
+      href: `/api/coverage/unregistered-zones/export?format=${format}`,
+    });
     document.body.appendChild(link); link.click(); link.remove();
   }
 
@@ -49,7 +60,7 @@ export function CrusadeCoverage() {
         <div className="flex flex-wrap gap-2 print:hidden">
           <Button variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!rows.length}><Download /> CSV</Button>
           <Button variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!rows.length}><FileSpreadsheet /> Excel</Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} disabled={!rows.length}><Printer /> PDF</Button>
+          <Button variant="outline" size="sm" onClick={() => exportRows("pdf")} disabled={!rows.length}><FileDown /> PDF</Button>
         </div>
       </header>
 
@@ -109,6 +120,41 @@ export function CrusadeCoverage() {
         )}
       </section>
       {data && <p className="text-xs text-slate-500 print:hidden">Showing {number.format(rows.length)} of {number.format(summary?.total || 0)} {type}.</p>}
+
+      <section aria-labelledby="unregistered-zone-exports" className="border-y border-slate-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 id="unregistered-zone-exports" className="text-sm font-semibold text-slate-950">Zones without registered crusades</h3>
+            <p className="mt-1 text-xs text-slate-500">{number.format(unregisteredZones.length)} zones</p>
+          </div>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <Button type="button" variant="outline" size="sm" onClick={() => downloadUnregisteredZones("txt")} disabled={!data}>
+              <FileText /> Plain text
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => downloadUnregisteredZones("pdf")} disabled={!data}>
+              <FileDown /> PDF
+            </Button>
+          </div>
+        </div>
+        {!data ? <div className="p-6"><LoadingRows rows={5} /></div> : !unregisteredZones.length ? (
+          <div className="px-5 py-10 text-center text-sm text-slate-500">All zones have registered a crusade.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b text-left text-xs text-slate-500">
+                <th className="px-5 py-3 font-medium">Zone</th>
+                <th className="px-5 py-3 font-medium">Region</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+              </tr></thead>
+              <tbody>{unregisteredZones.map((row) => <tr key={row.name} className="border-b last:border-0">
+                <td className="px-5 py-3 font-medium text-slate-900">{row.name}</td>
+                <td className="px-5 py-3 text-slate-600">{row.region}</td>
+                <td className="px-5 py-3"><Status status={row.status} /></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

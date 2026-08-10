@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ChevronDown, FileDown, FileText, GripVertical, Maximize2, Minimize2, Plus, Radio, RotateCcw, X } from "lucide-react";
+import { ChevronDown, FileDown, FileText, GripVertical, Maximize2, Minimize2, Plus, Printer, Radio, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -273,21 +273,11 @@ function downloadCountryRegistrationsDocx(data, filename) {
 
 function downloadCountryRegistrationsReport(data, format = "word") {
   const date = new Date().toISOString().slice(0, 10);
-  const html = buildCountryRegistrationsReportHtml(data);
   if (format === "pdf") {
-    // Avoid "noopener" in window features — Chrome opens about:blank but returns a
-    // window we cannot write into, so the report never appears.
-    const printWindow = window.open("", "_blank", "width=960,height=720");
-    if (!printWindow) {
-      toast.error("Allow pop-ups to export this report as PDF.");
-      return;
-    }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.opener = null;
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 300);
+    const link = Object.assign(document.createElement("a"), { href: "/api/registrations/country-report.pdf" });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     return;
   }
   downloadCountryRegistrationsDocx(data, `registrations-by-continent-and-country-${date}.docx`);
@@ -427,7 +417,7 @@ export function RegistrationsLive() {
               {hidden.map((id) => <button key={id} type="button" className="w-full px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={(event) => { setLayout((current) => [...current, { id, expanded: false }]); event.target.closest("details").open = false; }}>{LIVE_WIDGETS[id].title}</button>)}
             </div>
           </details>}
-          <Button type="button" variant="outline" size="sm" onClick={() => window.print()} title="Export this dashboard as a PDF"><FileDown /> Export PDF</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => window.print()} title="Open the print dialog for this dashboard"><Printer /> Print dashboard</Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => setLayout(DEFAULT_LAYOUT)}><RotateCcw /> Reset</Button>
         </div>
       </div>

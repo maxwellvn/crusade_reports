@@ -344,6 +344,33 @@ registrations.get("/countries-without-registrations", requireAdmin, wrap((_req, 
   res.json({ countries: missing, total: missing.length });
 }));
 
+registrations.get("/country-report.pdf", requireAdmin, wrap(async (_req, res) => {
+  const continentByCountry = new Map(COUNTRIES.map((country) => [country.name.toLowerCase(), country.continent || "Other"]));
+  const rows = db.prepare(
+    `SELECT country, COALESCE(SUM(planned_count), 0) AS crusades, COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items i
+     WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL AND TRIM(country) <> ''
+     GROUP BY country COLLATE NOCASE`
+  ).all().map((row) => ({
+    ...row,
+    continent: continentByCountry.get(String(row.country).toLowerCase()) || "Other",
+  })).sort((a, b) => a.continent.localeCompare(b.continent)
+    || Number(b.crusades) - Number(a.crusades)
+    || a.country.localeCompare(b.country));
+  const numbered = rows.map((row, index) => ({ ...row, number: index + 1 }));
+  const crusades = rows.reduce((sum, row) => sum + Number(row.crusades || 0), 0);
+  await sendExport(res, "pdf", "registrations-by-continent-and-country", [
+    { header: "#", value: (row) => row.number, pdfWidth: 0.3, align: "right" },
+    { header: "Continent", value: (row) => row.continent, pdfWidth: 1.4 },
+    { header: "Country", value: (row) => row.country, pdfWidth: 2.2 },
+    { header: "Registered crusades", value: (row) => row.crusades, pdfWidth: 1.2, align: "right" },
+    { header: "Registration entries", value: (row) => row.registrations, pdfWidth: 1.2, align: "right" },
+  ], numbered, {
+    title: "Registrations by Continent and Country",
+    subtitle: `${rows.length} countries represented | ${crusades} registered crusades`,
+  });
+}));
+
 // Shared WHERE clause for the registrations table and its export.
 // Always scoped to public registrations (NULL allowed for pre-migration rows)
 // so Blue Elite rows never appear in the original admin table.

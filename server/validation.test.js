@@ -23,6 +23,7 @@ import { updateCampaignSettings } from "./routes/campaignSettings.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
 import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
+import { sendExport } from "./routes/exporter.js";
 import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
 import {
@@ -660,4 +661,42 @@ test("private dashboard tokens lock submissions to their zone or network", () =>
   } finally {
     db.exec("ROLLBACK");
   }
+});
+
+test("PDF exports download as readable multi-page documents", async () => {
+  const rows = Array.from({ length: 55 }, (_, index) => ({
+    number: index + 1,
+    name: `TEST ZONE ${index + 1}`,
+    region: `Region ${(index % 8) + 1}`,
+  }));
+  const response = {
+    headers: {},
+    setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
+    end(body) { this.body = body; },
+  };
+  await sendExport(response, "pdf", "zones-without-registered-crusades", [
+    { header: "#", value: (row) => row.number, pdfWidth: 0.35, align: "right" },
+    { header: "Zone", value: (row) => row.name, pdfWidth: 3.25 },
+    { header: "Region", value: (row) => row.region, pdfWidth: 2 },
+  ], rows);
+
+  assert.equal(response.headers["content-type"], "application/pdf");
+  assert.equal(response.headers["content-disposition"], 'attachment; filename="zones-without-registered-crusades.pdf"');
+  assert.equal(response.headers["content-length"], response.body.length);
+  assert.equal(response.body.subarray(0, 5).toString(), "%PDF-");
+  assert.match(response.body.subarray(-24).toString(), /%%EOF/);
+
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const standardFontDataUrl = new URL("../node_modules/pdfjs-dist/standard_fonts/", import.meta.url).href;
+  const pdf = await getDocument({ data: new Uint8Array(response.body), standardFontDataUrl, verbosity: 0 }).promise;
+  assert.ok(pdf.numPages >= 2 && pdf.numPages <= 4);
+  let content = "";
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const text = await page.getTextContent();
+    content += text.items.map((item) => item.str).join(" ");
+  }
+  assert.match(content, /Zones Without Registered Crusades/);
+  assert.match(content, /TEST ZONE 1/);
+  assert.match(content, /TEST ZONE 55/);
 });

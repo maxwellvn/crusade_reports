@@ -3,7 +3,7 @@ import { db } from "../db.js";
 import { requireAdmin } from "../auth.js";
 import { wrap } from "../logger.js";
 import { loadZones } from "./zones.js";
-import { sendExport } from "./exporter.js";
+import { sendExport, sendTextDownload } from "./exporter.js";
 import { buildCoverageRows } from "../coverage.js";
 
 export const coverage = Router();
@@ -27,7 +27,7 @@ async function coverageData() {
     SELECT zone, group_name, COALESCE(SUM(planned_count), 0) AS crusades, 0 AS attendance
     FROM registration_items
     WHERE zone IS NOT NULL AND TRIM(zone) <> ''
-      AND program = 'public'
+      AND (program = 'public' OR program IS NULL)
     GROUP BY zone COLLATE NOCASE, group_name COLLATE NOCASE
   `).all();
   return buildCoverageRows(directory, reported);
@@ -42,5 +42,26 @@ coverage.get("/export", requireAdmin, wrap(async (req, res) => {
   const data = await coverageData();
   const rows = data[type].filter((row) => (!status || row.status === status)
     && (!query || [row.name, row.zone, row.region].some((value) => String(value || "").toLowerCase().includes(query))));
-  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${type}-crusade-coverage`, exportColumns(type), rows);
+  const format = ["xlsx", "pdf"].includes(req.query.format) ? req.query.format : "csv";
+  await sendExport(res, format, `${type}-crusade-coverage`, exportColumns(type), rows);
+}));
+
+coverage.get("/unregistered-zones/export", requireAdmin, wrap(async (req, res) => {
+  const data = await coverageData();
+  const rows = data.zones.filter((row) => row.status === "not_registered")
+    .map((row, index) => ({ ...row, number: index + 1 }));
+  const baseName = "zones-without-registered-crusades";
+  if (req.query.format === "txt") {
+    return sendTextDownload(res, baseName, [
+      "ZONES WITHOUT A REGISTERED CRUSADE",
+      `Total: ${rows.length}`,
+      "",
+      ...rows.map((row, index) => `${index + 1}. ${row.name}`),
+    ]);
+  }
+  await sendExport(res, "pdf", baseName, [
+    { header: "#", value: (row) => row.number, pdfWidth: 0.35, align: "right" },
+    { header: "Zone", value: (row) => row.name, pdfWidth: 3.25 },
+    { header: "Region", value: (row) => row.region, pdfWidth: 2 },
+  ], rows);
 }));
