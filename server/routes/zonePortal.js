@@ -14,18 +14,16 @@ import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LAB
 
 export const zonePortal = Router();
 
-// GET /api/zone-links — ALL zones (upstream list) and ALL networks, each with
-// its token if one exists. Data-only names (e.g. a zone missing upstream but
-// present in reports) are included too, so nothing is unreachable.
+export const currentDirectoryZoneNames = (directory) => [...new Set(directory.map((entry) => entry.zone).filter(Boolean))];
+
+// GET /api/zone-links — current Churches API zones and all networks, each with
+// its token if one exists. The directory is authoritative for zone visibility:
+// deleted/renamed zones must not be reintroduced by stale tokens or old reports.
 zonePortal.get("/zone-links", requireAdmin, wrap(async (req, res) => {
   const tokens = db.prepare("SELECT zone AS name, token, kind FROM zone_tokens").all();
   const tokenFor = (kind, name) => tokens.find((t) => t.kind === kind && t.name === name)?.token || null;
 
-  const zoneNames = new Set((await loadZones().catch(() => [])).map((z) => z.zone));
-  db.prepare(`SELECT DISTINCT zone AS n FROM registrations WHERE zone IS NOT NULL
-              UNION SELECT DISTINCT zone FROM crusades WHERE zone IS NOT NULL`).all()
-    .forEach((r) => zoneNames.add(r.n));
-  tokens.filter((t) => t.kind === "zone").forEach((t) => zoneNames.add(t.name));
+  const zoneNames = new Set(currentDirectoryZoneNames(await loadZones().catch(() => [])));
 
   const networkNames = new Set(db.prepare("SELECT name FROM networks").all().map((r) => r.name));
   db.prepare(`SELECT DISTINCT network_name AS n FROM registrations WHERE network_name IS NOT NULL

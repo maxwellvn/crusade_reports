@@ -17,6 +17,7 @@ import { buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationC
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
+import { currentDirectoryZoneNames } from "./routes/zonePortal.js";
 import { COUNTRIES } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
@@ -131,6 +132,13 @@ test("the live churches directory includes additions and excludes removed zones"
     zone: "USA ZONE 3 REGION 1",
     groups: [{ id: "g1", name: "NEW GROUP" }],
   }]);
+});
+
+test("admin zone lists do not restore deleted zones from historical data", () => {
+  assert.deepEqual(currentDirectoryZoneNames([
+    { zone: "AUSTRALIA" },
+    { zone: "AUSTRALIA" },
+  ]), ["AUSTRALIA"]);
 });
 
 test("city selection keeps place ids for suggestions and clears them for manual cities", () => {
