@@ -203,14 +203,26 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
     WHERE ${listWhere("registration_items.")} AND (registration_items.program = 'public' OR registration_items.program IS NULL)
     ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
-  `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
+  `).all(...listParams).map((r) => {
+    const visitor = r[col] !== name;
+    return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
+  });
 
   const crusades = db.prepare(`
     SELECT id, registration_item_id, event_date, event_type, other_event_type, event_name, format, city, country,
            organization_type, zone, group_name, church_name, cell_name, network_name,
            attendance, online_participation, salvation, minister_name, venue
     FROM crusades WHERE ${listWhere("")} ORDER BY event_date DESC, id DESC LIMIT 500
-  `).all(...listParams).map((r) => ({ ...r, visitor: r[col] !== name }));
+  `).all(...listParams).map((r) => {
+    const visitor = r[col] !== name;
+    return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
+  });
+
+  const sourceCounts = new Map();
+  for (const item of items) sourceCounts.set(item.source_scope, (sourceCounts.get(item.source_scope) || 0) + (item.planned_count || 0));
+  const source_breakdown = ["network", "zone", "group", "church", "cell", "other"]
+    .filter((source) => sourceCounts.has(source))
+    .map((source) => ({ source, planned: sourceCounts.get(source) }));
 
   const totals = {
     planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(name).n,
@@ -219,7 +231,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
   };
 
-  res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, registrations, items, crusades });
+  res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, source_breakdown, registrations, items, crusades });
 }));
 
 // CSV/Excel export of registered crusades visible on this dashboard.

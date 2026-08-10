@@ -21,6 +21,8 @@ import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photos
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const SOURCE_LABELS = { network: "Network directly", zone: "Zones", group: "Groups", church: "Churches", cell: "Cells", other: "Other ministries" };
+const sourceLabel = (source, networkName) => source === "network" ? `${networkName} directly` : (SOURCE_LABELS[source] || "Other ministries");
 
 // Zone dashboard, opened via a capability link (/zone/<token>). The server
 // scopes every read and readiness update to the token's zone/network.
@@ -36,6 +38,7 @@ export function ZonePortal() {
   const [query, setQuery] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
   const [readinessFilter, setReadinessFilter] = React.useState("");
+  const [sourceFilter, setSourceFilter] = React.useState("");
 
   React.useEffect(() => {
     getJSON(`/zone-portal/${token}`).then(setData).catch((e) => setError(e.message));
@@ -59,11 +62,12 @@ export function ZonePortal() {
       .filter(Boolean).join(" ").toLowerCase();
     return (!normalizedQuery || searchable.includes(normalizedQuery))
       && (!typeFilter || item.event_type === typeFilter)
-      && (!readinessFilter || item.readiness_status === readinessFilter);
+      && (!readinessFilter || item.readiness_status === readinessFilter)
+      && (!sourceFilter || item.source_scope === sourceFilter);
   });
   const filteredUnregistered = (data?.crusades || []).filter((crusade) => !crusade.registration_item_id && (!normalizedQuery
     || [crusade.event_name, crusade.event_type, typeLabel(crusade.event_type), crusade.country, crusade.city, crusade.venue, crusade.event_date]
-      .filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery)));
+      .filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery)) && (!sourceFilter || crusade.source_scope === sourceFilter));
 
   return (
     <div className="min-h-screen bg-background">
@@ -93,8 +97,10 @@ export function ZonePortal() {
               ["Souls won", data.totals.salvation],
             ]} />
 
+            {data.kind === "network" && <Card><CardHeader><CardTitle className="text-sm">Registration source breakdown</CardTitle><CardDescription>These are all crusades visible to this network because they match its crusade type. The breakdown separates registrations made directly by {data.zone} from those registered by churches, zones, groups, cells, and other ministry structures.</CardDescription></CardHeader><CardContent><div className="grid border-y sm:grid-cols-2 lg:grid-cols-3">{data.source_breakdown.map((entry) => <div key={entry.source} className="border-b p-4 last:border-b-0 sm:border-r sm:[&:nth-child(2n)]:border-r-0 lg:[&:nth-child(2n)]:border-r lg:[&:nth-child(3n)]:border-r-0"><p className="text-xs font-medium text-muted-foreground">{sourceLabel(entry.source, data.zone)}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{nfull.format(entry.planned)}</p><p className="mt-1 text-xs text-muted-foreground">planned crusades</p></div>)}</div></CardContent></Card>}
+
             <Card>
-              <CardContent className="grid gap-2 pt-6 sm:grid-cols-[1fr_13rem_13rem]">
+              <CardContent className={`grid gap-2 pt-6 ${data.kind === "network" ? "sm:grid-cols-2 lg:grid-cols-[1fr_12rem_12rem_13rem]" : "sm:grid-cols-[1fr_13rem_13rem]"}`}>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9"
@@ -113,6 +119,7 @@ export function ZonePortal() {
                   <option value="holding">Holding as planned</option>
                   <option value="not_holding">Not holding</option>
                 </Select>
+                {data.kind === "network" && <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} aria-label="Filter by registration source"><option value="">All registration sources</option><option value="network">Registered directly by {data.zone}</option><option value="church">Registered by churches</option><option value="zone">Registered by zones</option><option value="group">Registered by groups</option><option value="cell">Registered by cells</option><option value="other">Other ministry registrations</option></Select>}
               </CardContent>
             </Card>
 
@@ -151,6 +158,7 @@ export function ZonePortal() {
                         <th className="py-2 pr-3 font-medium">Country</th>
                         <th className="py-2 pr-3 font-medium">Location</th>
                         <th className="py-2 pr-3 font-medium">Registration type</th>
+                        {data.kind === "network" && <th className="py-2 pr-3 font-medium">Source</th>}
                         <th className="py-2 pr-3 text-right font-medium">Expected</th>
                         <th className="py-2 font-medium">Readiness</th>
                         <th className="py-2 text-right font-medium">Actions</th>
@@ -168,6 +176,7 @@ export function ZonePortal() {
                             <td className="max-w-40 py-2 pr-3">{item.country || "—"}</td>
                             <td className="max-w-56 py-2 pr-3 text-muted-foreground">{[item.city, item.venue].filter(Boolean).join(" · ") || "Details pending"}</td>
                             <td className="min-w-64 max-w-80 py-2 pr-3 text-xs">{orgHierarchy(item)}</td>
+                            {data.kind === "network" && <td className="py-2 pr-3"><SourceBadge source={item.source_scope} networkName={data.zone} /></td>}
                             <td className="py-2 pr-3 text-right">{nfull.format(item.expected_attendance || 0)}</td>
                             <td className="py-2">
                               <StatusBadge status={item.readiness_status} />
@@ -227,6 +236,7 @@ export function ZonePortal() {
                         <th className="py-2 pr-3 font-medium">Country</th>
                         <th className="py-2 pr-3 font-medium">Location</th>
                         <th className="py-2 pr-3 font-medium">Registration type</th>
+                        {data.kind === "network" && <th className="py-2 pr-3 font-medium">Source</th>}
                         <th className="py-2 pr-3 font-medium">Report status</th>
                         <th className="py-2 pr-3 text-right font-medium">Attendance</th>
                         <th className="py-2 pr-3 text-right font-medium">Souls won</th>
@@ -242,6 +252,7 @@ export function ZonePortal() {
                           <td className="max-w-40 py-2 pr-3">{item.country || "—"}</td>
                           <td className="max-w-56 py-2 pr-3 text-muted-foreground">{[item.city, item.venue].filter(Boolean).join(" · ") || "—"}</td>
                           <td className="min-w-64 max-w-80 py-2 pr-3 text-xs">{orgHierarchy(item)}</td>
+                          {data.kind === "network" && <td className="py-2 pr-3"><SourceBadge source={item.source_scope} networkName={data.zone} /></td>}
                           <td className="py-2 pr-3"><ReportStatusBadge reported={!!item.report_id} /></td>
                           <td className="py-2 pr-3 text-right">{item.report_id ? nfull.format((item.reported_attendance || 0) + (item.reported_online_participation || 0)) : "—"}</td>
                           <td className="py-2 pr-3 text-right">{item.report_id ? nfull.format(item.reported_salvation || 0) : "—"}</td>
@@ -393,6 +404,11 @@ function ZoneCrusadeEditDialog({ crusade, token, onClose, onSaved }) {
       </div>
     </dialog>
   );
+}
+
+function SourceBadge({ source, networkName }) {
+  const direct = source === "network";
+  return <span className={`inline-flex whitespace-nowrap border px-2 py-1 text-xs font-medium ${direct ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-slate-700"}`}>{sourceLabel(source, networkName)}</span>;
 }
 
 function ReportStatusBadge({ reported }) {
