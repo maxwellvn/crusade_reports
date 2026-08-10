@@ -290,6 +290,10 @@ test("mission nation catalogue contains 242 nations and rejects home-nation sele
   assert.equal(missionNationSelectionSchema.safeParse({ ...selection, mission_country_code: "NG" }).success, false);
 });
 
+test("Turkey is visible by its familiar English name in country selectors", () => {
+  assert.deepEqual(COUNTRIES.find((country) => country.code === "TR")?.name, "Turkey");
+});
+
 test("each zone submits once while multiple zones may prefer the same nation", () => {
   db.exec("BEGIN");
   try {

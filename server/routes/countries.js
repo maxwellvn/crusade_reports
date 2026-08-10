@@ -12,12 +12,15 @@ const CODES =
   );
 
 const dn = new Intl.DisplayNames(["en"], { type: "region" });
-export const COUNTRIES = CODES.map((code) => ({ code, name: dn.of(code) || code, continent: continentForCode(code) }))
+const DISPLAY_NAME_OVERRIDES = { TR: "Turkey" };
+export const COUNTRIES = CODES.map((code) => ({ code, name: DISPLAY_NAME_OVERRIDES[code] || dn.of(code) || code, continent: continentForCode(code) }))
   .filter((c) => c.name && c.name !== c.code)
   .sort((a, b) => a.name.localeCompare(b.name));
 
 // name (any case) -> ISO code, for resolving a typed country during import.
 export const countryCodeByName = (name) =>
-  COUNTRIES.find((c) => c.name.toLowerCase() === String(name || "").trim().toLowerCase())?.code || "";
+  ({ türkiye: "TR", turkiye: "TR" }[String(name || "").trim().toLowerCase()]
+    || COUNTRIES.find((c) => c.name.toLowerCase() === String(name || "").trim().toLowerCase())?.code
+    || "");
 
 countries.get("/", wrap((_req, res) => res.json(COUNTRIES)));
