@@ -207,6 +207,12 @@ test("upcoming crusades are offered as individual choices", () => {
   assert.equal(UPCOMING_CRUSADES.some(({ dates }) => /[,&]/.test(dates)), false);
 });
 
+test("university crusades are identified as youth crusades", () => {
+  const universityCrusades = UPCOMING_CRUSADES.filter((item) => /university/i.test(item.names));
+  assert.ok(universityCrusades.length > 0);
+  assert.ok(universityCrusades.every((item) => item.names.includes("(Youth Crusade)")));
+});
+
 test("upcoming crusade corrections preserve the approved individual schedule", () => {
   const country = (code) => UPCOMING_CRUSADES.filter((item) => item.country_code === code);
   assert.deepEqual(country("CG").map(({ names, dates }) => [names, dates]), [["Makelele City Wide Crusade", "28 Aug"]]);
