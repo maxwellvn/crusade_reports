@@ -473,6 +473,31 @@ db.exec(`
     cities TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS upcoming_crusade_interest_choices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    interest_id INTEGER NOT NULL REFERENCES upcoming_crusade_interests(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    opportunity_code TEXT NOT NULL,
+    opportunity_nation TEXT NOT NULL,
+    opportunity_dates TEXT NOT NULL,
+    opportunity_names TEXT NOT NULL,
+    opportunity_types TEXT NOT NULL,
+    opportunity_cities TEXT NOT NULL,
+    UNIQUE(interest_id, position)
+  );
+  CREATE INDEX IF NOT EXISTS idx_upcoming_choice_code ON upcoming_crusade_interest_choices(opportunity_code);
+`);
+
+db.exec(`
+  INSERT OR IGNORE INTO upcoming_crusade_interest_choices
+    (interest_id, position, opportunity_code, opportunity_nation, opportunity_dates, opportunity_names, opportunity_types, opportunity_cities)
+  SELECT id, 0, opportunity_code, opportunity_nation, opportunity_dates, opportunity_names, opportunity_types, opportunity_cities
+  FROM upcoming_crusade_interests;
+  INSERT OR IGNORE INTO upcoming_crusade_interest_choices
+    (interest_id, position, opportunity_code, opportunity_nation, opportunity_dates, opportunity_names, opportunity_types, opportunity_cities)
+  SELECT id, 1, second_opportunity_code, second_opportunity_nation, second_opportunity_dates, second_opportunity_names, second_opportunity_types, second_opportunity_cities
+  FROM upcoming_crusade_interests WHERE second_opportunity_code IS NOT NULL;
 `);
 
 const upcomingInterestColumns = new Set(db.prepare("PRAGMA table_info(upcoming_crusade_interests)").all().map((column) => column.name));

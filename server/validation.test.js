@@ -187,7 +187,9 @@ test("upcoming crusade interest requires zone identity and confirmed travel acce
   assert.equal(upcomingCrusadeInterestSchema.safeParse(interest).success, true);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, zone_name: "" }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: [] }).success, false);
-  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE-01", "GH-01"] }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE-01", "GH-01"] }).success, true);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: ["KE-01", "KE-01"] }).success, false);
+  assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, opportunity_codes: Array.from({ length: 51 }, (_, index) => `KE-${index}`) }).success, false);
   assert.equal(upcomingCrusadeInterestSchema.safeParse({ ...interest, designation: "" }).success, false);
 });
 

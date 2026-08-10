@@ -14,8 +14,7 @@ const countries = new Map(COUNTRIES.map((item) => [item.code, item]));
 
 export function upcomingCrusadeCatalogue({ includeRemoved = false } = {}) {
   const totals = new Map(db.prepare(`SELECT code, COUNT(*) count FROM (
-    SELECT opportunity_code code FROM upcoming_crusade_interests
-    UNION ALL SELECT second_opportunity_code code FROM upcoming_crusade_interests WHERE second_opportunity_code IS NOT NULL
+    SELECT opportunity_code code FROM upcoming_crusade_interest_choices
   ) GROUP BY code`).all().map((row) => [row.code, row.count]));
   const assigned = new Set(db.prepare("SELECT opportunity_code FROM upcoming_crusade_assignments").all().map((row) => row.opportunity_code));
   const removed = new Set(db.prepare("SELECT opportunity_code FROM upcoming_crusade_removed").all().map((row) => row.opportunity_code));
@@ -52,25 +51,31 @@ upcomingCrusades.post("/interests", wrap(async (req, res) => {
   if (data.group_name && !group) throw new ApiError(400, "INVALID_GROUP", "Choose a group that belongs to the selected zone, or leave group blank.");
   const reference = `UC-${new Date().getUTCFullYear()}-${randomBytes(4).toString("hex").toUpperCase()}`;
   try {
-    db.prepare(`INSERT INTO upcoming_crusade_interests
-      (reference_code, designation, full_name, zone_name, group_name, email, kingschat_username, phone_country_code, phone_number,
-       passport_country_code, passport_country_name, passport_expiry, opportunity_code, opportunity_nation,
-       opportunity_dates, opportunity_names, opportunity_types, opportunity_cities, second_opportunity_code,
-       second_opportunity_nation, second_opportunity_dates, second_opportunity_names, second_opportunity_types,
-       second_opportunity_cities, additional_information)
-      VALUES (@reference, @designation, @full_name, @zone, @group_name, @email, @kingschat_username, @phone_country_code, @phone_number,
-       @passport_code, @passport_name, @passport_expiry, @opportunity_code, @nation, @dates, @names, @types, @cities,
-       @second_code, @second_nation, @second_dates, @second_names, @second_types, @second_cities, @notes)`)
-      .run({
-        reference, ...data, zone: zone.zone, group_name: group?.name || null, passport_expiry: "",
-        email: "", kingschat_username: "", phone_country_code: "", phone_number: "",
-        passport_code: passport.code, passport_name: passport.name,
-        opportunity_code: opportunity.code, nation: opportunity.nation, dates: opportunity.dates, names: opportunity.names,
-        types: opportunity.types, cities: opportunity.cities, notes: data.additional_information || null,
-        second_code: secondOpportunity?.code || null, second_nation: secondOpportunity?.nation || null,
-        second_dates: secondOpportunity?.dates || null, second_names: secondOpportunity?.names || null,
-        second_types: secondOpportunity?.types || null, second_cities: secondOpportunity?.cities || null,
-      });
+    db.transaction(() => {
+      const inserted = db.prepare(`INSERT INTO upcoming_crusade_interests
+        (reference_code, designation, full_name, zone_name, group_name, email, kingschat_username, phone_country_code, phone_number,
+         passport_country_code, passport_country_name, passport_expiry, opportunity_code, opportunity_nation,
+         opportunity_dates, opportunity_names, opportunity_types, opportunity_cities, second_opportunity_code,
+         second_opportunity_nation, second_opportunity_dates, second_opportunity_names, second_opportunity_types,
+         second_opportunity_cities, additional_information)
+        VALUES (@reference, @designation, @full_name, @zone, @group_name, @email, @kingschat_username, @phone_country_code, @phone_number,
+         @passport_code, @passport_name, @passport_expiry, @opportunity_code, @nation, @dates, @names, @types, @cities,
+         @second_code, @second_nation, @second_dates, @second_names, @second_types, @second_cities, @notes)`)
+        .run({
+          reference, ...data, zone: zone.zone, group_name: group?.name || null, passport_expiry: "",
+          email: "", kingschat_username: "", phone_country_code: "", phone_number: "",
+          passport_code: passport.code, passport_name: passport.name,
+          opportunity_code: opportunity.code, nation: opportunity.nation, dates: opportunity.dates, names: opportunity.names,
+          types: opportunity.types, cities: opportunity.cities, notes: data.additional_information || null,
+          second_code: secondOpportunity?.code || null, second_nation: secondOpportunity?.nation || null,
+          second_dates: secondOpportunity?.dates || null, second_names: secondOpportunity?.names || null,
+          second_types: secondOpportunity?.types || null, second_cities: secondOpportunity?.cities || null,
+        });
+      const insertChoice = db.prepare(`INSERT INTO upcoming_crusade_interest_choices
+        (interest_id, position, opportunity_code, opportunity_nation, opportunity_dates, opportunity_names, opportunity_types, opportunity_cities)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+      selected.forEach((item, position) => insertChoice.run(inserted.lastInsertRowid, position, item.code, item.nation, item.dates, item.names, item.types, item.cities));
+    })();
   } catch (error) {
     if (error.code === "SQLITE_CONSTRAINT_UNIQUE") throw new ApiError(409, "ZONE_ALREADY_REGISTERED", "This zone has already indicated an upcoming crusade preference.");
     throw error;
@@ -93,13 +98,18 @@ function rows(query = {}) {
   for (const [key, column] of [["zone", "zone_name"], ["destination", "opportunity_code"], ["passport", "passport_country_code"]]) {
     const value = String(query[key] || "").trim().slice(0, 250);
     if (value) {
-      where.push(key === "destination" ? `(opportunity_code = @destination OR second_opportunity_code = @destination)` : `${column} = @${key} COLLATE NOCASE`);
+      where.push(key === "destination" ? `EXISTS (SELECT 1 FROM upcoming_crusade_interest_choices choice WHERE choice.interest_id = upcoming_crusade_interests.id AND choice.opportunity_code = @destination)` : `${column} = @${key} COLLATE NOCASE`);
       params[key] = value;
     }
   }
   const direction = String(query.direction).toLowerCase() === "asc" ? "ASC" : "DESC";
   const sort = SORTS[query.sort] || SORTS.created_at;
-  return db.prepare(`SELECT * FROM upcoming_crusade_interests ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${sort} ${direction}, id DESC`).all(params);
+  const result = db.prepare(`SELECT * FROM upcoming_crusade_interests ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${sort} ${direction}, id DESC`).all(params);
+  if (!result.length) return result;
+  const choices = db.prepare(`SELECT * FROM upcoming_crusade_interest_choices WHERE interest_id IN (${result.map(() => "?").join(",")}) ORDER BY interest_id, position`).all(...result.map((row) => row.id));
+  const byInterest = new Map();
+  for (const choice of choices) byInterest.set(choice.interest_id, [...(byInterest.get(choice.interest_id) || []), choice]);
+  return result.map((row) => ({ ...row, opportunities: byInterest.get(row.id) || [] }));
 }
 
 upcomingCrusades.get("/admin", requirePageAccess("dashboard/upcoming-crusades"), wrap((req, res) => {
@@ -151,8 +161,8 @@ upcomingCrusades.delete("/admin/opportunities/:code", requirePageAccess("dashboa
 const columns = [
   { header: "Reference", value: (row) => row.reference_code }, { header: "Designation", value: (row) => row.designation }, { header: "Name", value: (row) => row.full_name },
   { header: "Zone", value: (row) => row.zone_name }, { header: "Group", value: (row) => row.group_name },
-  { header: "Selected nations", value: (row) => [row.opportunity_nation, row.second_opportunity_nation].filter(Boolean).join("; ") }, { header: "Crusade dates", value: (row) => [row.opportunity_dates, row.second_opportunity_dates].filter(Boolean).join("; ") },
-  { header: "Crusades", value: (row) => [row.opportunity_names, row.second_opportunity_names].filter(Boolean).join("; ") }, { header: "Cities", value: (row) => [row.opportunity_cities, row.second_opportunity_cities].filter(Boolean).join("; ") },
+  { header: "Selected nations", value: (row) => row.opportunities.map((item) => item.opportunity_nation).join("; ") }, { header: "Crusade dates", value: (row) => row.opportunities.map((item) => item.opportunity_dates).join("; ") },
+  { header: "Crusades", value: (row) => row.opportunities.map((item) => item.opportunity_names).join("; ") }, { header: "Cities", value: (row) => row.opportunities.map((item) => item.opportunity_cities).join("; ") },
   { header: "Passport", value: (row) => row.passport_country_name },
   { header: "Additional information", value: (row) => row.additional_information },
   { header: "Submitted at (UTC)", value: (row) => row.created_at },

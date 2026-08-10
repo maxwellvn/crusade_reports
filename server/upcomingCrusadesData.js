@@ -1,5 +1,7 @@
 // Source: "LIST OF UPCOMING CRUSADES BY NETWORKS – NOTC NATIONS & CONTINENTS EDITION.pdf"
 // Source rows are expanded below so every selectable card represents one crusade.
+import { continentForCode } from "./countryContinents.js";
+
 const CRUSADES = [
   { code: "AO", nation: "Angola", dates: "29 Aug", names: "Night of a Thousand Crusades - Jesus Alive", types: "Mega Crusade", cities: "Luanda" },
   { code: "AR", nation: "Argentina", dates: "29 Aug & 18 Sep", names: "Rhapsody Women Crusade; Light Up Argentina", types: "Leading Ladies; Mega Crusades", cities: "Formosa" },
@@ -84,6 +86,7 @@ function expandCrusades(item) {
       ...item,
       code: `${item.code}-${String(index + 1).padStart(2, "0")}`,
       country_code: item.code,
+      continent: continentForCode(item.code),
       names: valueAt(names, index),
       dates: crusadeDate,
       cities: valueAt(cities, index),

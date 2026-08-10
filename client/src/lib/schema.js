@@ -177,7 +177,7 @@ export const upcomingCrusadeInterestSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone").max(250),
   group_name: z.string().trim().max(250).optional().default(""),
   passport_country_code: z.string().length(2, "Select your passport country"),
-  opportunity_codes: z.array(z.string().min(2).max(20)).length(1, "Select one upcoming crusade"),
+  opportunity_codes: z.array(z.string().min(2).max(20)).min(1, "Select at least one upcoming crusade").max(50, "Select no more than 50 crusades").refine((codes) => new Set(codes).size === codes.length, "Select each crusade only once"),
   additional_information: z.string().trim().max(2000).optional().default(""),
 });
 
