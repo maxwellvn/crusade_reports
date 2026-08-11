@@ -19,9 +19,17 @@ const CODES = new Set(LANGUAGES.map(({ code }) => code));
 const cache = new Map();
 const usage = new Map();
 
-export function applyTranslationGlossary(target, value) {
-  if (target !== "id") return value;
-  return String(value).replace(/\bperang\s+salib\b/gi, "Kebaktian Kebangunan Rohani (KKR)");
+export function applyTranslationGlossary(target, value, source = "") {
+  if (target === "id") return String(value).replace(/\bperang\s+salib\b/gi, "Kebaktian Kebangunan Rohani (KKR)");
+  if (target !== "de" || !/\bcrusades?\b/i.test(source)) return value;
+  return String(value)
+    .replace(/\bKreuzzügen\b/gi, "Evangelisationen")
+    .replace(/\bKreuzzüge\b/gi, "Evangelisationen")
+    .replace(/\bKreuzzug(?:es|s)?\b/gi, "Evangelisation")
+    .replace(/\bKampagnen\b/gi, "Evangelisationen")
+    .replace(/\bKampagne\b/gi, "Evangelisation")
+    .replace(/\bBürgerversammlungen\b/gi, "Evangelisationsveranstaltungen")
+    .replace(/\bBürgerversammlung\b/gi, "Evangelisationsveranstaltung");
 }
 
 function publicIp(value) {
@@ -68,7 +76,7 @@ translation.post("/translate", wrap(async (req, res) => {
     const results = body?.data?.translations || [];
     if (results.length !== missing.length) throw new ApiError(502, "TRANSLATION_FAILED", "Google returned an incomplete translation.");
     results.forEach((item, position) => {
-      const value = applyTranslationGlossary(target, item.translatedText || "");
+      const value = applyTranslationGlossary(target, item.translatedText || "", missing[position]);
       translated[indexes[position]] = value;
       cache.set(`${target}\0${missing[position]}`, value);
     });

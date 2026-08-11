@@ -18,7 +18,7 @@ import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSet
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
 import { changedPortalTemplateFields, currentDirectoryZoneNames, invalidMediaLink, validIsoDate } from "./routes/zonePortal.js";
-import { COUNTRIES } from "./routes/countries.js";
+import { COUNTRIES, countryCodeByName } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
 import { updateCampaignSettings } from "./routes/campaignSettings.js";
@@ -277,6 +277,12 @@ test("Indonesian translations use the approved term for crusade", () => {
   assert.equal(applyTranslationGlossary("ms", "Perang Salib"), "Perang Salib");
 });
 
+test("German translations use evangelistic terminology for crusades", () => {
+  assert.equal(applyTranslationGlossary("de", "Nacht der tausend Kreuzzüge", "Night of a Thousand Crusades"), "Nacht der tausend Evangelisationen");
+  assert.equal(applyTranslationGlossary("de", "Mega-Kampagne und Bürgerversammlung", "Mega Crusade and Community Crusade"), "Mega-Evangelisation und Evangelisationsveranstaltung");
+  assert.equal(applyTranslationGlossary("de", "Medienkampagne", "Media campaign"), "Medienkampagne");
+});
+
 test("media training accepts an individual trainee and supports admin filtering", () => {
   const registration = {
     zone_name: "Lagos Zone 1", group_name: "Lekki Group", church_name: "Christ Embassy Lekki", church_country_code: "NG", church_city: "Lagos", church_city_place_id: "place-lagos", languages_spoken: ["English", "Yoruba"], full_name: "Ada Example",
@@ -317,6 +323,13 @@ test("mission nation catalogue contains 242 nations and rejects home-nation sele
 
 test("Turkey is visible by its familiar English name in country selectors", () => {
   assert.deepEqual(COUNTRIES.find((country) => country.code === "TR")?.name, "Turkey");
+});
+
+test("Saint Helena is visible and searchable by common names in country selectors", () => {
+  assert.equal(COUNTRIES.find((country) => country.code === "SH")?.name, "Saint Helena");
+  assert.equal(countryCodeByName("Saint Helena"), "SH");
+  assert.equal(countryCodeByName("St Helena"), "SH");
+  assert.equal(countryCodeByName("St. Helena"), "SH");
 });
 
 test("each zone submits once while multiple zones may prefer the same nation", () => {
