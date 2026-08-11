@@ -248,14 +248,14 @@ auth.get("/kingschat/login", (req, res) => {
     response_type: "token",
     post_redirect: "true",
   });
-  // ?pm=1 sets a short-lived cookie that tells the callback to auto-add the
-  // signed-in KingsChat username to the dashboard allow list. Lets us share
-  // /admin/pm as a self-service access link without manually approving each user.
+  // Leadership access links set a short-lived cookie that tells the callback to
+  // auto-add the signed-in KingsChat username to the dashboard allow list.
   // sameSite=none + secure is required because KingsChat POSTs the token back
   // from accounts.kingsch.at — a cross-site POST, which browsers won't carry
   // sameSite=lax cookies on.
-  if (req.query.pm === "1") {
-    res.cookie("pm_auto_approve", "1", {
+  const leadershipAccess = req.query.dg === "1" ? "dg" : req.query.pm === "1" ? "pm" : "";
+  if (leadershipAccess) {
+    res.cookie(`${leadershipAccess}_auto_approve`, "1", {
       httpOnly: true,
       sameSite: "none",
       secure: true,
@@ -276,13 +276,12 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
   } catch {
     return res.redirect(`${landing}?auth_error=kingschat_verification_failed`);
   }
-  // Auto-approve: if the pm_auto_approve cookie is set (from /admin/pm → login?pm=1),
-  // add the signed-in KingsChat username to the allow list before the access check.
-  const pmAutoApprove = cookie(req, "pm_auto_approve") === "1";
-  if (pmAutoApprove) {
-    res.clearCookie("pm_auto_approve", { httpOnly: true, sameSite: "none", secure: true, path: "/" });
-    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, "pm_auto_approve");
-    // Seed default page permissions for pm users so they start with the
+  // Auto-approve leadership users before the regular dashboard access check.
+  const leadershipAccess = cookie(req, "dg_auto_approve") === "1" ? "dg" : cookie(req, "pm_auto_approve") === "1" ? "pm" : "";
+  if (leadershipAccess) {
+    res.clearCookie(`${leadershipAccess}_auto_approve`, { httpOnly: true, sameSite: "none", secure: true, path: "/" });
+    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, `${leadershipAccess}_auto_approve`);
+    // Seed default page permissions for leadership users so they start with the
     // standard non-super-admin set, not the full list.
     const permStmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
     for (const key of DEFAULT_PAGE_KEYS) permStmt.run(user.username, key);
