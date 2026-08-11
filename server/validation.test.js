@@ -13,7 +13,7 @@ import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
 import { crusadeFilterOptions, deleteCrusadeReport } from "./routes/crusades.js";
-import { buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, registrationFilterOptions, updateRegistrationCrusade } from "./routes/registrations.js";
+import { attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, registrationFilterOptions, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
@@ -796,6 +796,19 @@ test("cell analysis is structured by zone, group, church, and cell", () => {
   } finally {
     db.exec("ROLLBACK");
   }
+});
+
+test("cell analysis maps zones to their Churches API regions", () => {
+  const rows = attachCellRegions([
+    { zone: "ZONE ALPHA", key: "Cell One", planned: 2 },
+    { zone: "Unknown Zone", key: "Cell Two", planned: 1 },
+  ], [
+    { region: "Region 3", zone: "ZONE ALPHA" },
+  ]);
+  assert.deepEqual(rows.map(({ zone, region }) => ({ zone, region })), [
+    { zone: "ZONE ALPHA", region: "Region 3" },
+    { zone: "Unknown Zone", region: "Region not mapped" },
+  ]);
 });
 
 test("PDF exports download as readable multi-page documents", async () => {

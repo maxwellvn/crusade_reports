@@ -13,6 +13,7 @@ import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 import { COUNTRIES } from "./countries.js";
 import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
+import { loadZones } from "./zones.js";
 
 export const registrations = Router();
 
@@ -288,6 +289,14 @@ export function cellRegistrationsByZone() {
   ).all();
 }
 
+export function attachCellRegions(rows, directory) {
+  const regionByZone = new Map(directory.map((entry) => [String(entry.zone).trim().toLowerCase(), entry.region]));
+  return rows.map((row) => ({
+    ...row,
+    region: regionByZone.get(String(row.zone).trim().toLowerCase()) || "Region not mapped",
+  }));
+}
+
 export function buildZoneCrusadeBreakdown(typeRows, cellularRows) {
   const zones = new Map();
   const ensure = (zone) => {
@@ -304,7 +313,7 @@ export function buildZoneCrusadeBreakdown(typeRows, cellularRows) {
   return [...zones.values()].sort((a, b) => b.total - a.total || a.zone.localeCompare(b.zone));
 }
 
-function crusadeAnalysisData() {
+async function crusadeAnalysisData() {
   const typeRows = db.prepare(
     `SELECT zone, event_type, COALESCE(SUM(planned_count), 0) AS planned
      FROM registration_items i
@@ -333,19 +342,19 @@ function crusadeAnalysisData() {
       by_zone: cellularByZone,
       by_group: cellularRegistrationsBy("group_name"),
       by_church: cellularRegistrationsBy("church_name"),
-      by_cell: cellRegistrationsByZone(),
+      by_cell: attachCellRegions(cellRegistrationsByZone(), await loadZones()),
     },
     zone_type_breakdown: zoneTypeBreakdown,
     active_types: CRUSADE_TYPES.filter(([key]) => typeRows.some((row) => row.event_type === key)),
   };
 }
 
-registrations.get("/crusade-analysis", requireAdmin, wrap((_req, res) => {
-  res.json(crusadeAnalysisData());
+registrations.get("/crusade-analysis", requireAdmin, wrap(async (_req, res) => {
+  res.json(await crusadeAnalysisData());
 }));
 
 registrations.get("/crusade-analysis/export", requireAdmin, wrap(async (req, res) => {
-  const data = crusadeAnalysisData();
+  const data = await crusadeAnalysisData();
   const format = ["xlsx", "pdf"].includes(req.query.format) ? req.query.format : "csv";
   if (req.query.view === "cellular") {
     const level = ["group", "church"].includes(req.query.level) ? req.query.level : "zone";
@@ -358,6 +367,7 @@ registrations.get("/crusade-analysis/export", requireAdmin, wrap(async (req, res
   }
   if (req.query.view === "cells") {
     return sendExport(res, format, "cellular-crusades-by-cell-and-zone", [
+      { header: "Region", value: (row) => row.region, pdfWidth: 1.5 },
       { header: "Zone", value: (row) => row.zone, pdfWidth: 2.5 },
       { header: "Group", value: (row) => row.group_name || "Not specified", pdfWidth: 2 },
       { header: "Church", value: (row) => row.church_name || "Not specified", pdfWidth: 2 },

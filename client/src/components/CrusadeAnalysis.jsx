@@ -93,8 +93,9 @@ function downloadAnalysisWord(data) {
       cellularSection("group", "Group"),
       cellularSection("church", "Church"),
       {
-        title: "Cell breakdown by zone and group",
+        title: "Cell breakdown by region, zone, and group",
         columns: [
+          { header: "Region", key: "region", width: 1800 },
           { header: "Zone", key: "zone", width: 2600 },
           { header: "Group", key: "group_name", width: 2200 },
           { header: "Church", key: "church_name", width: 2200 },
@@ -132,7 +133,7 @@ export function CrusadeAnalysis() {
   const zoneRows = data.zone_type_breakdown.filter((row) => !needle || row.zone.toLowerCase().includes(needle));
   const levelConfig = LEVELS.find(([key]) => key === level);
   const cellularRows = data.cellular[`by_${level}`].filter((row) => !needle || row.key.toLowerCase().includes(needle));
-  const cellRows = data.cellular.by_cell.filter((row) => !needle || [row.zone, row.group_name, row.church_name, row.key].some((value) => String(value || "").toLowerCase().includes(needle)));
+  const cellRows = data.cellular.by_cell.filter((row) => !needle || [row.region, row.zone, row.group_name, row.church_name, row.key].some((value) => String(value || "").toLowerCase().includes(needle)));
   const openRegistrations = (filters) => navigate(`/registrations?${new URLSearchParams(filters).toString()}`);
   const exportCurrent = (format) => {
     const params = new URLSearchParams({ view: tab, format });
@@ -204,10 +205,10 @@ export function CrusadeAnalysis() {
       ) : (
         <section aria-labelledby="cell-breakdown-heading" className="space-y-4">
           <div>
-            <h3 id="cell-breakdown-heading" className="text-base font-semibold text-slate-950">Cell breakdown by zone and group</h3>
-            <p className="mt-1 text-sm text-slate-500">See how many cells registered crusades in every zone, organised under their groups.</p>
+            <h3 id="cell-breakdown-heading" className="text-base font-semibold text-slate-950">Cell breakdown by region</h3>
+            <p className="mt-1 text-sm text-slate-500">See registered cells by Churches API region, with each region organised by zone and group.</p>
           </div>
-          <ReportToolbar count={`${nfull.format(cellRows.length)} cells`} query={query} setQuery={setQuery} placeholder="Search zone, group, church or cell..." />
+          <ReportToolbar count={`${nfull.format(cellRows.length)} cells`} query={query} setQuery={setQuery} placeholder="Search region, zone, group, church or cell..." />
           <CellBreakdown rows={cellRows} onSelect={openRegistrations} />
         </section>
       )}
@@ -239,14 +240,22 @@ function CellularTable({ rows, level, onSelect }) {
 
 function CellBreakdown({ rows, onSelect }) {
   if (!rows.length) return <div className="border-y border-slate-200 py-14 text-center text-sm text-slate-500">No cells match this search.</div>;
-  const zones = new Map();
+  const regions = new Map();
   for (const row of rows) {
+    if (!regions.has(row.region)) regions.set(row.region, new Map());
+    const zones = regions.get(row.region);
     if (!zones.has(row.zone)) zones.set(row.zone, new Map());
     const group = row.group_name || "Group not specified";
     if (!zones.get(row.zone).has(group)) zones.get(row.zone).set(group, []);
     zones.get(row.zone).get(group).push(row);
   }
-  return <div className="space-y-7">{[...zones].map(([zone, groups]) => {
+  const regionNumber = (name) => Number(String(name).match(/\d+/)?.[0]) || Number.MAX_SAFE_INTEGER;
+  return <div className="space-y-10">{[...regions].sort(([a], [b]) => regionNumber(a) - regionNumber(b) || a.localeCompare(b)).map(([region, zones]) => {
+    const regionRows = [...zones.values()].flatMap((groups) => [...groups.values()].flat());
+    const regionCrusades = regionRows.reduce((sum, row) => sum + Number(row.planned || 0), 0);
+    return <section key={region} aria-label={`${region} cell breakdown`} className="space-y-5">
+      <header className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-blue-700 pb-3"><h4 className="text-xl font-semibold text-slate-950">{region}</h4><p className="text-sm text-slate-600">{nfull.format(zones.size)} zones · {nfull.format(regionRows.length)} registered cells · {nfull.format(regionCrusades)} crusades</p></header>
+      <div className="space-y-6">{[...zones].sort(([a], [b]) => a.localeCompare(b)).map(([zone, groups]) => {
     const zoneRows = [...groups.values()].flat();
     const zoneCrusades = zoneRows.reduce((sum, row) => sum + Number(row.planned || 0), 0);
     return <section key={zone} className="overflow-hidden border border-slate-200 bg-white" aria-label={`${zone} cell breakdown`}>
@@ -255,6 +264,8 @@ function CellBreakdown({ rows, onSelect }) {
         <div className="flex items-baseline justify-between gap-3 bg-blue-50 px-5 py-3"><h5 className="text-sm font-semibold text-blue-950">{group}</h5><span className="text-xs text-blue-700">{nfull.format(groupRows.length)} cell{groupRows.length === 1 ? "" : "s"}</span></div>
         <div className="overflow-x-auto"><table className="w-full min-w-[38rem] text-sm"><thead><tr className="border-b text-left text-xs text-slate-500"><th className="px-5 py-2.5 font-medium">Cell</th><th className="px-5 py-2.5 font-medium">Church</th><th className="px-5 py-2.5 text-right font-medium">Registered crusades</th><th className="px-5 py-2.5 text-right font-medium">Entries</th></tr></thead><tbody>{groupRows.map((row) => <tr key={`${row.church_name || ""}-${row.key}`} className="border-b last:border-0"><td className="px-5 py-3 font-medium text-slate-950">{row.key}</td><td className="px-5 py-3 text-slate-600">{row.church_name || "Not specified"}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ organization_type: "cell", zone: row.zone, group_name: row.group_name || "", cell_name: row.key }} label={`${row.key} Cellular Crusades`} onSelect={onSelect} /></td><td className="px-5 py-3 text-right tabular-nums text-slate-600">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>
       </div>)}
+    </section>;
+      })}</div>
     </section>;
   })}</div>;
 }
