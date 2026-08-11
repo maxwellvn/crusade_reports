@@ -23,8 +23,23 @@ export function deleteCrusadeReport(id) {
   })();
 }
 
-// Exact-match filters (dropdown-driven); "city" is substring since it's free text.
-const FILTER_COLS = ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "event_type", "format"];
+// Exact-match filters are driven by dropdowns in the admin tables.
+const FILTER_COLS = ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country", "city", "event_type", "format"];
+const CRUSADE_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "cell_name", "network_name", "country", "city"];
+
+// Values for the PM/admin report-table dropdowns come from the complete report
+// dataset, so newly submitted attribution values appear automatically.
+export function crusadeFilterOptions() {
+  return Object.fromEntries(CRUSADE_FILTER_OPTION_COLS.map((column) => [
+    column,
+    db.prepare(
+      `SELECT DISTINCT TRIM(${column}) AS value
+       FROM crusades
+       WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''
+       ORDER BY value COLLATE NOCASE`
+    ).all().map((row) => row.value),
+  ]));
+}
 
 // Build the shared WHERE clause for the table and its export, so both apply the
 // exact same filters and free-text search.
@@ -35,7 +50,6 @@ function crusadeFilters(query) {
     const v = query[col];
     if (v) { where.push(`c.${col} = @${col}`); params[col] = String(v); }
   }
-  if (query.city) { where.push("c.city LIKE @city"); params.city = `%${query.city}%`; }
   if (query.q) {
     const match = String(query.q).trim().split(/\s+/).slice(0, 8)
       .map((t) => `"${t.replace(/"/g, "")}"*`).join(" ");
@@ -121,7 +135,7 @@ crusades.get("/", requireAdmin, wrap((req, res) => {
      ${from} ${clause} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
 
-  res.json({ rows, total, page, page_size: pageSize });
+  res.json({ rows, total, page, page_size: pageSize, filter_options: crusadeFilterOptions() });
 }));
 
 crusades.delete("/:id", requireSuperAdmin, wrap((req, res) => {

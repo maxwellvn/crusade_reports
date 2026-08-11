@@ -12,8 +12,8 @@ import { applyTranslationGlossary } from "./routes/translation.js";
 import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
-import { deleteCrusadeReport } from "./routes/crusades.js";
-import { buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, updateRegistrationCrusade } from "./routes/registrations.js";
+import { crusadeFilterOptions, deleteCrusadeReport } from "./routes/crusades.js";
+import { buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, registrationFilterOptions, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
@@ -550,6 +550,46 @@ test("super-admin deletions preserve linked data until the report is removed", (
     assert.equal(db.prepare("SELECT 1 FROM reports WHERE id = ?").get(reportId), undefined);
     assert.equal(deleteRegistrationCrusade(itemId).registration_deleted, true);
     assert.equal(db.prepare("SELECT 1 FROM registrations WHERE id = ?").get(registrationId), undefined);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("admin table filter dropdowns include values from registrations and reports", () => {
+  const marker = `Dropdown Zone ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    const registrationId = db.prepare(
+      `INSERT INTO registrations (organization_type, zone, country, plan_date)
+       VALUES ('zone', ?, 'Dropdown Country', '2026-08-01')`
+    ).run(marker).lastInsertRowid;
+    db.prepare(
+      `INSERT INTO registration_items
+       (registration_id, organization_type, zone, group_name, church_name, cell_name, network_name, country, plan_date,
+        event_type, planned_count, event_name, event_date, venue, expected_attendance, city)
+       VALUES (?, 'zone', ?, 'Dropdown Group', 'Dropdown Church', 'Dropdown Cell', 'Dropdown Network', 'Dropdown Country',
+        '2026-08-01', 'mega', 1, 'Dropdown Test', '2026-08-01', 'Test venue', 100, 'Dropdown City')`
+    ).run(registrationId, marker);
+    const reportId = db.prepare(
+      `INSERT INTO reports (organization_type, zone, country)
+       VALUES ('zone', ?, 'Dropdown Country')`
+    ).run(marker).lastInsertRowid;
+    db.prepare(
+      `INSERT INTO crusades
+       (report_id, organization_type, zone, group_name, church_name, cell_name, network_name, country, event_type, city, event_date)
+       VALUES (?, 'zone', ?, 'Dropdown Group', 'Dropdown Church', 'Dropdown Cell', 'Dropdown Network',
+        'Dropdown Country', 'mega', 'Dropdown City', '2026-08-01')`
+    ).run(reportId, marker);
+
+    for (const options of [registrationFilterOptions(), crusadeFilterOptions()]) {
+      assert.equal(options.zone.includes(marker), true);
+      assert.equal(options.group_name.includes("Dropdown Group"), true);
+      assert.equal(options.church_name.includes("Dropdown Church"), true);
+      assert.equal(options.cell_name.includes("Dropdown Cell"), true);
+      assert.equal(options.network_name.includes("Dropdown Network"), true);
+      assert.equal(options.country.includes("Dropdown Country"), true);
+      assert.equal(options.city.includes("Dropdown City"), true);
+    }
   } finally {
     db.exec("ROLLBACK");
   }

@@ -34,13 +34,13 @@ const FILTERS = [
   ["organization_type", "Registered as", "select", ORG_TYPES],
   ["readiness_status", "Readiness", "select", STATUSES],
   ["report_status", "Report status", "select", REPORT_STATUSES],
-  ["zone", "Zone", "text"],
-  ["group_name", "Group", "text"],
-  ["church_name", "Church", "text"],
-  ["cell_name", "Cell", "text"],
-  ["network_name", "Network", "text"],
-  ["country", "Country", "text"],
-  ["city", "City", "text"],
+  ["zone", "Zone", "dynamic-select"],
+  ["group_name", "Group", "dynamic-select"],
+  ["church_name", "Church", "dynamic-select"],
+  ["cell_name", "Cell", "dynamic-select"],
+  ["network_name", "Network", "dynamic-select"],
+  ["country", "Country", "dynamic-select"],
+  ["city", "City", "dynamic-select"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
   ["min_attendance", "Min expected attendance", "number"],
   ["date_from", "Crusade date from", "date"],
@@ -155,10 +155,12 @@ export function RegistrationsTable() {
         {showFilters && <div id="registration-filters" className="grid gap-x-5 gap-y-4 border-t border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-3 lg:grid-cols-4">
           {FILTERS.map(([key, label, kind, options]) => (
             <Field key={key} label={label}>
-              {kind === "select" ? (
+              {kind === "select" || kind === "dynamic-select" ? (
                 <Select value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}>
-                  <option value="">Any</option>
-                  {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  <option value="">Any {label.toLowerCase()}</option>
+                  {kind === "select"
+                    ? options.map(([v, l]) => <option key={v} value={v}>{l}</option>)
+                    : (data?.filter_options?.[key] || []).map((value) => <option key={value} value={value}>{value}</option>)}
                 </Select>
               ) : (
                 <Input type={kind} min={kind === "number" ? "0" : undefined} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}

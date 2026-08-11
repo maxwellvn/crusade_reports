@@ -243,6 +243,22 @@ const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_
 // Blue Elite module's data never leaks into the original admin views.
 const PUBLIC_PROGRAM_FILTER = "(i.program = 'public' OR i.program IS NULL)";
 
+const REGISTRATION_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "cell_name", "network_name", "country", "city"];
+
+// Values for the admin table dropdowns come from all public registration
+// records, rather than only the currently filtered page.
+export function registrationFilterOptions() {
+  return Object.fromEntries(REGISTRATION_FILTER_OPTION_COLS.map((column) => [
+    column,
+    db.prepare(
+      `SELECT DISTINCT TRIM(${column}) AS value
+       FROM registration_items i
+       WHERE ${PUBLIC_PROGRAM_FILTER} AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
+       ORDER BY value COLLATE NOCASE`
+    ).all().map((row) => row.value),
+  ]));
+}
+
 const CELLULAR_DIMENSIONS = new Set(["zone", "group_name", "church_name"]);
 function cellularRegistrationsBy(column) {
   if (!CELLULAR_DIMENSIONS.has(column)) throw new Error(`Unsupported cellular dimension: ${column}`);
@@ -610,5 +626,5 @@ registrations.get("/", requireAdmin, wrap((req, res) => {
      ${clause} ORDER BY ${sortCol} ${dir}, i.id DESC LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
 
-  res.json({ rows, total, page, page_size: pageSize });
+  res.json({ rows, total, page, page_size: pageSize, filter_options: registrationFilterOptions() });
 }));
