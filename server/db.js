@@ -180,6 +180,7 @@ db.exec(`
     plan_date         TEXT NOT NULL,
 
     event_type        TEXT NOT NULL,
+    other_event_type  TEXT,
     planned_count     INTEGER NOT NULL DEFAULT 0,
     event_name        TEXT,
     event_date        TEXT,
@@ -642,7 +643,7 @@ if (!registrationItemColsForProgram.has("program")) {
 }
 
 const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
-for (const col of ["event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
+for (const col of ["other_event_type", "event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
   if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
 }
 // Network-only, per individual crusade. Collaboration fields hold comma-joined

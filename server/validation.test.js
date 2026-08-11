@@ -821,6 +821,9 @@ test("cell analysis maps zones to their Churches API regions", () => {
 });
 
 test("personal dashboard Excel templates round-trip registration reports and media links", async () => {
+  assert.equal(db.prepare("PRAGMA table_info(registration_items)").all().some((column) => column.name === "other_event_type"), true);
+  const reportIndex = db.prepare("PRAGMA index_list(crusades)").all().find((index) => index.name === "idx_crusades_registration_item");
+  assert.equal(reportIndex?.unique, 1, "registration items must have at most one submitted report");
   const workbook = await buildPortalReportWorkbook([{
     id: 987654,
     event_name: "Excel Report Test",

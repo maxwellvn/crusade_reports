@@ -38,13 +38,14 @@ export function invalidMediaLink(value) {
 
 export function changedPortalTemplateFields(uploaded, item) {
   const expectedFormat = ONLINE_TYPES.includes(item.event_type) ? "online" : "physical";
+  const expectedOtherType = item.event_type === "other" ? (item.other_event_type || "Other") : (item.other_event_type || "");
   return [
     ["Registered Crusade", uploaded.registered_event_name, item.event_name],
     ["Registered Type", uploaded.registered_event_type, item.event_type],
     ["Registered Date", uploaded.registered_event_date, item.event_date || item.plan_date],
     ["Country", uploaded.registered_country, item.country],
     ["Format", uploaded.format, expectedFormat],
-    ["Other Crusade Type", uploaded.other_event_type, item.other_event_type],
+    ["Other Crusade Type", uploaded.other_event_type, expectedOtherType],
     ["Date Held", uploaded.event_date, item.event_date || item.plan_date],
     ["City", uploaded.city, item.city],
     ["Venue / Address", uploaded.venue, item.venue],
@@ -313,7 +314,9 @@ zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
   ensureReportingOpen();
   const { name, kind, col, slug } = resolvePortalScope(req.params.token);
   const rows = db.prepare(`
-    SELECT i.id, i.event_type, i.other_event_type, i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
+    SELECT i.id, i.event_type,
+           CASE WHEN i.event_type = 'other' THEN COALESCE(NULLIF(i.other_event_type, ''), 'Other') ELSE COALESCE(i.other_event_type, '') END AS other_event_type,
+           i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
            i.country, i.city, i.city_place_id, i.venue, i.minister_name
     FROM registration_items i
     WHERE i.${col} = ? AND (i.program = 'public' OR i.program IS NULL)
@@ -374,7 +377,7 @@ zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.sing
     const crusade = {
       format: ONLINE_TYPES.includes(item.event_type) ? "online" : "physical",
       event_type: item.event_type,
-      other_event_type: item.other_event_type || "",
+      other_event_type: item.event_type === "other" ? (item.other_event_type || "Other") : (item.other_event_type || ""),
       event_name: item.event_name,
       country: item.country,
       city: item.city,

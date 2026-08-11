@@ -51,7 +51,7 @@ const insertRegStmt = db.prepare(`
     @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username)
 `);
 const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "zone_manual", "group_manual", "church_name", "cell_name", "network_name", "country", "plan_date",
-  "event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id",
+  "event_type", "other_event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id",
   "crusade_collaborators", "zone_contribution", "estimated_budget", "rhapsody_copies_confirmed", "permits_obtained", "media_coverage_plan",
   "readiness_status"];
 
@@ -93,6 +93,7 @@ const insertRegistration = db.transaction((d) => {
       group_manual: d.group_manual ? 1 : 0,
       country: it.country,
       event_type: it.event_type,
+      other_event_type: it.other_event_type || null,
       planned_count: 1,
       event_name: it.event_name,
       event_date: it.event_date,
