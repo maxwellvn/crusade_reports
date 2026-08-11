@@ -28,7 +28,7 @@ import { buildCoverageRows } from "./coverage.js";
 import { sendExport } from "./routes/exporter.js";
 import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
-import { buildPortalReportWorkbook, parsePortalReportWorkbook, PORTAL_TEMPLATE_COLUMNS } from "./portalReportTemplate.js";
+import { buildPortalReportWorkbook, parsePortalReportWorkbook, PORTAL_TEMPLATE_COLUMNS, PORTAL_TEMPLATE_EDITABLE_KEYS } from "./portalReportTemplate.js";
 import {
   assertPersistentDatabasePath,
   createVerifiedBackup,
@@ -835,10 +835,12 @@ test("personal dashboard Excel templates round-trip registration reports and med
   const column = (key) => PORTAL_TEMPLATE_COLUMNS.findIndex(([, field]) => field === key) + 1;
   assert.equal(sheet.getRow(2).getCell(column("registration_item_id")).protection.locked, true);
   assert.equal(sheet.getRow(2).getCell(column("registered_event_name")).protection.locked, true);
+  for (const [, key] of PORTAL_TEMPLATE_COLUMNS) {
+    assert.equal(sheet.getRow(2).getCell(column(key)).protection.locked, !PORTAL_TEMPLATE_EDITABLE_KEYS.has(key), `${key} lock state`);
+  }
   assert.equal(sheet.getRow(2).getCell(column("attendance")).protection.locked, false);
   assert.equal(sheet.getRow(2).getCell(column("attendance")).dataValidation.type, "whole");
   assert.equal(sheet.getRow(2).getCell(column("crusade_expense")).dataValidation.type, "decimal");
-  sheet.getRow(2).getCell(column("submit")).value = "Yes";
   sheet.getRow(2).getCell(column("attendance")).value = 250;
   sheet.getRow(2).getCell(column("salvation")).value = 75;
   sheet.getRow(2).getCell(column("photo_links")).value = "https://drive.google.com/photo-test";
@@ -879,6 +881,13 @@ test("personal dashboard report imports reject tampering, formulas, invalid numb
     registered_event_type: source.event_type,
     registered_event_date: source.event_date,
     registered_country: source.country,
+    format: "physical",
+    other_event_type: "",
+    event_date: source.event_date,
+    city: source.city,
+    venue: source.venue,
+    minister_name: source.minister_name,
+    highlights: "",
   }, source), ["Registered Crusade"]);
   assert.equal(validIsoDate("2026-02-29"), false);
   assert.equal(validIsoDate("2026-08-30"), true);
@@ -888,7 +897,6 @@ test("personal dashboard report imports reject tampering, formulas, invalid numb
   const workbook = await buildPortalReportWorkbook([source], "Test Zone dashboard");
   const sheet = workbook.getWorksheet("Report Template");
   const column = (key) => PORTAL_TEMPLATE_COLUMNS.findIndex(([, field]) => field === key) + 1;
-  sheet.getRow(2).getCell(column("submit")).value = "Yes";
   sheet.getRow(2).getCell(column("attendance")).value = "not a number";
   sheet.getRow(2).getCell(column("salvation")).value = { formula: "1+1", result: 2 };
   const parsed = await parsePortalReportWorkbook(await workbook.xlsx.writeBuffer());

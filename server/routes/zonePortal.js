@@ -13,6 +13,7 @@ import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LABELS, yesNo, phone } from "../labels.js";
 import multer from "multer";
 import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalReportTemplate.js";
+import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -36,11 +37,19 @@ export function invalidMediaLink(value) {
 }
 
 export function changedPortalTemplateFields(uploaded, item) {
+  const expectedFormat = ONLINE_TYPES.includes(item.event_type) ? "online" : "physical";
   return [
     ["Registered Crusade", uploaded.registered_event_name, item.event_name],
     ["Registered Type", uploaded.registered_event_type, item.event_type],
     ["Registered Date", uploaded.registered_event_date, item.event_date || item.plan_date],
     ["Country", uploaded.registered_country, item.country],
+    ["Format", uploaded.format, expectedFormat],
+    ["Other Crusade Type", uploaded.other_event_type, item.other_event_type],
+    ["Date Held", uploaded.event_date, item.event_date || item.plan_date],
+    ["City", uploaded.city, item.city],
+    ["Venue / Address", uploaded.venue, item.venue],
+    ["Minister", uploaded.minister_name, item.minister_name],
+    ["Highlights", uploaded.highlights, ""],
   ].filter(([, uploadedValue, storedValue]) => String(uploadedValue || "").trim() !== String(storedValue || "").trim()).map(([label]) => label);
 }
 
@@ -304,7 +313,7 @@ zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
   ensureReportingOpen();
   const { name, kind, col, slug } = resolvePortalScope(req.params.token);
   const rows = db.prepare(`
-    SELECT i.id, i.event_type, i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
+    SELECT i.id, i.event_type, i.other_event_type, i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
            i.country, i.city, i.city_place_id, i.venue, i.minister_name
     FROM registration_items i
     WHERE i.${col} = ? AND (i.program = 'public' OR i.program IS NULL)
@@ -363,21 +372,21 @@ zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.sing
       continue;
     }
     const crusade = {
-      format: uploaded.format,
+      format: ONLINE_TYPES.includes(item.event_type) ? "online" : "physical",
       event_type: item.event_type,
-      other_event_type: uploaded.other_event_type || "",
+      other_event_type: item.other_event_type || "",
       event_name: item.event_name,
       country: item.country,
-      city: uploaded.city,
-      city_place_id: uploaded.city === item.city ? (item.city_place_id || "") : "",
-      event_date: uploaded.event_date,
+      city: item.city,
+      city_place_id: item.city_place_id || "",
+      event_date: item.event_date || item.plan_date,
       attendance: uploaded.attendance,
       crusade_expense: uploaded.crusade_expense,
-      minister_name: uploaded.minister_name,
-      venue: uploaded.venue,
+      minister_name: item.minister_name,
+      venue: item.venue,
       ...Object.fromEntries(METRIC_FIELDS.map((field) => [field, uploaded[field] || 0])),
     };
-    const body = { crusade, highlights: uploaded.highlights, photo_links: uploaded.photo_links, video_links: uploaded.video_links };
+    const body = { crusade, highlights: "", photo_links: uploaded.photo_links, video_links: uploaded.video_links };
     const parsed = portalCrusadeReportSchema.safeParse(body);
     if (!parsed.success) {
       errors.push(`Row ${uploaded.row_number}: ${parsed.error.issues[0]?.message || "Check the report details."}`);

@@ -27,6 +27,14 @@ const REPORT_COLUMNS = [
   ["Video Links", "video_links"],
 ];
 export const PORTAL_TEMPLATE_COLUMNS = [...REGISTRATION_COLUMNS, ...REPORT_COLUMNS];
+export const PORTAL_TEMPLATE_EDITABLE_KEYS = new Set([
+  "attendance",
+  "online_participation",
+  "crusade_expense",
+  ...METRIC_FIELDS.filter((field) => field !== "online_participation"),
+  "photo_links",
+  "video_links",
+]);
 
 const normalizedHeader = (value) => String(value || "").trim().toLowerCase();
 const cellText = (cell) => {
@@ -53,15 +61,12 @@ export async function buildPortalReportWorkbook(rows, dashboardName) {
   workbook.creator = "Night of a Thousand Crusades";
   const sheet = workbook.addWorksheet("Report Template");
   const instructions = workbook.addWorksheet("Instructions");
-  const lists = workbook.addWorksheet("Lists");
-  lists.state = "veryHidden";
-
   sheet.columns = PORTAL_TEMPLATE_COLUMNS.map(([header, key]) => ({ header, key, width: Math.min(Math.max(header.length + 3, 15), 28) }));
   sheet.views = [{ state: "frozen", ySplit: 1, xSplit: REGISTRATION_COLUMNS.length }];
   sheet.autoFilter = { from: "A1", to: sheet.getRow(1).getCell(PORTAL_TEMPLATE_COLUMNS.length).address };
   sheet.getRow(1).height = 30;
   sheet.getRow(1).eachCell((cell, column) => {
-    const editable = column > REGISTRATION_COLUMNS.length;
+    const editable = PORTAL_TEMPLATE_EDITABLE_KEYS.has(PORTAL_TEMPLATE_COLUMNS[column - 1][1]);
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: editable ? "FF047857" : "FF1E3A8A" } };
     cell.alignment = { vertical: "middle", wrapText: true };
@@ -74,39 +79,32 @@ export async function buildPortalReportWorkbook(rows, dashboardName) {
       registered_event_type: row.event_type,
       registered_event_date: row.event_date,
       registered_country: row.country,
-      submit: "",
+      submit: "Auto",
       format: ONLINE_TYPES.includes(row.event_type) ? "online" : "physical",
-      other_event_type: "",
+      other_event_type: row.other_event_type || "",
       event_date: row.event_date ? new Date(`${row.event_date}T00:00:00.000Z`) : "",
       city: row.city,
       venue: row.venue,
       minister_name: row.minister_name,
-      attendance: 0,
-      online_participation: 0,
-      crusade_expense: 0,
-      ...Object.fromEntries(METRIC_FIELDS.filter((field) => field !== "online_participation").map((field) => [field, 0])),
+      attendance: "",
+      online_participation: "",
+      crusade_expense: "",
+      ...Object.fromEntries(METRIC_FIELDS.filter((field) => field !== "online_participation").map((field) => [field, ""])),
       highlights: "",
       photo_links: "",
       video_links: "",
     });
     added.eachCell((cell, column) => {
-      const editable = column > REGISTRATION_COLUMNS.length;
+      const editable = PORTAL_TEMPLATE_EDITABLE_KEYS.has(PORTAL_TEMPLATE_COLUMNS[column - 1][1]);
       cell.protection = { locked: !editable };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: editable ? "FFF0FDF4" : "FFEFF6FF" } };
       cell.alignment = { vertical: "top", wrapText: true };
     });
   });
 
-  lists.getCell("A1").value = "Yes";
-  lists.getCell("A2").value = "No";
-  lists.getCell("B1").value = "physical";
-  lists.getCell("B2").value = "online";
   for (let row = 2; row <= Math.max(sheet.rowCount, 2); row++) {
-    sheet.getCell(row, columnNumber("submit")).dataValidation = { type: "list", allowBlank: true, formulae: ["Lists!$A$1:$A$2"], ...validationError("Choose Yes or No from the dropdown.") };
-    sheet.getCell(row, columnNumber("format")).dataValidation = { type: "list", allowBlank: false, formulae: ["Lists!$B$1:$B$2"], ...validationError("Choose physical or online from the dropdown.") };
     const dateCell = sheet.getCell(row, columnNumber("event_date"));
     dateCell.numFmt = "yyyy-mm-dd";
-    dateCell.dataValidation = { type: "date", operator: "between", allowBlank: false, formulae: [new Date("2000-01-01T00:00:00.000Z"), new Date("2100-12-31T00:00:00.000Z")], ...validationError("Enter a valid date between 2000 and 2100.") };
     for (const key of ["attendance", "online_participation", ...METRIC_FIELDS.filter((field) => field !== "online_participation")]) {
       const cell = sheet.getCell(row, columnNumber(key));
       cell.numFmt = "0";
@@ -115,7 +113,7 @@ export async function buildPortalReportWorkbook(rows, dashboardName) {
     const expenseCell = sheet.getCell(row, columnNumber("crusade_expense"));
     expenseCell.numFmt = "0.00";
     expenseCell.dataValidation = { type: "decimal", operator: "between", allowBlank: true, formulae: [0, MAX_EXPENSE], ...validationError("Enter a positive number or zero.") };
-    for (const [key, maximum] of [["other_event_type", 200], ["city", 200], ["venue", 1000], ["minister_name", 300], ["highlights", 2000], ["photo_links", 8000], ["video_links", 8000]]) {
+    for (const [key, maximum] of [["photo_links", 8000], ["video_links", 8000]]) {
       sheet.getCell(row, columnNumber(key)).dataValidation = { type: "textLength", operator: "lessThanOrEqual", allowBlank: true, formulae: [maximum], ...validationError(`Use no more than ${maximum.toLocaleString()} characters.`) };
     }
   }
@@ -135,9 +133,9 @@ export async function buildPortalReportWorkbook(rows, dashboardName) {
   [
     ["NOTC Personal Dashboard Report Template"],
     [`Dashboard: ${dashboardName}`],
-    ["1. Use only this downloaded workbook. Do not change the blue registration columns or Registration ID."],
-    ["2. Choose Yes under Submit Report? only for crusades whose reports you are completing."],
-    ["3. Complete the green report columns. Count fields accept only positive whole numbers or zero; expense accepts a positive number or zero."],
+    ["1. Only the green number and evidence-link cells are editable. All crusade details are fixed from the registration."],
+    ["2. Complete only the rows you are reporting. A row is included automatically when at least one green cell has been filled."],
+    ["3. Count fields accept only positive whole numbers or zero; expense accepts a positive number or zero."],
     ["4. Photo and video evidence should be entered as accessible links, including Google Drive links."],
     ["5. Save the workbook as .xlsx, upload it on the same dashboard, review the preview, then confirm submission."],
     ["6. Existing reports are never overwritten by this upload."],
@@ -170,12 +168,8 @@ export async function parsePortalReportWorkbook(buffer) {
   for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
     const row = sheet.getRow(rowNumber);
     const text = (key) => columnByKey[key] ? cellText(row.getCell(columnByKey[key])) : "";
-    const submit = text("submit").toLowerCase();
-    if (!submit || submit === "no") continue;
-    if (submit !== "yes") {
-      errors.push(`Row ${rowNumber}: Submit Report? must be Yes or No.`);
-      continue;
-    }
+    const hasReportData = [...PORTAL_TEMPLATE_EDITABLE_KEYS].some((key) => text(key) !== "");
+    if (!hasReportData) continue;
     const formulaFields = PORTAL_TEMPLATE_COLUMNS.filter(([, key]) => columnByKey[key] && row.getCell(columnByKey[key]).value?.formula).map(([header]) => header);
     if (formulaFields.length) errors.push(`Row ${rowNumber}: formulas are not allowed in ${formulaFields.join(", ")}. Enter direct values only.`);
     const id = Number.parseInt(text("registration_item_id"), 10);
@@ -211,6 +205,6 @@ export async function parsePortalReportWorkbook(buffer) {
       ...numeric,
     });
   }
-  if (!reports.length) errors.push("No rows are marked Yes under Submit Report?.");
+  if (!reports.length) errors.push("No report data was found. Fill at least one green number or evidence-link cell.");
   return { reports, errors };
 }
