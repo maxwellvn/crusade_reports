@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Search, X, Download } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Loader2, Search, Upload, X } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,9 +40,8 @@ export function ZonePortal() {
   const [readinessFilter, setReadinessFilter] = React.useState("");
   const [sourceFilter, setSourceFilter] = React.useState("");
 
-  React.useEffect(() => {
-    getJSON(`/zone-portal/${token}`).then(setData).catch((e) => setError(e.message));
-  }, [token]);
+  const loadPortal = React.useCallback(() => getJSON(`/zone-portal/${token}`).then(setData).catch((e) => setError(e.message)), [token]);
+  React.useEffect(() => { loadPortal(); }, [loadPortal]);
 
   if (error)
     return (
@@ -209,13 +208,10 @@ export function ZonePortal() {
                   <CardTitle className="text-sm">Crusade reports</CardTitle>
                   <CardDescription>Submit outcomes for each registered crusade individually.</CardDescription>
                 </div>
-                <Button asChild variant="outline" size="sm">
-                  <a href={`/api/zone-portal/${encodeURIComponent(token)}/export/reports?format=csv`}>
-                    <Download className="size-4" /> Export CSV
-                  </a>
-                </Button>
+                <Button asChild variant="outline" size="sm"><a href={`/api/zone-portal/${encodeURIComponent(token)}/export/reports?format=csv`}><Download className="size-4" /> Export CSV</a></Button>
               </CardHeader>
               <CardContent className="space-y-4 overflow-x-auto">
+                <ReportTemplateWorkflow token={token} pendingCount={data.items.filter((item) => !item.visitor && !item.report_id).length} onImported={loadPortal} />
                 {!filteredItems.length ? (
                   <p className="py-10 text-center text-sm text-muted-foreground">No registered crusades match your search and filters.</p>
                 ) : (
@@ -409,6 +405,63 @@ function ReportStatusBadge({ reported }) {
     : "border-amber-300 bg-amber-50 text-amber-700"}`}>
     {reported ? "Submitted" : "Not submitted"}
   </span>;
+}
+
+function ReportTemplateWorkflow({ token, pendingCount, onImported }) {
+  const inputRef = React.useRef(null);
+  const [file, setFile] = React.useState(null);
+  const [preview, setPreview] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function upload(selectedFile, commit = false) {
+    if (!selectedFile) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", selectedFile);
+      const result = await postForm(`/zone-portal/${encodeURIComponent(token)}/report-template${commit ? "?commit=1" : ""}`, form);
+      if (commit) {
+        toast.success(`${result.submitted} ${result.submitted === 1 ? "report" : "reports"} submitted from Excel.`);
+        setFile(null);
+        setPreview(null);
+        if (inputRef.current) inputRef.current.value = "";
+        await onImported();
+      } else {
+        setFile(selectedFile);
+        setPreview(result);
+      }
+    } catch (error) {
+      toast.error(error.message || "Could not process the Excel report template.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="border-y border-emerald-200 bg-emerald-50/50 p-4" aria-labelledby="excel-reporting-heading">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="max-w-xl">
+        <h3 id="excel-reporting-heading" className="flex items-center gap-2 text-sm font-semibold text-slate-950"><FileSpreadsheet className="size-4 text-emerald-700" /> Submit reports with Excel</h3>
+        <p className="mt-1 text-xs leading-5 text-slate-600">Download your unreported registrations, complete the green report columns, add photo or video evidence as links, then upload the same .xlsx file.</p>
+        <p className="mt-1 text-xs font-medium text-emerald-800">{nfull.format(pendingCount)} registered {pendingCount === 1 ? "crusade needs" : "crusades need"} a report.</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {pendingCount > 0 ? <Button asChild type="button" variant="outline" size="sm"><a href={`/api/zone-portal/${encodeURIComponent(token)}/report-template`} download><Download /> Download Excel template</a></Button> : <Button type="button" variant="outline" size="sm" disabled><Download /> Download Excel template</Button>}
+        <Button type="button" size="sm" onClick={() => inputRef.current?.click()} disabled={busy || pendingCount < 1}>{busy ? <Loader2 className="animate-spin" /> : <Upload />} Upload completed template</Button>
+        <input ref={inputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => upload(event.target.files?.[0] || null)} />
+      </div>
+    </div>
+    {preview && <div className={`mt-4 border p-3 text-sm ${preview.ok ? "border-emerald-300 bg-white" : "border-red-300 bg-red-50"}`}>
+      {preview.ok ? <>
+        <p className="flex items-center gap-2 font-semibold text-emerald-800"><CheckCircle2 className="size-4" /> Ready to submit {preview.summary.reports} {preview.summary.reports === 1 ? "report" : "reports"}</p>
+        <p className="mt-1 text-xs text-slate-600">{nfull.format(preview.summary.attendance)} total attendance · {nfull.format(preview.summary.salvations)} salvations</p>
+        <div className="mt-3 max-h-40 overflow-y-auto border-y border-slate-200">{preview.rows.map((row) => <div key={row.registration_item_id} className="flex flex-wrap justify-between gap-2 border-b px-2 py-2 text-xs last:border-0"><span className="font-medium">{row.event_name}</span><span className="text-slate-500">{row.event_date} · {nfull.format(row.attendance)} attendance</span></div>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => upload(file, true)}>{busy ? <Loader2 className="animate-spin" /> : <Upload />} Confirm and submit</Button><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}>Cancel</Button></div>
+      </> : <>
+        <p className="flex items-center gap-2 font-semibold text-red-800"><AlertTriangle className="size-4" /> Correct these issues and upload the file again</p>
+        <ul className="mt-2 max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-red-800">{preview.errors.map((error, index) => <li key={index}>{error}</li>)}</ul>
+      </>}
+    </div>}
+  </section>;
 }
 
 function useCityFetcher(countryName) {

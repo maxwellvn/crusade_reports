@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireSuperAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { wrap } from "../logger.js";
 import { COUNTRIES } from "./countries.js";
 
@@ -109,7 +109,7 @@ function getNetworkCountryBreakdown() {
   return [...networkMap.values()].sort((a, b) => b.totalCrusades - a.totalCrusades);
 }
 
-countryCoverage.get("/", requireSuperAdmin, wrap((_req, res) => {
+countryCoverage.get("/", requirePageAccess("dashboard/country-coverage"), wrap((_req, res) => {
   const unregistered = getCountriesWithoutRegistrations();
   const registered = COUNTRIES.filter((c) => !unregistered.some((u) => u.code === c.code));
 
@@ -127,7 +127,7 @@ countryCoverage.get("/", requireSuperAdmin, wrap((_req, res) => {
 }));
 
 // CSV export with all data combined
-countryCoverage.get("/export", requireSuperAdmin, wrap((_req, res) => {
+countryCoverage.get("/export", requirePageAccess("dashboard/country-coverage"), wrap((_req, res) => {
   const gpdZones = getGpdZonesCountryBreakdown();
   const cellCrusades = getCellCrusadesCountryBreakdown();
   const networks = getNetworkCountryBreakdown();

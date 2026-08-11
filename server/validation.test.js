@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
 import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema, upcomingCrusadeInterestSchema } from "./validation.js";
-import { createDashboardSession, dashboardSessionUser, DASHBOARD_SESSION_MAX_AGE_MS, isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
+import { ASSIGNABLE_PAGES, createDashboardSession, dashboardSessionUser, DASHBOARD_SESSION_MAX_AGE_MS, isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
 import { applyTranslationGlossary } from "./routes/translation.js";
 import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
@@ -17,7 +17,7 @@ import { attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, 
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
-import { currentDirectoryZoneNames } from "./routes/zonePortal.js";
+import { changedPortalTemplateFields, currentDirectoryZoneNames, invalidMediaLink, validIsoDate } from "./routes/zonePortal.js";
 import { COUNTRIES } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
 import { mediaTrainingRows } from "./routes/mediaTraining.js";
@@ -28,6 +28,7 @@ import { buildCoverageRows } from "./coverage.js";
 import { sendExport } from "./routes/exporter.js";
 import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
+import { buildPortalReportWorkbook, parsePortalReportWorkbook, PORTAL_TEMPLATE_COLUMNS } from "./portalReportTemplate.js";
 import {
   assertPersistentDatabasePath,
   createVerifiedBackup,
@@ -529,6 +530,14 @@ test("page access middleware honors the Mission nations permission", async () =>
   }
 });
 
+test("country coverage can be assigned from the super-admin access settings", () => {
+  assert.deepEqual(ASSIGNABLE_PAGES.find((page) => page.key === "dashboard/country-coverage"), {
+    key: "dashboard/country-coverage",
+    label: "Country coverage",
+    path: "/dashboard/country-coverage",
+  });
+});
+
 test("super-admin deletions preserve linked data until the report is removed", () => {
   const marker = `Delete flow ${Date.now()}`;
   db.exec("BEGIN");
@@ -809,6 +818,82 @@ test("cell analysis maps zones to their Churches API regions", () => {
     { zone: "ZONE ALPHA", region: "Region 3" },
     { zone: "Unknown Zone", region: "Region not mapped" },
   ]);
+});
+
+test("personal dashboard Excel templates round-trip registration reports and media links", async () => {
+  const workbook = await buildPortalReportWorkbook([{
+    id: 987654,
+    event_name: "Excel Report Test",
+    event_type: "mega",
+    event_date: "2026-08-30",
+    country: "Nigeria",
+    city: "Lagos",
+    venue: "Test Arena",
+    minister_name: "Pastor Test",
+  }], "Test Zone dashboard");
+  const sheet = workbook.getWorksheet("Report Template");
+  const column = (key) => PORTAL_TEMPLATE_COLUMNS.findIndex(([, field]) => field === key) + 1;
+  assert.equal(sheet.getRow(2).getCell(column("registration_item_id")).protection.locked, true);
+  assert.equal(sheet.getRow(2).getCell(column("registered_event_name")).protection.locked, true);
+  assert.equal(sheet.getRow(2).getCell(column("attendance")).protection.locked, false);
+  assert.equal(sheet.getRow(2).getCell(column("attendance")).dataValidation.type, "whole");
+  assert.equal(sheet.getRow(2).getCell(column("crusade_expense")).dataValidation.type, "decimal");
+  sheet.getRow(2).getCell(column("submit")).value = "Yes";
+  sheet.getRow(2).getCell(column("attendance")).value = 250;
+  sheet.getRow(2).getCell(column("salvation")).value = 75;
+  sheet.getRow(2).getCell(column("photo_links")).value = "https://drive.google.com/photo-test";
+  sheet.getRow(2).getCell(column("video_links")).value = "https://drive.google.com/video-test";
+
+  const parsed = await parsePortalReportWorkbook(await workbook.xlsx.writeBuffer());
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.reports.length, 1);
+  assert.deepEqual({
+    id: parsed.reports[0].registration_item_id,
+    attendance: parsed.reports[0].attendance,
+    salvation: parsed.reports[0].salvation,
+    photo_links: parsed.reports[0].photo_links,
+    video_links: parsed.reports[0].video_links,
+  }, {
+    id: 987654,
+    attendance: 250,
+    salvation: 75,
+    photo_links: "https://drive.google.com/photo-test",
+    video_links: "https://drive.google.com/video-test",
+  });
+});
+
+test("personal dashboard report imports reject tampering, formulas, invalid numbers, dates, and links", async () => {
+  const source = {
+    id: 987655,
+    event_name: "Protected Report Test",
+    event_type: "mega",
+    event_date: "2026-08-30",
+    plan_date: "2026-08-30",
+    country: "Nigeria",
+    city: "Lagos",
+    venue: "Test Arena",
+    minister_name: "Pastor Test",
+  };
+  assert.deepEqual(changedPortalTemplateFields({
+    registered_event_name: "Changed name",
+    registered_event_type: source.event_type,
+    registered_event_date: source.event_date,
+    registered_country: source.country,
+  }, source), ["Registered Crusade"]);
+  assert.equal(validIsoDate("2026-02-29"), false);
+  assert.equal(validIsoDate("2026-08-30"), true);
+  assert.equal(invalidMediaLink("https://drive.google.com/example"), "");
+  assert.equal(invalidMediaLink("javascript:alert(1)"), "javascript:alert(1)");
+
+  const workbook = await buildPortalReportWorkbook([source], "Test Zone dashboard");
+  const sheet = workbook.getWorksheet("Report Template");
+  const column = (key) => PORTAL_TEMPLATE_COLUMNS.findIndex(([, field]) => field === key) + 1;
+  sheet.getRow(2).getCell(column("submit")).value = "Yes";
+  sheet.getRow(2).getCell(column("attendance")).value = "not a number";
+  sheet.getRow(2).getCell(column("salvation")).value = { formula: "1+1", result: 2 };
+  const parsed = await parsePortalReportWorkbook(await workbook.xlsx.writeBuffer());
+  assert.equal(parsed.errors.some((error) => error.includes("Onsite Attendance must be")), true);
+  assert.equal(parsed.errors.some((error) => error.includes("formulas are not allowed")), true);
 });
 
 test("PDF exports download as readable multi-page documents", async () => {

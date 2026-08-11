@@ -23,6 +23,7 @@ export const ASSIGNABLE_PAGES = [
   { key: "dashboard/crusade-analysis", label: "Crusade analysis", path: "/dashboard/crusade-analysis" },
   { key: "dashboard/zone-links", label: "Zone links", path: "/dashboard/zone-links" },
   { key: "dashboard/coverage", label: "Coverage map", path: "/dashboard/coverage" },
+  { key: "dashboard/country-coverage", label: "Country coverage", path: "/dashboard/country-coverage" },
   { key: "crusades/edit", label: "Edit reports", path: "/crusades" },
   { key: "registrations/manual-organizations", label: "Manual organisations", path: "/registrations/manual-organizations" },
   { key: "dashboard/mission-nations", label: "Mission nations", path: "/dashboard/mission-nations" },

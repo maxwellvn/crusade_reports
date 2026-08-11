@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAdmin } from "../auth.js";
-import { registrationCrusadeEditSchema } from "../validation.js";
+import { portalCrusadeReportSchema, registrationCrusadeEditSchema } from "../validation.js";
 import { updateRegistrationCrusade } from "./registrations.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { loadZones } from "./zones.js";
@@ -11,8 +11,38 @@ import { ensureReportingOpen, isReportingOpen } from "../appSettings.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LABELS, yesNo, phone } from "../labels.js";
+import multer from "multer";
+import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalReportTemplate.js";
 
 export const zonePortal = Router();
+const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+
+export function validIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+export function invalidMediaLink(value) {
+  for (const link of String(value || "").split(/[\n,]+/).map((entry) => entry.trim()).filter(Boolean)) {
+    try {
+      const url = new URL(link);
+      if (!["http:", "https:"].includes(url.protocol)) return link;
+    } catch {
+      return link;
+    }
+  }
+  return "";
+}
+
+export function changedPortalTemplateFields(uploaded, item) {
+  return [
+    ["Registered Crusade", uploaded.registered_event_name, item.event_name],
+    ["Registered Type", uploaded.registered_event_type, item.event_type],
+    ["Registered Date", uploaded.registered_event_date, item.event_date || item.plan_date],
+    ["Country", uploaded.registered_country, item.country],
+  ].filter(([, uploadedValue, storedValue]) => String(uploadedValue || "").trim() !== String(storedValue || "").trim()).map(([label]) => label);
+}
 
 export const currentDirectoryZoneNames = (directory) => [...new Set(directory.map((entry) => entry.zone).filter(Boolean))];
 
@@ -266,6 +296,119 @@ zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
     ORDER BY c.event_date DESC, c.id DESC
   `).all(...listParams);
   await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-reports`, PORTAL_REPORT_EXPORT_COLUMNS, rows);
+}));
+
+// Download a protected Excel workbook containing this dashboard's own
+// registrations that do not yet have reports. Network visitor rows are excluded.
+zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
+  ensureReportingOpen();
+  const { name, kind, col, slug } = resolvePortalScope(req.params.token);
+  const rows = db.prepare(`
+    SELECT i.id, i.event_type, i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
+           i.country, i.city, i.city_place_id, i.venue, i.minister_name
+    FROM registration_items i
+    WHERE i.${col} = ? AND (i.program = 'public' OR i.program IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
+    ORDER BY COALESCE(i.event_date, i.plan_date), i.id
+  `).all(name);
+  const workbook = await buildPortalReportWorkbook(rows, `${name} ${kind} dashboard`);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${slug}-report-template.xlsx"`);
+  await workbook.xlsx.write(res);
+  res.end();
+}));
+
+// Preview or commit a completed workbook. Every Registration ID is resolved
+// again under the capability token before validation or insertion.
+zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.single("file"), wrap(async (req, res) => {
+  ensureReportingOpen();
+  if (!req.file) throw new ApiError(400, "NO_FILE", "Choose a completed .xlsx report template.");
+  const scope = resolvePortalScope(req.params.token);
+  let parsedWorkbook;
+  try {
+    parsedWorkbook = await parsePortalReportWorkbook(req.file.buffer);
+  } catch (error) {
+    throw new ApiError(422, "BAD_TEMPLATE", error.message || "Could not read the report template.");
+  }
+
+  const errors = [...parsedWorkbook.errors];
+  const validated = [];
+  for (const uploaded of parsedWorkbook.reports) {
+    const item = db.prepare(`
+      SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
+      FROM registration_items i JOIN registrations r ON r.id = i.registration_id
+      WHERE i.id = ? AND i.${scope.col} = ? AND (i.program = 'public' OR i.program IS NULL)
+    `).get(uploaded.registration_item_id, scope.name);
+    if (!item) {
+      errors.push(`Row ${uploaded.row_number}: Registration ID ${uploaded.registration_item_id} does not belong to this dashboard.`);
+      continue;
+    }
+    if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
+      errors.push(`Row ${uploaded.row_number}: ${item.event_name || `Registration ${item.id}`} already has a submitted report.`);
+      continue;
+    }
+    const changedFixedFields = changedPortalTemplateFields(uploaded, item);
+    if (changedFixedFields.length) {
+      errors.push(`Row ${uploaded.row_number}: protected registration fields were changed (${changedFixedFields.join(", ")}). Download a fresh template.`);
+      continue;
+    }
+    if (!validIsoDate(uploaded.event_date)) {
+      errors.push(`Row ${uploaded.row_number}: Date Held must be a valid date in YYYY-MM-DD format.`);
+      continue;
+    }
+    const badPhotoLink = invalidMediaLink(uploaded.photo_links);
+    const badVideoLink = invalidMediaLink(uploaded.video_links);
+    if (badPhotoLink || badVideoLink) {
+      errors.push(`Row ${uploaded.row_number}: ${badPhotoLink ? "Photo Links" : "Video Links"} contains an invalid link. Use complete http:// or https:// links, separated by commas or new lines.`);
+      continue;
+    }
+    const crusade = {
+      format: uploaded.format,
+      event_type: item.event_type,
+      other_event_type: uploaded.other_event_type || "",
+      event_name: item.event_name,
+      country: item.country,
+      city: uploaded.city,
+      city_place_id: uploaded.city === item.city ? (item.city_place_id || "") : "",
+      event_date: uploaded.event_date,
+      attendance: uploaded.attendance,
+      crusade_expense: uploaded.crusade_expense,
+      minister_name: uploaded.minister_name,
+      venue: uploaded.venue,
+      ...Object.fromEntries(METRIC_FIELDS.map((field) => [field, uploaded[field] || 0])),
+    };
+    const body = { crusade, highlights: uploaded.highlights, photo_links: uploaded.photo_links, video_links: uploaded.video_links };
+    const parsed = portalCrusadeReportSchema.safeParse(body);
+    if (!parsed.success) {
+      errors.push(`Row ${uploaded.row_number}: ${parsed.error.issues[0]?.message || "Check the report details."}`);
+      continue;
+    }
+    validated.push({ item, body: parsed.data, row_number: uploaded.row_number });
+  }
+
+  const summary = {
+    reports: validated.length,
+    attendance: validated.reduce((sum, entry) => sum + entry.body.crusade.attendance + entry.body.crusade.online_participation, 0),
+    salvations: validated.reduce((sum, entry) => sum + entry.body.crusade.salvation, 0),
+  };
+  if (errors.length) return res.json({ ok: false, errors: errors.slice(0, 100), summary });
+  if (req.query.commit !== "1") {
+    return res.json({ ok: true, errors: [], summary, rows: validated.map((entry) => ({
+      row_number: entry.row_number,
+      registration_item_id: entry.item.id,
+      event_name: entry.item.event_name,
+      event_date: entry.body.crusade.event_date,
+      attendance: entry.body.crusade.attendance + entry.body.crusade.online_participation,
+      photo_links: entry.body.photo_links,
+      video_links: entry.body.video_links,
+    })) });
+  }
+
+  const submitted = db.transaction(() => validated.map(({ item, body }) => ({
+    registration_item_id: item.id,
+    ...submitRegisteredCrusadeReport(item, body),
+  })))();
+  res.status(201).json({ ok: true, submitted: submitted.length, summary, reports: submitted });
 }));
 
 // The capability token may update only individual crusades belonging to its zone/network.

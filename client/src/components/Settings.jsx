@@ -30,6 +30,7 @@ const ASSIGNABLE_PAGES = [
   { key: "dashboard/crusade-analysis", label: "Crusade analysis" },
   { key: "dashboard/zone-links", label: "Zone links" },
   { key: "dashboard/coverage", label: "Coverage map" },
+  { key: "dashboard/country-coverage", label: "Country coverage" },
   { key: "crusades/edit", label: "Edit reports" },
   { key: "registrations/manual-organizations", label: "Manual organisations" },
   { key: "dashboard/mission-nations", label: "Mission nations" },
