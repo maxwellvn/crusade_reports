@@ -609,6 +609,11 @@ const registrationCols = new Set(db.prepare("PRAGMA table_info(registrations)").
 const missionSelectionCols = new Set(db.prepare("PRAGMA table_info(mission_nation_selections)").all().map((c) => c.name));
 if (!missionSelectionCols.has("minister_type")) db.exec("ALTER TABLE mission_nation_selections ADD COLUMN minister_type TEXT NOT NULL DEFAULT 'zonal_pastor'");
 if (!missionSelectionCols.has("ministry_name")) db.exec("ALTER TABLE mission_nation_selections ADD COLUMN ministry_name TEXT");
+if (!missionSelectionCols.has("mission_country_codes")) db.exec("ALTER TABLE mission_nation_selections ADD COLUMN mission_country_codes TEXT");
+if (!missionSelectionCols.has("mission_country_names")) db.exec("ALTER TABLE mission_nation_selections ADD COLUMN mission_country_names TEXT");
+db.exec(`UPDATE mission_nation_selections
+  SET mission_country_codes = json_array(mission_country_code), mission_country_names = json_array(mission_country_name)
+  WHERE mission_country_codes IS NULL OR mission_country_names IS NULL`);
 // Manual organisation names are retained separately from directory-backed
 // selections so admins can review and reconcile them later.
 for (const [table, cols] of [["registrations", ["zone_manual", "group_manual"]], ["registration_items", ["zone_manual", "group_manual"]]]) {

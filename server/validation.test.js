@@ -305,12 +305,13 @@ test("mission nation catalogue contains 242 nations and rejects home-nation sele
   assert.deepEqual([...new Set(COUNTRIES.map((country) => country.continent))].sort(), ["Africa", "Asia", "Europe", "North America", "Oceania", "South America"]);
   const selection = {
     pastor_name: "Pastor Test", zone_name: "Test Zone", home_country_code: "NG",
-    mission_country_code: "GH", contact_email: "pastor@example.com", phone_country_code: "+234",
+    mission_country_codes: ["GH", "KE"], contact_email: "pastor@example.com", phone_country_code: "+234",
     phone_number: "8012345678", kingschat_username: "pastor.test",
   };
   assert.equal(missionNationSelectionSchema.safeParse(selection).success, true);
   assert.equal(missionNationSelectionSchema.safeParse({ ...selection, kingschat_username: "" }).success, true);
-  assert.equal(missionNationSelectionSchema.safeParse({ ...selection, mission_country_code: "NG" }).success, false);
+  assert.equal(missionNationSelectionSchema.safeParse({ ...selection, mission_country_codes: ["GH", "NG"] }).success, false);
+  assert.equal(missionNationSelectionSchema.safeParse({ ...selection, mission_country_codes: [] }).success, false);
 });
 
 test("Turkey is visible by its familiar English name in country selectors", () => {
@@ -340,9 +341,13 @@ test("mission nation admin filters and sorting are server constrained", () => {
        mission_country_name, contact_email, phone_country_code, phone_number, kingschat_username, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, '+234', '8012345678', ?, ?)`);
     insert.run("MN-FILTER-1", "Pastor Alpha", "FILTER ZONE A", "NG", "Nigeria", "GH", "Ghana", "alpha@example.com", "alpha", "2026-07-01 10:00:00");
+    db.prepare(`UPDATE mission_nation_selections SET mission_country_codes = '["GH","US"]',
+      mission_country_names = '["Ghana","United States"]' WHERE receipt_code = 'MN-FILTER-1'`).run();
     insert.run("MN-FILTER-2", "Pastor Beta", "FILTER ZONE B", "ZA", "South Africa", "KE", "Kenya", "beta@example.com", "beta", "2026-07-02 10:00:00");
     db.prepare("UPDATE mission_nation_selections SET assigned_country_code = 'US', assigned_country_name = 'United States' WHERE receipt_code = 'MN-FILTER-1'").run();
     assert.deepEqual(adminSelectionQuery({ mission_country: "GH" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
+    assert.deepEqual(adminSelectionQuery({ mission_country: "US" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
+    assert.deepEqual(adminSelectionQuery({ mission_country: "US" })[0].mission_country_names, ["Ghana", "United States"]);
     assert.deepEqual(adminSelectionQuery({ assigned_country: "US" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
     assert.deepEqual(adminSelectionQuery({ q: "United States" }).map((row) => row.receipt_code), ["MN-FILTER-1"]);
     assert.deepEqual(adminSelectionQuery({ zone: "FILTER ZONE B" }).map((row) => row.receipt_code), ["MN-FILTER-2"]);

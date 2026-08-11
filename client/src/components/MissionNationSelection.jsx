@@ -12,7 +12,7 @@ import { getJSON, postJSON } from "@/lib/api";
 import { PHONE_CODES } from "@/lib/constants";
 import { missionNationSelectionSchema } from "@/lib/schema";
 
-const EMPTY = { minister_type: "zonal_pastor", pastor_name: "", zone_name: "", ministry_name: "", home_country_code: "", mission_country_code: "", contact_email: "", phone_country_code: "", phone_number: "", kingschat_username: "" };
+const EMPTY = { minister_type: "zonal_pastor", pastor_name: "", zone_name: "", ministry_name: "", home_country_code: "", mission_country_codes: [], contact_email: "", phone_country_code: "", phone_number: "", kingschat_username: "" };
 const CONTINENTS = ["Africa", "Asia", "Europe", "North America", "South America", "Oceania"];
 
 function Receipt({ receipt }) {
@@ -21,11 +21,11 @@ function Receipt({ receipt }) {
     <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-20">
       <div className="flex size-12 items-center justify-center rounded-full bg-slate-950 text-white print:hidden"><Check className="size-6" /></div>
       <p className="mt-8 text-sm font-semibold text-blue-700">Preference received</p>
-      <h1 className="mt-3 text-4xl font-normal tracking-[-0.035em] text-slate-950 sm:text-5xl">{receipt.zone_name} prefers {receipt.mission_nation}.</h1>
-      <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">This receipt confirms the ministry's mission-nation preference. The final assignment will be made by the NOTC administration.</p>
+      <h1 className="mt-3 text-4xl font-normal tracking-[-0.035em] text-slate-950 sm:text-5xl">{receipt.zone_name} selected {receipt.mission_nations.join(", ")}.</h1>
+      <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600">This receipt confirms the ministry's mission-nation preferences. The final assignment will be made by the NOTC administration.</p>
       <dl className="mt-10 border-y border-slate-200">{[
         ["Receipt", receipt.receipt_code], ["Minister", receipt.pastor_name], ["Zone or network", receipt.zone_name],
-        ["Zone/ministry nation", receipt.home_nation], ["Preferred mission nation", receipt.mission_nation],
+        ["Zone/ministry nation", receipt.home_nation], ["Preferred mission nations", receipt.mission_nations.join(", ")],
         ["Minimum commitment", `${receipt.minimum_crusades.toLocaleString()} crusades`], ["Submitted", `${receipt.submitted_at} UTC`],
       ].map(([label, value]) => <div key={label} className="grid gap-1 border-b border-slate-200 py-4 last:border-0 sm:grid-cols-[12rem_1fr]"><dt className="text-sm text-slate-500">{label}</dt><dd className="text-sm font-semibold text-slate-950">{value}</dd></div>)}</dl>
       <div className="mt-8 flex flex-wrap gap-3 print:hidden"><Button onClick={() => window.print()} className="rounded-full"><Printer /> Print receipt</Button><Button variant="outline" className="rounded-full" onClick={() => window.location.reload()}>Make another selection</Button></div>
@@ -41,7 +41,7 @@ export function MissionNationSelection() {
   const [continent, setContinent] = React.useState("all");
   const [submitting, setSubmitting] = React.useState(false);
   const [receipt, setReceipt] = React.useState(null);
-  const selected = catalogue?.nations.find((nation) => nation.code === form.mission_country_code);
+  const selectedNations = (catalogue?.nations || []).filter((nation) => form.mission_country_codes.includes(nation.code));
   const homeNation = catalogue?.nations.find((nation) => nation.code === form.home_country_code);
   const isZonalPastor = form.minister_type === "zonal_pastor";
   const isOtherMinister = form.minister_type === "other";
@@ -72,10 +72,16 @@ export function MissionNationSelection() {
   function update(key, value) {
     setForm((current) => {
       const next = { ...current, [key]: value };
-      if (key === "home_country_code" && current.mission_country_code === value) next.mission_country_code = "";
+      if (key === "home_country_code") next.mission_country_codes = current.mission_country_codes.filter((code) => code !== value);
       return next;
     });
     setErrors((current) => ({ ...current, [key]: "" }));
+  }
+
+  function toggleNation(code) {
+    update("mission_country_codes", form.mission_country_codes.includes(code)
+      ? form.mission_country_codes.filter((value) => value !== code)
+      : [...form.mission_country_codes, code]);
   }
 
   async function submit(event) {
@@ -85,10 +91,10 @@ export function MissionNationSelection() {
       const next = {};
       parsed.error.issues.forEach((issue) => { if (!next[issue.path[0]]) next[issue.path[0]] = issue.message; });
       setErrors(next);
-      toast.error("Complete the required details and select a nation.");
+      toast.error("Complete the required details and select at least one nation.");
       window.requestAnimationFrame(() => {
         const firstField = parsed.error.issues[0]?.path[0];
-        const ids = { pastor_name: "mission-pastor-name", zone_name: "mission-zone", ministry_name: "mission-ministry-name", home_country_code: "mission-home-nation", contact_email: "mission-email", mission_country_code: "mission-nation-directory" };
+        const ids = { pastor_name: "mission-pastor-name", zone_name: "mission-zone", ministry_name: "mission-ministry-name", home_country_code: "mission-home-nation", contact_email: "mission-email", mission_country_codes: "mission-nation-directory" };
         const target = document.getElementById(ids[firstField]);
         target?.scrollIntoView({ behavior: "smooth", block: "center" });
         target?.focus?.({ preventScroll: true });
@@ -136,14 +142,14 @@ export function MissionNationSelection() {
         <section id="mission-nation-directory" tabIndex={-1} className="scroll-mt-6 py-12 outline-none">
           <div>
             <p className="text-sm font-semibold text-blue-700">Mission nation directory</p>
-            <h2 className="mt-3 text-3xl font-normal tracking-[-0.03em] text-slate-950">Choose the nation you want to serve.</h2>
+            <h2 className="mt-3 text-3xl font-normal tracking-[-0.03em] text-slate-950">Choose the nations you want to serve.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Search or filter by continent, then tap one nation. The nation where your zone/ministry is located is unavailable, and each preference includes a minimum of 1,000 crusades.
+              Search or filter by continent, then select one or more nations. Tap a selected nation again to remove it. The nation where your zone/ministry is located is unavailable, and each preference includes a minimum of 1,000 crusades.
             </p>
           </div>
-          <div className={`mt-6 flex items-center gap-3 border px-4 py-3 text-sm ${errors.mission_country_code ? "border-red-300 bg-red-50 text-red-800" : selected ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-blue-200 bg-blue-50 text-blue-900"}`} role="status" aria-live="polite">
-            <span className={`grid size-7 shrink-0 place-items-center rounded-full ${selected ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}`}>{selected ? <Check className="size-4" /> : <ArrowRight className="size-4" />}</span>
-            <span className="font-medium">{errors.mission_country_code ? "Select one mission nation before submitting." : selected ? `${selected.name} is selected.` : "Tap one nation in the directory below to select it."}</span>
+          <div className={`mt-6 flex items-center gap-3 border px-4 py-3 text-sm ${errors.mission_country_codes ? "border-red-300 bg-red-50 text-red-800" : selectedNations.length ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-blue-200 bg-blue-50 text-blue-900"}`} role="status" aria-live="polite">
+            <span className={`grid size-7 shrink-0 place-items-center rounded-full ${selectedNations.length ? "bg-emerald-700 text-white" : "bg-blue-700 text-white"}`}>{selectedNations.length ? <Check className="size-4" /> : <ArrowRight className="size-4" />}</span>
+            <span className="font-medium">{errors.mission_country_codes ? "Select at least one mission nation before submitting." : selectedNations.length ? `${selectedNations.length} ${selectedNations.length === 1 ? "nation" : "nations"} selected: ${selectedNations.map((nation) => nation.name).join(", ")}.` : "Tap the nations in the directory below to select them."}</span>
           </div>
           {!catalogue?.selection_open && <div role="alert" className="mt-8 border-y border-amber-300 py-4 text-sm text-amber-900">The selection window is closed. Pastors who did not select a nation may have one designated to their zone.</div>}
           <div className="mt-8 grid border-y border-slate-200 sm:grid-cols-[1fr_13rem]">
@@ -172,13 +178,13 @@ export function MissionNationSelection() {
                     {group.nations.map((nation) => {
                       const isHome = nation.code === form.home_country_code;
                       const disabled = !catalogue.selection_open || isHome;
-                      const active = form.mission_country_code === nation.code;
+                      const active = form.mission_country_codes.includes(nation.code);
                       return (
                         <button
                           key={nation.code}
                           type="button"
                           disabled={disabled}
-                          onClick={() => update("mission_country_code", nation.code)}
+                          onClick={() => toggleNation(nation.code)}
                           aria-pressed={active}
                           className={`group flex min-h-14 items-center gap-3 border-b border-slate-200 px-3 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:odd:border-r ${active ? "bg-slate-950 text-white" : disabled ? "cursor-not-allowed text-slate-400" : "hover:bg-slate-50"}`}
                         >
@@ -203,11 +209,11 @@ export function MissionNationSelection() {
               <p className="mt-2 text-sm text-slate-600">Change the search or continent filter.</p>
             </div>
           )}
-          {errors.mission_country_code && <p className="mt-3 text-sm text-red-700">{errors.mission_country_code}</p>}
+          {errors.mission_country_codes && <p className="mt-3 text-sm text-red-700">{errors.mission_country_codes}</p>}
         </section>
 
         <span className="public-mobile-bottom-action hidden" aria-hidden="true" />
-        <section className="sticky bottom-0 z-20 -mx-4 flex border-t border-slate-300 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:border-y lg:px-0 lg:py-6 lg:backdrop-blur-none"><div className="hidden lg:block">{selected ? <><p className="text-sm font-semibold text-slate-950">{selected.name} preferred</p><p className="mt-1 text-sm text-slate-500">{form.zone_name || "Your ministry"} proposes at least 1,000 crusades in this nation.</p></> : <><p className="text-sm font-semibold text-slate-950">No nation selected</p><p className="mt-1 text-sm text-slate-500">Complete your details and choose one nation.</p></>}</div><Button type="submit" disabled={submitting || !catalogue?.selection_open} className="w-full rounded-full lg:w-auto"><ShieldCheck />{submitting ? "Submitting…" : selected ? `Submit ${selected.name} preference` : "Submit nation preference"}</Button></section>
+        <section className="sticky bottom-0 z-20 -mx-4 flex border-t border-slate-300 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:border-y lg:px-0 lg:py-6 lg:backdrop-blur-none"><div className="hidden lg:block">{selectedNations.length ? <><p className="text-sm font-semibold text-slate-950">{selectedNations.length} {selectedNations.length === 1 ? "nation" : "nations"} selected</p><p className="mt-1 text-sm text-slate-500">{form.zone_name || "Your ministry"} proposes at least 1,000 crusades.</p></> : <><p className="text-sm font-semibold text-slate-950">No nation selected</p><p className="mt-1 text-sm text-slate-500">Complete your details and choose one or more nations.</p></>}</div><Button type="submit" disabled={submitting || !catalogue?.selection_open} className="w-full rounded-full lg:w-auto"><ShieldCheck />{submitting ? "Submitting…" : selectedNations.length ? `Submit ${selectedNations.length} ${selectedNations.length === 1 ? "preference" : "preferences"}` : "Submit nation preferences"}</Button></section>
         <p className="mt-5 flex gap-2 text-xs leading-5 text-slate-500"><Info className="mt-0.5 size-3.5 shrink-0" />If a zone does not make a selection during the open window, a mission nation may be designated to that zone.</p>
       </form>
     </main>

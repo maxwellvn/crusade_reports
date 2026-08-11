@@ -135,7 +135,7 @@ export const missionNationSelectionSchema = z.object({
   zone_name: z.string().optional().default(""),
   ministry_name: z.string().trim().max(200).optional().default(""),
   home_country_code: z.string().length(2, "Select the home nation"),
-  mission_country_code: z.string().length(2, "Select one available mission nation"),
+  mission_country_codes: z.array(z.string().length(2)).min(1, "Select at least one available mission nation").max(241),
   contact_email: z.string().trim().email("Enter a valid email address"),
   phone_country_code: z.string().trim().refine((value) => value === "" || /^\+\d{1,4}$/.test(value), "Select a phone country code").optional().default(""),
   phone_number: z.string().trim().refine((value) => value === "" || /^[\d ()-]{6,24}$/.test(value), "Enter a valid phone number").optional().default(""),
@@ -144,7 +144,8 @@ export const missionNationSelectionSchema = z.object({
   if (data.minister_type === "zonal_pastor" && data.zone_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["zone_name"], message: "Select a zone" });
   if (data.minister_type === "other" && data.ministry_name.length < 2) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["ministry_name"], message: "Enter your ministry or network" });
   if (Boolean(data.phone_number) !== Boolean(data.phone_country_code)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [data.phone_number ? "phone_country_code" : "phone_number"], message: "Enter both phone number and country code, or leave both blank" });
-  if (data.home_country_code === data.mission_country_code) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mission_country_code"], message: "You cannot select your home nation" });
+  if (new Set(data.mission_country_codes).size !== data.mission_country_codes.length) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mission_country_codes"], message: "Each nation can only be selected once" });
+  if (data.mission_country_codes.includes(data.home_country_code)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["mission_country_codes"], message: "You cannot select your home nation" });
 });
 
 export const mediaTrainingRegistrationSchema = z.object({

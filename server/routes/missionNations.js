@@ -13,9 +13,28 @@ const countryByCode = new Map(COUNTRIES.map((country) => [country.code, country]
 const setting = db.prepare("SELECT value FROM app_settings WHERE key = 'mission_nation_selection_open'");
 const isOpen = () => setting.get()?.value !== "0";
 
+function parseJsonList(value, fallback) {
+  try {
+    const parsed = JSON.parse(value || "");
+    return Array.isArray(parsed) && parsed.length ? parsed : [fallback].filter(Boolean);
+  } catch {
+    return [fallback].filter(Boolean);
+  }
+}
+
+function decorateSelection(row) {
+  return {
+    ...row,
+    mission_country_codes: parseJsonList(row.mission_country_codes, row.mission_country_code),
+    mission_country_names: parseJsonList(row.mission_country_names, row.mission_country_name),
+  };
+}
+
 function catalogue() {
-  const interest = new Map(db.prepare("SELECT mission_country_code, COUNT(*) AS count FROM mission_nation_selections GROUP BY mission_country_code").all()
-    .map((row) => [row.mission_country_code, row.count]));
+  const interest = new Map();
+  db.prepare("SELECT mission_country_code, mission_country_codes FROM mission_nation_selections").all().forEach((row) => {
+    parseJsonList(row.mission_country_codes, row.mission_country_code).forEach((code) => interest.set(code, (interest.get(code) || 0) + 1));
+  });
   return COUNTRIES.map((country) => ({
     ...country,
     interest_count: interest.get(country.code) || 0,
@@ -38,9 +57,9 @@ missionNations.post("/", wrap(async (req, res) => {
   }
   const data = parsed.data;
   const home = countryByCode.get(data.home_country_code);
-  const mission = countryByCode.get(data.mission_country_code);
-  if (!home || !mission) throw new ApiError(400, "INVALID_NATION", "Choose nations from the mission nation directory.");
-  if (home.code === mission.code) throw new ApiError(400, "HOME_NATION", "You cannot select your home nation.");
+  const missions = data.mission_country_codes.map((code) => countryByCode.get(code));
+  if (!home || missions.some((mission) => !mission)) throw new ApiError(400, "INVALID_NATION", "Choose nations from the mission nation directory.");
+  if (missions.some((mission) => home.code === mission.code)) throw new ApiError(400, "HOME_NATION", "You cannot select your home nation.");
   let canonicalOrganization = data.ministry_name || data.zone_name;
   if (data.minister_type === "zonal_pastor") {
     canonicalOrganization = (await loadZones()).find((row) => row.zone.toLowerCase() === data.zone_name.toLowerCase())?.zone;
@@ -55,17 +74,19 @@ missionNations.post("/", wrap(async (req, res) => {
   try {
     const result = db.prepare(`INSERT INTO mission_nation_selections
       (receipt_code, pastor_name, zone_name, minister_type, ministry_name, home_country_code, home_country_name,
-       mission_country_code, mission_country_name, contact_email, phone_country_code, phone_number, kingschat_username)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(receiptCode, data.pastor_name, canonicalOrganization, data.minister_type, displayMinistry, home.code, home.name, mission.code, mission.name,
+       mission_country_code, mission_country_name, mission_country_codes, mission_country_names,
+       contact_email, phone_country_code, phone_number, kingschat_username)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(receiptCode, data.pastor_name, canonicalOrganization, data.minister_type, displayMinistry, home.code, home.name,
+        missions[0].code, missions[0].name, JSON.stringify(missions.map((mission) => mission.code)), JSON.stringify(missions.map((mission) => mission.name)),
         data.contact_email, data.phone_country_code, data.phone_number, data.kingschat_username.replace(/^@/, ""));
-    const row = db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(result.lastInsertRowid);
+    const row = decorateSelection(db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(result.lastInsertRowid));
     res.status(201).json({
       receipt_code: row.receipt_code,
       pastor_name: row.pastor_name,
       zone_name: row.ministry_name || row.zone_name,
       home_nation: row.home_country_name,
-      mission_nation: row.mission_country_name,
+      mission_nations: row.mission_country_names,
       minimum_crusades: 1000,
       submitted_at: row.created_at,
     });
@@ -90,13 +111,19 @@ export function adminSelectionQuery(query) {
   const params = {};
   const q = String(query.q || "").trim().slice(0, 100);
   if (q) {
-    where.push(`(pastor_name LIKE @q OR zone_name LIKE @q OR mission_country_name LIKE @q OR assigned_country_name LIKE @q
+    where.push(`(pastor_name LIKE @q OR zone_name LIKE @q OR mission_country_name LIKE @q OR mission_country_names LIKE @q OR assigned_country_name LIKE @q
       OR home_country_name LIKE @q OR contact_email LIKE @q OR kingschat_username LIKE @q OR receipt_code LIKE @q)`);
     params.q = `%${q}%`;
   }
-  for (const [key, column] of [["mission_country", "mission_country_code"], ["assigned_country", "assigned_country_code"], ["home_country", "home_country_code"], ["zone", "zone_name"]]) {
+  for (const [key, column] of [["assigned_country", "assigned_country_code"], ["home_country", "home_country_code"], ["zone", "zone_name"]]) {
     const value = String(query[key] || "").trim().slice(0, 200);
     if (value) { where.push(`${column} = @${key} COLLATE NOCASE`); params[key] = value; }
+  }
+  const missionCountry = String(query.mission_country || "").trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(missionCountry)) {
+    where.push(`(mission_country_code = @mission_country OR mission_country_codes LIKE @mission_country_json)`);
+    params.mission_country = missionCountry;
+    params.mission_country_json = `%"${missionCountry}"%`;
   }
   for (const [key, operator] of [["date_from", ">="], ["date_to", "<="]]) {
     const value = String(query[key] || "").trim();
@@ -108,12 +135,12 @@ export function adminSelectionQuery(query) {
   const direction = String(query.direction).toLowerCase() === "asc" ? "ASC" : "DESC";
   const sql = `SELECT * FROM mission_nation_selections ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY ${sort} ${direction}, id ${direction}`;
-  return db.prepare(sql).all(params);
+  return db.prepare(sql).all(params).map(decorateSelection);
 }
 
 const exportColumns = [
   { header: "Receipt", value: (row) => row.receipt_code },
-  { header: "Preferred Mission Nation", value: (row) => row.mission_country_name },
+  { header: "Preferred Mission Nations", value: (row) => row.mission_country_names.join(", ") },
   { header: "Assigned Mission Nation", value: (row) => row.assigned_country_name || "Not assigned" },
   { header: "Zone", value: (row) => row.zone_name },
   { header: "Minister", value: (row) => row.pastor_name },
@@ -151,7 +178,7 @@ missionNations.put("/admin/:id/assignment", requirePageAccess("dashboard/mission
   db.prepare(`UPDATE mission_nation_selections SET assigned_country_code = ?, assigned_country_name = ?,
     assignment_updated_at = datetime('now'), assigned_by = ? WHERE id = ?`)
     .run(country?.code || null, country?.name || null, req.admin.username, row.id);
-  res.json(db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(row.id));
+  res.json(decorateSelection(db.prepare("SELECT * FROM mission_nation_selections WHERE id = ?").get(row.id)));
 }));
 
 missionNations.put("/admin/settings", requirePageAccess("dashboard/mission-nations"), wrap((req, res) => {
