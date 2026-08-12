@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db } from "../db.js";
-import { requireSuperAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { ApiError, wrap } from "../logger.js";
 import { mediaTrainingRegistrationSchema } from "../validation.js";
 import { sendExport } from "./exporter.js";
@@ -54,7 +54,7 @@ mediaTraining.post("/registrations", wrap(async (req, res) => {
   res.status(201).json({ reference_code: reference, zone_name: canonicalZone, group_name: data.group_name, church_name: data.church_name, church_country_name: churchCountry.name, church_city: data.church_city, languages_spoken: data.languages_spoken, full_name: data.full_name, training_date: "2026-08-24" });
 }));
 
-mediaTraining.get("/admin", requireSuperAdmin, wrap((req, res) => {
+mediaTraining.get("/admin", requirePageAccess("dashboard/media-training"), wrap((req, res) => {
   const rows = mediaTrainingRows(req.query);
   const totals = db.prepare(`SELECT COUNT(*) AS registrations,
     (SELECT COUNT(*) FROM media_training_trainees) AS trainees FROM media_training_registrations`).get();
@@ -71,11 +71,11 @@ const exportColumns = [
   { header: "KingsChat Username", value: (row) => row.kingschat_username ? `@${row.kingschat_username}` : "" },
   { header: "Phone", value: (row) => `${row.phone_country_code} ${row.phone_number}` }, { header: "Submitted At (UTC)", value: (row) => row.created_at },
 ];
-mediaTraining.get("/admin/export", requireSuperAdmin, wrap(async (req, res) => {
+mediaTraining.get("/admin/export", requirePageAccess("dashboard/media-training"), wrap(async (req, res) => {
   await sendExport(res, req.query.format === "csv" ? "csv" : "xlsx", "global-media-training", exportColumns, mediaTrainingRows(req.query));
 }));
 
-mediaTraining.delete("/admin/:id", requireSuperAdmin, wrap((req, res) => {
+mediaTraining.delete("/admin/:id", requirePageAccess("dashboard/media-training"), wrap((req, res) => {
   const result = db.prepare("DELETE FROM media_training_registrations WHERE id = ?").run(req.params.id);
   if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Training registration not found.");
   res.status(204).end();

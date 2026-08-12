@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { blueEliteRegistrationSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
-import { requireSuperAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { sendExport } from "./exporter.js";
 import { backupDatabaseRolling } from "./registrations.js";
@@ -95,9 +95,9 @@ blueElite.post("/registrations", wrap((req, res) => {
 const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_name, r.zone, r.organization_type)";
 
 // GET /api/blue-elite/registrations/live — totals + breakdowns for the
-// super-admin-only dashboard. Scoped to program='blue_elite' so it never
+// permission-scoped dashboard. Scoped to program='blue_elite' so it never
 // touches public registration data.
-blueElite.get("/registrations/live", requireSuperAdmin, wrap((_req, res) => {
+blueElite.get("/registrations/live", requirePageAccess("dashboard/blue-elite"), wrap((_req, res) => {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations WHERE program = ?) AS registrations,
            COALESCE(SUM(i.planned_count), 0)      AS planned,
@@ -224,14 +224,14 @@ const EXPORT_COLUMNS = [
   { header: "KingsChat", value: (row) => row.kingschat_username },
 ];
 
-blueElite.get("/registrations/export", requireSuperAdmin, wrap(async (req, res) => {
+blueElite.get("/registrations/export", requirePageAccess("registrations/blue-elite"), wrap(async (req, res) => {
   const { clause, params } = blueEliteFilters(req.query);
   const rows = db.prepare(`${EXPORT_SELECT} ${clause} ORDER BY r.created_at DESC, i.id DESC`).all(params);
   await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "blue-elite-registered-crusades", EXPORT_COLUMNS, rows);
 }));
 
 // GET /api/blue-elite/registrations — paginated, filtered, sorted table.
-blueElite.get("/registrations", requireSuperAdmin, wrap((req, res) => {
+blueElite.get("/registrations", requirePageAccess("registrations/blue-elite"), wrap((req, res) => {
   const { clause, params } = blueEliteFilters(req.query);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);

@@ -103,6 +103,8 @@ export function CrusadesTable() {
 
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
   const activeFilters = FILTERS.filter(([key]) => params.get(key));
+  const canEditReports = admin?.is_super_admin || admin?.permissions?.includes("crusades/edit");
+  const hasReportActions = canEditReports || admin?.is_super_admin;
 
   // If we arrived by clicking a dashboard breakdown row, show that widget in the trail.
   const fromWidgetId = Object.keys(DRILL_MAP).find((id) => params.get(DRILL_MAP[id].filterField));
@@ -196,7 +198,7 @@ export function CrusadesTable() {
                   ))}
                   <Th col="minister_name" label="Minister" />
                   <Th col="venue" label="Venue" />
-                  {admin?.is_super_admin && <th className="py-2 font-medium">Actions</th>}
+                  {hasReportActions && <th className="py-2 font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -220,15 +222,19 @@ export function CrusadesTable() {
                     ))}
                     <td className="max-w-32 truncate py-2 pr-3">{r.minister_name}</td>
                     <td className="max-w-32 truncate py-2">{r.venue}</td>
-                    {admin?.is_super_admin && (
+                    {hasReportActions && (
                       <td className="py-2 pl-3">
                         <div className="flex gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => navigate(`/crusades/${r.id}/edit`)}>
-                            <Pencil /> Edit
-                          </Button>
-                          <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
-                            <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
-                          </Button>
+                          {canEditReports && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => navigate(`/crusades/${r.id}/edit`)}>
+                              <Pencil /> Edit
+                            </Button>
+                          )}
+                          {admin?.is_super_admin && (
+                            <Button type="button" variant="destructive" size="sm" disabled={deleting === r.id} onClick={() => deleteReport(r)}>
+                              <Trash2 /> {deleting === r.id ? "Deleting…" : "Delete report"}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     )}

@@ -7,7 +7,7 @@ import { getJSON } from "@/lib/api";
 import { BarH, nfull, orgHierarchy, typeLabel, Empty, StatTile } from "@/lib/dashboardWidgets";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
-// Super-admin-only dashboard for Loveworld Blue Elite registrations.
+// Permission-scoped dashboard for Loveworld Blue Elite registrations.
 // Reads /api/blue-elite/registrations/live, which is server-scoped to
 // program='blue_elite'. Deliberately simpler than the public live dashboard:
 // KPI tiles + key breakdowns + a recent feed. No drag-and-drop layout.
@@ -82,7 +82,7 @@ export function BlueEliteDashboard() {
       <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
           <h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Loveworld Blue Elite — live</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Crusade registrations logged by Blue Elite staff. Super-admin only.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Crusade registrations logged by Blue Elite staff.</p>
         </div>
         {data && <p className="text-sm tabular-nums text-slate-500">Updates every 15s</p>}
       </div>

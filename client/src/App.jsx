@@ -115,7 +115,9 @@ function Shell({ subtitle, links }) {
     // is always visible. Every other link needs a matching permission key.
     if (!admin?.is_super_admin && to !== "/") {
       const pageKey = to.replace(/^\//, "");
-      if (admin?.permissions && !admin.permissions.includes(pageKey)) return false;
+      const allowed = admin?.permissions?.includes(pageKey)
+        || (to === "/crusades" && admin?.permissions?.includes("crusades/edit"));
+      if (admin?.permissions && !allowed) return false;
     }
     return true;
   });
@@ -192,10 +194,10 @@ function LeadershipAccessRedirect({ access }) {
 // Page-level access guard. Checks the signed-in admin's permissions array
 // (returned by /auth/me) and redirects to the first accessible page if the
 // user doesn't have access. Super admins bypass the check.
-function PageGuard({ pageKey, children }) {
+function PageGuard({ pageKey, alternatePageKeys = [], children }) {
   const admin = useAdmin();
   if (admin?.is_super_admin) return children;
-  const allowed = admin?.permissions?.includes(pageKey);
+  const allowed = [pageKey, ...alternatePageKeys].some((key) => admin?.permissions?.includes(key));
   if (!allowed) return <Navigate to="/admin" replace />;
   return children;
 }
@@ -241,7 +243,7 @@ export default function App() {
           links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
-          <Route path="/crusades" element={<PageGuard pageKey="crusades"><CrusadesTable /></PageGuard>} />
+          <Route path="/crusades" element={<PageGuard pageKey="crusades" alternatePageKeys={["crusades/edit"]}><CrusadesTable /></PageGuard>} />
           <Route path="/crusades/:id/edit" element={<PageGuard pageKey="crusades/edit"><EditCrusadePage /></PageGuard>} />
           <Route path="/registrations" element={<PageGuard pageKey="registrations"><RegistrationsTable /></PageGuard>} />
           <Route path="/registrations/live" element={<PageGuard pageKey="registrations/live"><RegistrationsLive /></PageGuard>} />

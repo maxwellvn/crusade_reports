@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db } from "../db.js";
-import { requireSuperAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { ApiError, wrap } from "../logger.js";
 import { missionTripVolunteerSchema } from "../validation.js";
 import { COUNTRIES } from "./countries.js";
@@ -32,12 +32,12 @@ missionTrips.post("/registrations", wrap((req, res) => {
   res.status(201).json({ reference_code: reference, full_name: `${data.first_name} ${data.last_name}`, passport_country_name: passport.name, preferred_destination_name: destination.name, sponsor_interest: data.sponsor_interest });
 }));
 
-missionTrips.get("/admin", requireSuperAdmin, wrap((req, res) => {
+missionTrips.get("/admin", requirePageAccess("dashboard/mission-trips"), wrap((req, res) => {
   const rows = missionTripRows(req.query);
   const options = { zones: db.prepare("SELECT DISTINCT zone_name name FROM mission_trip_volunteers WHERE trim(COALESCE(zone_name,'')) <> '' ORDER BY name COLLATE NOCASE").all().map((r) => r.name), passports: db.prepare("SELECT DISTINCT passport_country_code code, passport_country_name name FROM mission_trip_volunteers ORDER BY name COLLATE NOCASE").all(), destinations: db.prepare("SELECT DISTINCT preferred_destination_code code, preferred_destination_name name FROM mission_trip_volunteers ORDER BY name COLLATE NOCASE").all() };
   res.json({ rows, total: db.prepare("SELECT COUNT(*) count FROM mission_trip_volunteers").get().count, filtered_total: rows.length, filter_options: options });
 }));
 
 const columns = [{ header: "Reference", value: (r) => r.reference_code }, { header: "Name", value: (r) => `${r.first_name} ${r.last_name}` }, { header: "Designation", value: (r) => r.designation }, { header: "Passport", value: (r) => r.passport_country_name }, { header: "Additional passports", value: (r) => r.additional_passports }, { header: "Passport expiry", value: (r) => r.passport_expiry }, { header: "Preferred destination", value: (r) => r.preferred_destination_name }, { header: "Any destination", value: (r) => r.ready_for_any_destination ? "Yes" : "No" }, { header: "Zone", value: (r) => r.zone_name }, { header: "Group", value: (r) => r.group_name }, { header: "Church", value: (r) => r.church_name }, { header: "Email", value: (r) => r.email }, { header: "Phone", value: (r) => `${r.phone_country_code} ${r.phone_number}` }, { header: "KingsChat", value: (r) => `@${r.kingschat_username}` }, { header: "Sponsor interest", value: (r) => r.sponsor_interest ? "Yes" : "No" }, { header: "Additional information", value: (r) => r.additional_information }, { header: "Submitted at (UTC)", value: (r) => r.created_at }];
-missionTrips.get("/admin/export", requireSuperAdmin, wrap(async (req, res) => sendExport(res, req.query.format === "csv" ? "csv" : "xlsx", "mission-trip-volunteers", columns, missionTripRows(req.query))));
-missionTrips.delete("/admin/:id", requireSuperAdmin, wrap((req, res) => { const result = db.prepare("DELETE FROM mission_trip_volunteers WHERE id = ?").run(req.params.id); if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Volunteer registration not found."); res.status(204).end(); }));
+missionTrips.get("/admin/export", requirePageAccess("dashboard/mission-trips"), wrap(async (req, res) => sendExport(res, req.query.format === "csv" ? "csv" : "xlsx", "mission-trip-volunteers", columns, missionTripRows(req.query))));
+missionTrips.delete("/admin/:id", requirePageAccess("dashboard/mission-trips"), wrap((req, res) => { const result = db.prepare("DELETE FROM mission_trip_volunteers WHERE id = ?").run(req.params.id); if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Volunteer registration not found."); res.status(204).end(); }));

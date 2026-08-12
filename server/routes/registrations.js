@@ -3,7 +3,7 @@ import { db } from "../db.js";
 import { backupDatabase } from "../databaseProtection.js";
 import { registrationCrusadeEditSchema, registrationSchema, manualOrgUpdateSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
-import { requireAdmin, requireSuperAdmin } from "../auth.js";
+import { requireAdmin, requirePageAccess, requireSuperAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen } from "../appSettings.js";
@@ -129,7 +129,7 @@ registrations.post("/", wrap((req, res) => {
 // Directory gaps are intentionally visible to admins for reconciliation. These
 // rows remain ordinary registrations; the flags only identify names typed by a
 // registrant instead of selected from the directory.
-registrations.get("/manual-organizations", requireSuperAdmin, wrap((_req, res) => {
+registrations.get("/manual-organizations", requirePageAccess("registrations/manual-organizations"), wrap((_req, res) => {
   const rows = db.prepare(`
     SELECT i.id, i.registration_id, i.created_at, i.zone, i.group_name,
            i.zone_manual, i.group_manual, i.event_name, i.event_date, i.city, i.country,
@@ -145,8 +145,8 @@ registrations.get("/manual-organizations", requireSuperAdmin, wrap((_req, res) =
 
 // Admin reconciliation: map a manually-typed zone/group to the real directory
 // entry. Updates both the registrations row and all its registration_items so
-// the flags stay consistent. Super-admin only — this rewrites org ownership.
-registrations.patch("/manual-organizations/:registrationId", requireSuperAdmin, wrap((req, res) => {
+// the flags stay consistent. Access requires the explicit manual-organisations permission.
+registrations.patch("/manual-organizations/:registrationId", requirePageAccess("registrations/manual-organizations"), wrap((req, res) => {
   const parsed = manualOrgUpdateSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid organisation update.");
   const { zone, group_name } = parsed.data;

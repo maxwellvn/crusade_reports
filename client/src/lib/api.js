@@ -49,6 +49,7 @@ export const getJSON = (path) => api(path);
 export const postJSON = (path, data) => api(path, { method: "POST", body: JSON.stringify(data) });
 export const postForm = (path, formData) => api(path, { method: "POST", body: formData });
 export const putJSON = (path, data) => api(path, { method: "PUT", body: JSON.stringify(data) });
+export const putForm = (path, formData) => api(path, { method: "PUT", body: formData });
 export const patchJSON = (path, data) => api(path, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteJSON = (path) => api(path, { method: "DELETE" });
 

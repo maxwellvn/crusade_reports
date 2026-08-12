@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAdmin, requireSuperAdmin } from "../auth.js";
+import { requireAdmin, requirePageAccess, requireSuperAdmin } from "../auth.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
-import { deleteReportPhotos, listReportPhotos } from "../reportMedia.js";
+import {
+  composeMediaLinks, deleteReportPhotos, listReportPhotos, parseReportPayload, removeUploadedFiles,
+  saveReportPhotos, withReportPhotoUpload,
+} from "../reportMedia.js";
 
 export const crusades = Router();
 
@@ -156,7 +159,7 @@ const REPORT_EDIT_COLS = [
 ];
 
 // GET /api/crusades/:id/edit — full crusade + report data for the edit form.
-crusades.get("/:id/edit", requireSuperAdmin, wrap((req, res) => {
+crusades.get("/:id/edit", requirePageAccess("crusades/edit"), wrap((req, res) => {
   const row = db.prepare(`
     SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
            r.kingschat_username, r.highlights, r.media_links, r.photo_links, r.video_links, r.id AS report_id
@@ -167,12 +170,29 @@ crusades.get("/:id/edit", requireSuperAdmin, wrap((req, res) => {
   res.json(row);
 }));
 
-// PUT /api/crusades/:id — super admin updates all editable crusade + report fields.
-crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
+// PUT /api/crusades/:id — assigned report editors update crusade/report fields and add photos.
+crusades.put("/:id", requirePageAccess("crusades/edit"), withReportPhotoUpload(wrap((req, res) => {
+  const files = req.files || [];
   const existing = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(req.params.id);
-  if (!existing) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+  if (!existing) {
+    removeUploadedFiles(files);
+    throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
+  }
+  if (files.length && !existing.report_id) {
+    removeUploadedFiles(files);
+    throw new ApiError(409, "REPORT_REQUIRED", "This crusade does not have a report record for photo uploads.");
+  }
 
-  const body = req.body || {};
+  let body;
+  try {
+    body = parseReportPayload(req);
+  } catch (error) {
+    removeUploadedFiles(files);
+    throw error;
+  }
+  if ("photo_links" in body || "video_links" in body) {
+    body.media_links = composeMediaLinks(body.photo_links, body.video_links);
+  }
   const crusadeSet = [];
   const crusadeVals = [];
   for (const col of CRUSADE_EDIT_COLS) {
@@ -190,7 +210,7 @@ crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
     }
   }
 
-  db.transaction(() => {
+  const update = db.transaction(() => {
     if (crusadeSet.length) {
       crusadeVals.push(req.params.id);
       db.prepare(`UPDATE crusades SET ${crusadeSet.join(", ")} WHERE id = ?`).run(...crusadeVals);
@@ -199,7 +219,14 @@ crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
       reportVals.push(existing.report_id);
       db.prepare(`UPDATE reports SET ${reportSet.join(", ")} WHERE id = ?`).run(...reportVals);
     }
-  })();
+    if (files.length) saveReportPhotos(existing.report_id, files);
+  });
+  try {
+    update();
+  } catch (error) {
+    removeUploadedFiles(files);
+    throw error;
+  }
 
   const updated = db.prepare(`
     SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
@@ -208,4 +235,4 @@ crusades.put("/:id", requireSuperAdmin, wrap((req, res) => {
   `).get(req.params.id);
   updated.photos = updated.report_id ? listReportPhotos(updated.report_id) : [];
   res.json(updated);
-}));
+})));

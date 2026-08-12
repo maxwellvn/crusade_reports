@@ -8,7 +8,7 @@ import { dirname } from "node:path";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { db } from "../db.js";
-import { requireSuperAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { ApiError, wrap } from "../logger.js";
 
 export const resources = Router();
@@ -120,7 +120,7 @@ resources.get("/", wrap((req, res) => {
   res.json({ resources: rows.map(publicRow), categories });
 }));
 
-resources.post("/categories", requireSuperAdmin, wrap((req, res) => {
+resources.post("/categories", requirePageAccess("dashboard/resources"), wrap((req, res) => {
   const name = clean(req.body.name, 80).replace(/\s+/g, " ");
   if (name.length < 2) throw new ApiError(400, "INVALID_CATEGORY", "Category names must be at least 2 characters.");
   try {
@@ -132,7 +132,7 @@ resources.post("/categories", requireSuperAdmin, wrap((req, res) => {
   }
 }));
 
-resources.delete("/categories/:id", requireSuperAdmin, wrap((req, res) => {
+resources.delete("/categories/:id", requirePageAccess("dashboard/resources"), wrap((req, res) => {
   const category = db.prepare("SELECT * FROM resource_categories WHERE id = ?").get(req.params.id);
   if (!category) throw new ApiError(404, "NOT_FOUND", "Category not found.");
   const used = db.prepare("SELECT COUNT(*) AS count FROM resources WHERE category = ? COLLATE NOCASE").get(category.name).count;
@@ -141,7 +141,7 @@ resources.delete("/categories/:id", requireSuperAdmin, wrap((req, res) => {
   res.status(204).end();
 }));
 
-resources.post("/", requireSuperAdmin, upload.fields([{ name: "file", maxCount: 1 }, { name: "thumbnail", maxCount: 1 }]), wrap(async (req, res) => {
+resources.post("/", requirePageAccess("dashboard/resources"), upload.fields([{ name: "file", maxCount: 1 }, { name: "thumbnail", maxCount: 1 }]), wrap(async (req, res) => {
   const file = req.files?.file?.[0];
   const thumbnailFile = req.files?.thumbnail?.[0];
   try {
@@ -184,7 +184,7 @@ resources.post("/", requireSuperAdmin, upload.fields([{ name: "file", maxCount: 
   }
 }));
 
-resources.put("/:id", requireSuperAdmin, upload.single("thumbnail"), wrap(async (req, res) => {
+resources.put("/:id", requirePageAccess("dashboard/resources"), upload.single("thumbnail"), wrap(async (req, res) => {
   const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
   if (!row) { if (req.file?.filename) unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); throw new ApiError(404, "NOT_FOUND", "Resource not found."); }
   try {
@@ -207,7 +207,7 @@ resources.put("/:id", requireSuperAdmin, upload.single("thumbnail"), wrap(async 
   } catch (error) { if (req.file?.filename) { try { unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); } catch { /* best effort */ } } throw error; }
 }));
 
-resources.post("/:id/thumbnail", requireSuperAdmin, wrap(async (req, res) => {
+resources.post("/:id/thumbnail", requirePageAccess("dashboard/resources"), wrap(async (req, res) => {
   const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Resource not found.");
   if (!row.external_url) throw new ApiError(400, "NOT_A_LINK", "Only linked resources can fetch a thumbnail.");
@@ -217,7 +217,7 @@ resources.post("/:id/thumbnail", requireSuperAdmin, wrap(async (req, res) => {
   res.json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ?").get(row.id)));
 }));
 
-resources.delete("/:id", requireSuperAdmin, wrap((req, res) => {
+resources.delete("/:id", requirePageAccess("dashboard/resources"), wrap((req, res) => {
   const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Resource not found.");
   db.prepare("DELETE FROM resources WHERE id = ?").run(row.id);

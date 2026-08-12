@@ -4,10 +4,14 @@ import { toast } from "sonner";
 import { ArrowLeft, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getJSON, putJSON } from "@/lib/api";
+import { getJSON, putForm, putJSON } from "@/lib/api";
+import {
+  ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes,
+} from "@/components/ReportMediaFields";
 import {
   CRUSADE_TYPES, FORMATS, CORE_OUTCOMES, EXTENDED_OUTCOMES, RABAH_OUTCOMES, METRIC_KEYS,
 } from "@/lib/constants";
@@ -16,14 +20,13 @@ const ORG_TYPES = [
   ["zone", "Zone"], ["group", "Group"], ["church", "Church"], ["cell", "Cell"], ["network", "Network"],
 ];
 
-const ALL_METRICS = [...CORE_OUTCOMES, ...EXTENDED_OUTCOMES, ...RABAH_OUTCOMES];
-
 export function EditCrusadePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [data, setData] = React.useState(null);
+  const [photos, setPhotos] = React.useState([]);
 
   React.useEffect(() => {
     getJSON(`/crusades/${id}/edit`)
@@ -38,6 +41,11 @@ export function EditCrusadePage() {
 
   async function save(e) {
     e.preventDefault();
+    const photoTotal = totalPhotoBytes(photos);
+    if (photoTotal > MAX_REPORT_PHOTOS_BYTES) {
+      toast.error(photosOverLimitMessage(photoTotal));
+      return;
+    }
     setSaving(true);
     try {
       const payload = {};
@@ -48,7 +56,7 @@ export function EditCrusadePage() {
         payload[f] = data[f] ?? "";
       }
       // Numeric metrics
-      for (const [key] of ALL_METRICS) payload[key] = parseInt(data[key] || 0, 10) || 0;
+      for (const key of METRIC_KEYS) payload[key] = parseInt(data[key] || 0, 10) || 0;
       payload.attendance = parseInt(data.attendance || 0, 10) || 0;
       payload.crusade_expense = Number(data.crusade_expense || 0) || 0;
       // Report fields
@@ -56,7 +64,11 @@ export function EditCrusadePage() {
         "kingschat_username", "highlights", "media_links", "photo_links", "video_links"]) {
         payload[f] = data[f] ?? "";
       }
-      await putJSON(`/crusades/${id}`, payload);
+      if (photos.length) {
+        await putForm(`/crusades/${id}`, buildReportFormData(payload, photos));
+      } else {
+        await putJSON(`/crusades/${id}`, payload);
+      }
       toast.success("Crusade updated.");
       navigate("/crusades");
     } catch (err) {
@@ -209,17 +221,19 @@ export function EditCrusadePage() {
           <CardHeader><CardTitle>Highlights & media</CardTitle></CardHeader>
           <CardContent className="grid gap-4">
             <Field label="Highlights">
-              <Input value={data.highlights || ""} onChange={(e) => set("highlights", e.target.value)} />
+              <Textarea rows={4} maxLength={2000} value={data.highlights || ""} onChange={(e) => set("highlights", e.target.value)} />
             </Field>
-            <Field label="Photo links">
-              <Input value={data.photo_links || ""} onChange={(e) => set("photo_links", e.target.value)} placeholder="One link per line" />
-            </Field>
-            <Field label="Video links">
-              <Input value={data.video_links || ""} onChange={(e) => set("video_links", e.target.value)} placeholder="One link per line" />
-            </Field>
+            <ReportMediaFields
+              photos={photos}
+              onPhotosChange={setPhotos}
+              photoLinks={data.photo_links || ""}
+              onPhotoLinksChange={(value) => set("photo_links", value)}
+              videoLinks={data.video_links || ""}
+              onVideoLinksChange={(value) => set("video_links", value)}
+            />
             {(data.photos || []).length > 0 && (
               <div>
-                <p className="mb-2 text-sm font-medium">Uploaded photos</p>
+                <p className="mb-2 text-sm font-medium">Previously uploaded photos</p>
                 <ul className="divide-y rounded-md border">
                   {data.photos.map((photo) => (
                     <li key={photo.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">

@@ -13,7 +13,7 @@ import { getJSON } from "@/lib/api";
 import { CRUSADE_TYPES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
 
-// Super-admin-only table of Loveworld Blue Elite staff registrations.
+// Permission-scoped table of Loveworld Blue Elite staff registrations.
 // Reads from /api/blue-elite/registrations, which is server-scoped to
 // program='blue_elite'. Same filter/sort/pagination pattern as the public
 // RegistrationsTable, but with a Department filter and no edit/delete actions

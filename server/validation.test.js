@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -12,15 +12,19 @@ import { applyTranslationGlossary } from "./routes/translation.js";
 import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
-import { crusadeFilterOptions, deleteCrusadeReport } from "./routes/crusades.js";
-import { attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, registrationFilterOptions, updateRegistrationCrusade } from "./routes/registrations.js";
+import { crusades, crusadeFilterOptions, deleteCrusadeReport } from "./routes/crusades.js";
+import { registrations, attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, registrationFilterOptions, updateRegistrationCrusade } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
 import { changedPortalTemplateFields, currentDirectoryZoneNames, invalidMediaLink, validIsoDate } from "./routes/zonePortal.js";
 import { COUNTRIES, countryCodeByName } from "./routes/countries.js";
 import { adminSelectionQuery } from "./routes/missionNations.js";
-import { mediaTrainingRows } from "./routes/mediaTraining.js";
+import { mediaTraining, mediaTrainingRows } from "./routes/mediaTraining.js";
+import { blueElite } from "./routes/blueElite.js";
+import { missionTrips } from "./routes/missionTrips.js";
+import { resources } from "./routes/resources.js";
+import { databaseProtection } from "./routes/databaseProtection.js";
 import { updateCampaignSettings } from "./routes/campaignSettings.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
 import { renderPageMetadata } from "./pageMeta.js";
@@ -541,6 +545,58 @@ test("page access middleware honors the Mission nations permission", async () =>
     global.fetch = originalFetch;
     db.exec("ROLLBACK");
   }
+});
+
+test("assignable admin pages use their delegated permission middleware", async () => {
+  const originalFetch = global.fetch;
+  db.exec("BEGIN");
+  try {
+    const username = "assigned.admin";
+    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, 'test')").run(username);
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({ profile: { user: { username } } }),
+    });
+
+    const routeCases = [
+      [crusades, "/:id/edit", "get", "crusades/edit"],
+      [registrations, "/manual-organizations", "get", "registrations/manual-organizations"],
+      [mediaTraining, "/admin", "get", "dashboard/media-training"],
+      [missionTrips, "/admin", "get", "dashboard/mission-trips"],
+      [resources, "/categories", "post", "dashboard/resources"],
+      [blueElite, "/registrations/live", "get", "dashboard/blue-elite"],
+      [blueElite, "/registrations", "get", "registrations/blue-elite"],
+      [databaseProtection, "/", "get", "dashboard/database-protection"],
+    ];
+
+    for (const [router, path, method, pageKey] of routeCases) {
+      db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
+      db.prepare("INSERT INTO dashboard_permissions (username, page_key) VALUES (?, ?)").run(username, pageKey);
+      const layer = router.stack.find((entry) => entry.route?.path === path && entry.route.methods[method]);
+      assert.ok(layer, `${method.toUpperCase()} ${path} route exists`);
+      const middleware = layer.route.stack[0].handle;
+      const error = await new Promise((resolve) => middleware({
+        headers: {},
+        get: (name) => name === "authorization" ? `Bearer assigned-${pageKey}` : "",
+      }, {}, (nextError) => resolve(nextError)));
+      assert.equal(error, undefined, `${pageKey} accepts its assigned administrator`);
+    }
+  } finally {
+    global.fetch = originalFetch;
+    db.exec("ROLLBACK");
+  }
+});
+
+test("admin report editing uses the shared multipart photo workflow", () => {
+  const editFormSource = readFileSync(join(process.cwd(), "client/src/components/EditCrusadePage.jsx"), "utf8");
+  assert.match(editFormSource, /<ReportMediaFields/);
+  assert.match(editFormSource, /putForm\([^\n]+buildReportFormData/);
+  assert.match(editFormSource, /for \(const key of METRIC_KEYS\)/);
+
+  const route = crusades.stack.find((entry) => entry.route?.path === "/:id" && entry.route.methods.put);
+  assert.ok(route, "PUT /:id route exists");
+  assert.equal(route.route.stack.length, 2, "permission and multipart update handlers are installed");
+  assert.match(String(route.route.stack[1].handle), /reportPhotoUpload/);
 });
 
 test("country coverage can be assigned from the super-admin access settings", () => {
