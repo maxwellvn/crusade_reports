@@ -27,6 +27,7 @@ import { upcomingCrusades } from "./routes/upcomingCrusades.js";
 import { translation } from "./routes/translation.js";
 import { coverage } from "./routes/coverage.js";
 import { countryCoverage } from "./routes/countryCoverage.js";
+import { pastoralChecklist } from "./routes/pastoralChecklist.js";
 import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
@@ -64,6 +65,7 @@ app.use("/api/upcoming-crusades", upcomingCrusades);
 app.use("/api/translation", translation);
 app.use("/api/coverage", coverage);
 app.use("/api/country-coverage", countryCoverage);
+app.use("/api/pastoral-checklist", pastoralChecklist);
 app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 

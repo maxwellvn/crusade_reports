@@ -29,6 +29,7 @@ import { updateCampaignSettings } from "./routes/campaignSettings.js";
 import { isPrivateAddress, metadataImage, youtubeThumbnail } from "./routes/resources.js";
 import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
+import { buildPastoralChecklistRows, filterPastoralChecklistRows, pastoralChecklistSummary } from "./pastoralChecklist.js";
 import { sendExport } from "./routes/exporter.js";
 import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
@@ -123,6 +124,40 @@ test("coverage compares the complete ministry directory with registered crusades
     { name: "GROUP TWO", zone: "ZONE ALPHA", status: "not_registered", crusades: 0 },
     { name: "GROUP THREE", zone: "ZONE BETA", status: "not_registered", crusades: 0 },
   ]);
+});
+
+test("pastoral checklist reconciles the five zonal accountability records", () => {
+  const directory = [
+    { region: "Region 1", zone: "LAGOS ZONE 6", groups: [] },
+    { region: "Region 2", zone: "ABUJA ZONE", groups: [] },
+  ];
+  const rows = buildPastoralChecklistRows(directory, [
+    { zone: "lagos zone 6", registered_crusades: 10, cellular_crusades: 5, prayer_march_records: 1 },
+    { zone: " LAGOS   ZONE 6 ", registered_crusades: 2, cellular_crusades: 2 },
+    { zone: "Lagos Zone 6", registered_crusades: 0, cellular_crusades: 0, wonders_diamond_records: 1 },
+    { zone: "ABUJA ZONE", registered_crusades: 2, cellular_crusades: 0, prayer_march_records: 0, wonders_diamond_records: 0 },
+  ], [{
+    zone_name: "Lagos Zone 6", pastor_name: "Pastor Chike Ume", mission_country_name: "Ghana",
+    mission_country_names: '["Ghana","Togo"]', created_at: "2026-08-11 09:00:00",
+  }]);
+
+  assert.deepEqual(rows[1], {
+    zone: "LAGOS ZONE 6", region: "Region 1", pastor_name: "Pastor Chike Ume",
+    has_registration: true, registered_crusades: 12, has_cellular: true, cellular_crusades: 7,
+    has_nation_selection: true, selected_nations: ["Ghana", "Togo"], nation_selected_at: "2026-08-11 09:00:00",
+    has_prayer_march: true, prayer_march_records: 1,
+    has_wonders_diamond: true, wonders_diamond_records: 1,
+    completed_items: 5, complete: true,
+  });
+  assert.equal(rows[0].zone, "ABUJA ZONE");
+  assert.equal(rows[0].completed_items, 1);
+  assert.deepEqual(pastoralChecklistSummary(rows), {
+    total: 2, complete: 1, registered: 2, cellular: 1, nation_selected: 1, prayer_march: 1, wonders_diamond: 1,
+  });
+  assert.deepEqual(filterPastoralChecklistRows(rows, { status: "no_cellular" }).map((row) => row.zone), ["ABUJA ZONE"]);
+  assert.deepEqual(filterPastoralChecklistRows(rows, { status: "no_prayer_march" }).map((row) => row.zone), ["ABUJA ZONE"]);
+  assert.deepEqual(filterPastoralChecklistRows(rows, { status: "no_wonders_diamond" }).map((row) => row.zone), ["ABUJA ZONE"]);
+  assert.deepEqual(filterPastoralChecklistRows(rows, { q: "chike" }).map((row) => row.zone), ["LAGOS ZONE 6"]);
 });
 
 test("the live churches directory includes additions and excludes removed zones", () => {
@@ -639,6 +674,14 @@ test("country coverage can be assigned from the super-admin access settings", ()
     key: "dashboard/country-coverage",
     label: "Country coverage",
     path: "/dashboard/country-coverage",
+  });
+});
+
+test("pastoral checklist can be assigned from the super-admin access settings", () => {
+  assert.deepEqual(ASSIGNABLE_PAGES.find((page) => page.key === "dashboard/pastoral-checklist"), {
+    key: "dashboard/pastoral-checklist",
+    label: "Pastoral checklist",
+    path: "/dashboard/pastoral-checklist",
   });
 });
 
