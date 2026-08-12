@@ -29,16 +29,15 @@ export const setDefaultLandingPage = (value) => {
 };
 
 // Manual org entry: when enabled, registrants can type a zone/group name that
-// isn't in the directory (flagged for admin review). When disabled, they must
-// pick from the directory only. Zones default off (directory is authoritative);
-// groups default on (new groups appear frequently).
+// isn't in the directory (flagged for admin review). Both default off so a
+// missing setting or a fresh deployment always treats the directory as authoritative.
 export const isManualZonesEnabled = () => db.prepare("SELECT value FROM app_settings WHERE key = 'manual_zones_enabled'").get()?.value === "1";
 export const setManualZonesEnabled = (enabled) => db.prepare(
   "INSERT INTO app_settings (key, value) VALUES ('manual_zones_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
 ).run(enabled ? "1" : "0");
 export const isManualGroupsEnabled = () => {
   const row = db.prepare("SELECT value FROM app_settings WHERE key = 'manual_groups_enabled'").get();
-  return row ? row.value === "1" : true; // default on
+  return row?.value === "1";
 };
 export const setManualGroupsEnabled = (enabled) => db.prepare(
   "INSERT INTO app_settings (key, value) VALUES ('manual_groups_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"

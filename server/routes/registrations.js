@@ -6,7 +6,7 @@ import { wrap, ApiError, logger } from "../logger.js";
 import { requireAdmin, requirePageAccess, requireSuperAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
-import { ensureReportingOpen } from "../appSettings.js";
+import { ensureReportingOpen, isManualGroupsEnabled, isManualZonesEnabled } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 import { sendExport } from "./exporter.js";
@@ -18,6 +18,54 @@ import { loadZones } from "./zones.js";
 export const registrations = Router();
 
 export const backupDatabaseRolling = () => backupDatabase("registration");
+
+const sameName = (left, right) => String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
+
+// The server, not the client-supplied *_manual flags, decides whether an
+// organization is canonical. This prevents forged requests and restored drafts
+// from bypassing the campaign settings.
+export function validateRegistrationOrganization(data, directory, {
+  manualZonesEnabled = false,
+  manualGroupsEnabled = false,
+  trustedZone = false,
+} = {}) {
+  const organization = { ...data, zone_manual: false, group_manual: false };
+  if (organization.organization_type === "network") {
+    return { ...organization, zone: "", group_name: "" };
+  }
+
+  const submittedZone = String(organization.zone || "").trim();
+  const canonicalZone = (directory || []).find((entry) => sameName(entry.zone, submittedZone));
+  if (canonicalZone) {
+    organization.zone = canonicalZone.zone;
+  } else if (trustedZone) {
+    organization.zone = submittedZone;
+  } else if (manualZonesEnabled) {
+    organization.zone = submittedZone;
+    organization.zone_manual = true;
+  } else {
+    throw new ApiError(422, "INVALID_ZONE", "Choose an official zone from the directory.");
+  }
+
+  if (organization.organization_type === "zone") {
+    return { ...organization, group_name: "", group_manual: false };
+  }
+
+  const submittedGroup = String(organization.group_name || "").trim();
+  const canonicalGroup = canonicalZone?.groups?.find((group) => sameName(group.name, submittedGroup));
+  if (canonicalGroup) {
+    organization.group_name = canonicalGroup.name;
+  } else if (canonicalZone && (directory || []).some((entry) =>
+    entry !== canonicalZone && entry.groups?.some((group) => sameName(group.name, submittedGroup)))) {
+    throw new ApiError(422, "GROUP_ZONE_MISMATCH", "Choose a group that belongs to the selected zone.");
+  } else if (manualGroupsEnabled) {
+    organization.group_name = submittedGroup;
+    organization.group_manual = true;
+  } else {
+    throw new ApiError(422, "INVALID_GROUP", "Choose an official group from the directory.");
+  }
+  return organization;
+}
 
 export function deleteRegistrationCrusade(id) {
   const item = db.prepare(`
@@ -116,11 +164,19 @@ const insertRegistration = db.transaction((d) => {
   return regId;
 });
 
-registrations.post("/", wrap((req, res) => {
-  const payload = applyPortalScope(req.body, String(req.body?.portal_token || ""));
+registrations.post("/", wrap(async (req, res) => {
+  const portalToken = String(req.body?.portal_token || "");
+  const payload = applyPortalScope(req.body, portalToken);
   const parsed = registrationSchema.safeParse(payload);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
-  const id = insertRegistration(parsed.data);
+  const registration = parsed.data.organization_type === "network"
+    ? validateRegistrationOrganization(parsed.data, [], {})
+    : validateRegistrationOrganization(parsed.data, portalToken ? [] : await loadZones(), {
+      manualZonesEnabled: isManualZonesEnabled(),
+      manualGroupsEnabled: isManualGroupsEnabled(),
+      trustedZone: Boolean(portalToken),
+    });
+  const id = insertRegistration(registration);
   backfillCityCoords().catch(() => {});
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed"));
   res.status(201).json({ id });
@@ -244,6 +300,7 @@ const ORG_LABEL = "COALESCE(r.cell_name, r.church_name, r.group_name, r.network_
 // Scoped to program='public' (or NULL for rows that pre-date the column) so the
 // Blue Elite module's data never leaks into the original admin views.
 const PUBLIC_PROGRAM_FILTER = "(i.program = 'public' OR i.program IS NULL)";
+const CELLULAR_ITEM_FILTER = "(i.organization_type = 'cell' OR i.event_type = 'rabah')";
 
 const REGISTRATION_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "cell_name", "network_name", "country", "city"];
 
@@ -262,14 +319,14 @@ export function registrationFilterOptions() {
 }
 
 const CELLULAR_DIMENSIONS = new Set(["zone", "group_name", "church_name"]);
-function cellularRegistrationsBy(column) {
+export function cellularRegistrationsBy(column) {
   if (!CELLULAR_DIMENSIONS.has(column)) throw new Error(`Unsupported cellular dimension: ${column}`);
   return db.prepare(
     `SELECT ${column} AS key, COALESCE(SUM(planned_count), 0) AS planned,
             COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
      WHERE ${PUBLIC_PROGRAM_FILTER}
-       AND organization_type = 'cell'
+       AND ${CELLULAR_ITEM_FILTER}
        AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
      GROUP BY ${column} COLLATE NOCASE
      ORDER BY planned DESC, key COLLATE NOCASE`
@@ -282,7 +339,7 @@ export function cellRegistrationsByZone() {
             COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
      WHERE ${PUBLIC_PROGRAM_FILTER}
-       AND organization_type = 'cell'
+       AND ${CELLULAR_ITEM_FILTER}
        AND zone IS NOT NULL AND TRIM(zone) <> ''
        AND cell_name IS NOT NULL AND TRIM(cell_name) <> ''
      GROUP BY zone COLLATE NOCASE, group_name COLLATE NOCASE, church_name COLLATE NOCASE, cell_name COLLATE NOCASE
@@ -307,7 +364,7 @@ export function buildZoneCrusadeBreakdown(typeRows, cellularRows) {
   for (const row of typeRows) {
     const zone = ensure(row.zone);
     const planned = Number(row.planned) || 0;
-    zone.types[row.event_type] = planned;
+    if (row.event_type !== "rabah") zone.types[row.event_type] = planned;
     zone.total += planned;
   }
   for (const row of cellularRows) ensure(row.zone).cellular = Number(row.planned) || 0;
@@ -333,7 +390,7 @@ async function crusadeAnalysisData() {
     `SELECT COALESCE(SUM(planned_count), 0) AS total,
             COALESCE(SUM(CASE WHEN event_type = 'mega' THEN planned_count ELSE 0 END), 0) AS mega,
             COALESCE(SUM(CASE WHEN event_type = 'online' THEN planned_count ELSE 0 END), 0) AS online,
-            COALESCE(SUM(CASE WHEN organization_type = 'cell' THEN planned_count ELSE 0 END), 0) AS cellular,
+            COALESCE(SUM(CASE WHEN ${CELLULAR_ITEM_FILTER} THEN planned_count ELSE 0 END), 0) AS cellular,
             COUNT(DISTINCT CASE WHEN zone IS NOT NULL AND TRIM(zone) <> '' THEN zone END) AS zones
      FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}`
   ).get();
@@ -346,7 +403,7 @@ async function crusadeAnalysisData() {
       by_cell: attachCellRegions(cellRegistrationsByZone(), await loadZones()),
     },
     zone_type_breakdown: zoneTypeBreakdown,
-    active_types: CRUSADE_TYPES.filter(([key]) => typeRows.some((row) => row.event_type === key)),
+    active_types: CRUSADE_TYPES.filter(([key]) => key !== "rabah" && typeRows.some((row) => row.event_type === key)),
   };
 }
 
@@ -529,7 +586,7 @@ registrations.get("/country-report.pdf", requireAdmin, wrap(async (_req, res) =>
 // Shared WHERE clause for the registrations table and its export.
 // Always scoped to public registrations (NULL allowed for pre-migration rows)
 // so Blue Elite rows never appear in the original admin table.
-function registrationFilters(query) {
+export function registrationFilters(query) {
   const where = ["(r.program = 'public' OR r.program IS NULL)"];
   const params = {};
   for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name"]) {
@@ -541,6 +598,7 @@ function registrationFilters(query) {
   if (query.readiness_status) { where.push("i.readiness_status = @readiness_status"); params.readiness_status = String(query.readiness_status); }
   if (query.report_status === "reported") where.push("EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
   if (query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
+  if (query.cellular === "1") where.push(CELLULAR_ITEM_FILTER);
   if (query.event_type) { where.push("i.event_type = @event_type"); params.event_type = String(query.event_type); }
   if (query.date_from) { where.push("i.event_date >= @date_from"); params.date_from = String(query.date_from); }
   if (query.date_to) { where.push("i.event_date <= @date_to"); params.date_to = String(query.date_to); }

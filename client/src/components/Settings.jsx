@@ -90,7 +90,7 @@ export function Settings() {
         setLandingPage(settings.default_landing_page || "");
         setLandingOptions(Array.isArray(settings.landing_page_options) ? settings.landing_page_options : []);
         setManualZones(settings.manual_zones_enabled ?? false);
-        setManualGroups(settings.manual_groups_enabled ?? true);
+        setManualGroups(settings.manual_groups_enabled ?? false);
         setManualCities(settings.manual_cities_enabled ?? true);
       })
       .catch((error) => toast.error(error.message));
@@ -271,7 +271,7 @@ export function Settings() {
       <SettingsSection title="Manual organisation entry" description="Let registrants type a zone, group, or city name that isn't in the directory. Typed entries are flagged for admin review on the Manual organisations page.">
         <div className="space-y-6">
           <ManualOrgToggle label="Manual zones" description="Allow registrants to type a zone name not in the directory. Off by default — zones should come from the churches API." checked={manualZones} disabled={manualZones === null || savingManualOrg} onChange={() => toggleManualOrg("zones")} />
-          <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. On by default — new groups appear frequently." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
+          <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. Off by default — groups should come from the churches API." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
           <ManualOrgToggle label="Manual cities" description="Allow registrants to type a city name not found in the search results. On by default — the create option only appears when no match is found." checked={manualCities} disabled={manualCities === null || savingManualOrg} onChange={() => toggleManualOrg("cities")} />
         </div>
       </SettingsSection>

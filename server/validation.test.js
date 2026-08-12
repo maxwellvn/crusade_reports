@@ -13,7 +13,7 @@ import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
 import { crusades, crusadeFilterOptions, deleteCrusadeReport } from "./routes/crusades.js";
-import { registrations, attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, deleteRegistrationCrusade, registrationFilterOptions, updateRegistrationCrusade } from "./routes/registrations.js";
+import { registrations, attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, cellularRegistrationsBy, deleteRegistrationCrusade, registrationFilterOptions, registrationFilters, updateRegistrationCrusade, validateRegistrationOrganization } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
@@ -411,6 +411,41 @@ test("each new registration item requires individual crusade details", () => {
   // country is per crusade now — a missing country fails validation
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, country: "" }] }).success, false);
   assert.equal(registrationSchema.safeParse({ ...base, items: [{ ...item, minister_name: "" }] }).success, false);
+});
+
+test("registration organization values obey the server-side manual entry settings", () => {
+  const directory = [
+    { zone: "LAGOS ZONE 1", groups: [{ id: "g1", name: "LEKKI GROUP" }] },
+    { zone: "ABUJA ZONE", groups: [{ id: "g2", name: "GWARINPA GROUP" }] },
+  ];
+  const base = { organization_type: "group", zone: "lagos zone 1", group_name: "lekki group", zone_manual: true, group_manual: true };
+
+  assert.deepEqual(validateRegistrationOrganization(base, directory, {
+    manualZonesEnabled: false,
+    manualGroupsEnabled: false,
+  }), { ...base, zone: "LAGOS ZONE 1", group_name: "LEKKI GROUP", zone_manual: false, group_manual: false });
+
+  assert.throws(() => validateRegistrationOrganization({ ...base, zone: "MADE UP ZONE" }, directory, {
+    manualZonesEnabled: false,
+    manualGroupsEnabled: false,
+  }), /official zone/i);
+  assert.throws(() => validateRegistrationOrganization({ ...base, group_name: "MADE UP GROUP" }, directory, {
+    manualZonesEnabled: false,
+    manualGroupsEnabled: false,
+  }), /official group/i);
+  assert.throws(() => validateRegistrationOrganization({ ...base, group_name: "GWARINPA GROUP" }, directory, {
+    manualZonesEnabled: false,
+    manualGroupsEnabled: false,
+  }), /selected zone/i);
+
+  assert.deepEqual(validateRegistrationOrganization({ ...base, zone: "NEW ZONE", group_name: "NEW GROUP" }, directory, {
+    manualZonesEnabled: true,
+    manualGroupsEnabled: true,
+  }), { ...base, zone: "NEW ZONE", group_name: "NEW GROUP", zone_manual: true, group_manual: true });
+
+  assert.deepEqual(validateRegistrationOrganization({ ...base, organization_type: "zone", zone: "ASSIGNED PORTAL ZONE" }, directory, {
+    trustedZone: true,
+  }), { ...base, organization_type: "zone", zone: "ASSIGNED PORTAL ZONE", group_name: "", zone_manual: false, group_manual: false });
 });
 
 test("network planning edits lock once the crusade date has passed", () => {
@@ -838,16 +873,59 @@ test("registered crusades are broken down by type and cellular level for each zo
   const rows = buildZoneCrusadeBreakdown([
     { zone: "Zone A", event_type: "mega", planned: 2 },
     { zone: "Zone A", event_type: "online", planned: 2 },
+    { zone: "Zone A", event_type: "rabah", planned: 4 },
     { zone: "Zone B", event_type: "street", planned: 5 },
   ], [
-    { zone: "Zone A", planned: 3 },
+    { zone: "Zone A", planned: 7 },
     { zone: "Zone B", planned: 1 },
   ]);
 
   assert.deepEqual(rows, [
+    { zone: "Zone A", total: 8, cellular: 7, types: { mega: 2, online: 2 } },
     { zone: "Zone B", total: 5, cellular: 1, types: { street: 5 } },
-    { zone: "Zone A", total: 4, cellular: 3, types: { mega: 2, online: 2 } },
   ]);
+});
+
+test("cell and RABAH registrations merge into one cellular category without double counting", () => {
+  const marker = `Merged Cellular ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    const insertRegistration = db.prepare(
+      `INSERT INTO registrations (organization_type, zone, country, plan_date)
+       VALUES (?, ?, 'Nigeria', '2026-08-28')`
+    );
+    const insertItem = db.prepare(
+      `INSERT INTO registration_items
+       (registration_id, organization_type, zone, country, plan_date, event_type, planned_count)
+       VALUES (?, ?, ?, 'Nigeria', '2026-08-28', ?, ?)`
+    );
+    for (const [organizationType, eventType, planned] of [
+      ["cell", "mega", 2],
+      ["zone", "rabah", 3],
+      ["cell", "rabah", 5],
+      ["zone", "mega", 7],
+    ]) {
+      const registrationId = insertRegistration.run(organizationType, marker).lastInsertRowid;
+      insertItem.run(registrationId, organizationType, marker, eventType, planned);
+    }
+
+    assert.deepEqual(cellularRegistrationsBy("zone").find((row) => row.key === marker), {
+      key: marker,
+      planned: 10,
+      registrations: 3,
+    });
+    const filter = registrationFilters({ cellular: "1", zone: marker });
+    assert.match(filter.clause, /organization_type = 'cell'.*event_type = 'rabah'/s);
+    assert.equal(filter.params.zone, marker);
+    const filteredRows = db.prepare(
+      `SELECT i.id FROM registration_items i
+       JOIN registrations r ON r.id = i.registration_id
+       ${filter.clause}`
+    ).all(filter.params);
+    assert.equal(filteredRows.length, 3);
+  } finally {
+    db.exec("ROLLBACK");
+  }
 });
 
 test("cell analysis is structured by zone, group, church, and cell", () => {

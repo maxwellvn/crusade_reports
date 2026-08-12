@@ -106,7 +106,7 @@ export function RegistrationForm() {
   const [batchType, setBatchType] = React.useState("");
   const [selectedCrusades, setSelectedCrusades] = React.useState([]);
   const [manualZones, setManualZones] = React.useState(false);
-  const [manualGroups, setManualGroups] = React.useState(true);
+  const [manualGroups, setManualGroups] = React.useState(false);
   const [manualCities, setManualCities] = React.useState(true);
   const orgType = watch("organization_type");
   const zone = watch("zone");
@@ -162,9 +162,14 @@ export function RegistrationForm() {
   React.useEffect(() => {
     getJSON("/campaign-settings").then((s) => {
       setManualZones(s.manual_zones_enabled ?? false);
-      setManualGroups(s.manual_groups_enabled ?? true);
+      setManualGroups(s.manual_groups_enabled ?? false);
       setManualCities(s.manual_cities_enabled ?? true);
-    }).catch(() => { /* defaults are fine */ });
+    }).catch(() => {
+      // Organization entry fails closed: an unavailable settings request must
+      // never silently re-enable free-text zones or groups.
+      setManualZones(false);
+      setManualGroups(false);
+    });
   }, []);
 
   React.useEffect(() => {
