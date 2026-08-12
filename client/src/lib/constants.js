@@ -10,7 +10,7 @@ export const ONLINE_TYPES = ["tv", "radio", "social-media", "online", "mystreams
 export const CRUSADE_TYPES = [
   ["mega", "Mega Crusades (4,000+ people)"],
   ["tap2read", "TAP2read Crusades"],
-  ["rabah", "RABAH Crusades"],
+  ["rabah", "Cellular Crusades (RABAH Crusades)"],
   ["youths-aglow", "Youths Aglow Crusades"],
   ["teevolution", "Teevolution Crusades (Teens)"],
   ["say-yes-to-kids", "Say Yes To Kids Crusades"],
