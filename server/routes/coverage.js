@@ -21,7 +21,7 @@ const exportColumns = (type) => type === "groups" ? [
   { header: "Crusades registered", value: (row) => row.crusades },
 ];
 
-async function coverageData() {
+export async function coverageData() {
   const directory = await loadZones();
   const reported = db.prepare(`
     SELECT zone, group_name, COALESCE(SUM(planned_count), 0) AS crusades, 0 AS attendance

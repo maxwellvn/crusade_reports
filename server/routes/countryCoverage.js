@@ -3,10 +3,69 @@ import { db } from "../db.js";
 import { requirePageAccess } from "../auth.js";
 import { wrap } from "../logger.js";
 import { COUNTRIES } from "./countries.js";
+import { coverageData } from "./coverage.js";
 
 export const countryCoverage = Router();
 
 const PUBLIC_PROGRAM_FILTER = "(i.program = 'public' OR i.program IS NULL)";
+
+function countryCoverageData() {
+  const unregistered = getCountriesWithoutRegistrations();
+  const registered = COUNTRIES.filter((country) => !unregistered.some((item) => item.code === country.code));
+  return {
+    summary: {
+      totalCountries: COUNTRIES.length,
+      registeredCount: registered.length,
+      unregisteredCount: unregistered.length,
+    },
+    unregisteredByContinent: groupByContinent(unregistered),
+    gpdZones: getGpdZonesCountryBreakdown(),
+    cellCrusades: getCellCrusadesCountryBreakdown(),
+    networks: getNetworkCountryBreakdown(),
+  };
+}
+
+export function buildEcardData(countryData, zoneData, generatedAt = new Date()) {
+  const groups = [
+    countryData.gpdZones,
+    countryData.cellCrusades,
+    ...countryData.networks.map((network) => ({
+      name: network.network,
+      countryCount: network.countries.length,
+      totalCrusades: network.totalCrusades,
+      totalRegistrations: network.totalRegistrations,
+      countries: network.countries,
+    })),
+  ];
+  const zonesWithoutRegistrations = zoneData.zones
+    .filter((zone) => zone.status === "not_registered")
+    .map((zone) => ({ zone: zone.name, region: zone.region }));
+  return {
+    schema_version: 1,
+    generated_at: generatedAt.toISOString(),
+    coverage_groups: groups,
+    countries: {
+      total: countryData.summary.totalCountries,
+      registered: countryData.summary.registeredCount,
+      without_registrations: countryData.unregisteredByContinent,
+    },
+    zones: {
+      official: zoneData.summary.zones.total,
+      registered: zoneData.summary.zones.registered,
+      without_registrations: zonesWithoutRegistrations,
+    },
+  };
+}
+
+export function sendEcardDataDownload(res, payload, date = new Date()) {
+  const filenameDate = date.toISOString().slice(0, 10);
+  const body = JSON.stringify(payload, null, 2);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="notc-ecard-data-${filenameDate}.json"`);
+  res.setHeader("Content-Length", Buffer.byteLength(body));
+  res.setHeader("Cache-Control", "no-store");
+  res.send(body);
+}
 
 function getCountriesWithoutRegistrations() {
   const registeredCountries = new Set(
@@ -110,20 +169,17 @@ function getNetworkCountryBreakdown() {
 }
 
 countryCoverage.get("/", requirePageAccess("dashboard/country-coverage"), wrap((_req, res) => {
-  const unregistered = getCountriesWithoutRegistrations();
-  const registered = COUNTRIES.filter((c) => !unregistered.some((u) => u.code === c.code));
+  res.json(countryCoverageData());
+}));
 
-  res.json({
-    summary: {
-      totalCountries: COUNTRIES.length,
-      registeredCount: registered.length,
-      unregisteredCount: unregistered.length,
-    },
-    unregisteredByContinent: groupByContinent(unregistered),
-    gpdZones: getGpdZonesCountryBreakdown(),
-    cellCrusades: getCellCrusadesCountryBreakdown(),
-    networks: getNetworkCountryBreakdown(),
-  });
+// Compact, complete source for the locally generated NOTC e-cards. This avoids
+// transferring the production SQLite database and keeps every figure aligned
+// with the live Country Coverage and Crusade Coverage reports.
+countryCoverage.get("/ecard-data", requirePageAccess("dashboard/country-coverage"), wrap(async (_req, res) => {
+  const countryData = countryCoverageData();
+  const zoneData = await coverageData();
+  const payload = buildEcardData(countryData, zoneData);
+  sendEcardDataDownload(res, payload);
 }));
 
 // CSV export with all data combined

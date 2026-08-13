@@ -18,7 +18,7 @@ export function PastoralChecklist() {
   const [status, setStatus] = React.useState("");
 
   React.useEffect(() => {
-    getJSON("/pastoral-checklist").then(setData).catch((error) => toast.error(error.message || "Could not load the pastoral checklist"));
+    getJSON("/zone-checklist").then(setData).catch((error) => toast.error(error.message || "Could not load the zone checklist"));
   }, []);
 
   const rows = React.useMemo(() => (data?.rows || []).filter((row) => {
@@ -44,15 +44,15 @@ export function PastoralChecklist() {
     if (query.trim()) params.set("q", query.trim());
     if (region) params.set("region", region);
     if (status) params.set("status", status);
-    window.location.assign(`/api/pastoral-checklist/export?${params}`);
+    window.location.assign(`/api/zone-checklist/export?${params}`);
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Pastoral checklist" }]} />
+      <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Zone checklist" }]} />
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Pastoral checklist for NOTC accountability</h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Zone checklist for NOTC accountability</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">Checklist status for every official zone based on the activity records available in the portal.</p>
         </div>
         <div className="flex flex-wrap gap-2">

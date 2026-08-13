@@ -33,6 +33,7 @@ import { buildPastoralChecklistRows, filterPastoralChecklistRows, pastoralCheckl
 import { sendExport } from "./routes/exporter.js";
 import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
+import { buildEcardData, sendEcardDataDownload } from "./routes/countryCoverage.js";
 import { buildPortalReportWorkbook, parsePortalReportWorkbook, PORTAL_TEMPLATE_COLUMNS, PORTAL_TEMPLATE_EDITABLE_KEYS } from "./portalReportTemplate.js";
 import {
   assertPersistentDatabasePath,
@@ -126,7 +127,7 @@ test("coverage compares the complete ministry directory with registered crusades
   ]);
 });
 
-test("pastoral checklist reconciles the five zonal accountability records", () => {
+test("zone checklist reconciles the five zonal accountability records", () => {
   const directory = [
     { region: "Region 1", zone: "LAGOS ZONE 6", groups: [] },
     { region: "Region 2", zone: "ABUJA ZONE", groups: [] },
@@ -158,6 +159,46 @@ test("pastoral checklist reconciles the five zonal accountability records", () =
   assert.deepEqual(filterPastoralChecklistRows(rows, { status: "no_prayer_march" }).map((row) => row.zone), ["ABUJA ZONE"]);
   assert.deepEqual(filterPastoralChecklistRows(rows, { status: "no_wonders_diamond" }).map((row) => row.zone), ["ABUJA ZONE"]);
   assert.deepEqual(filterPastoralChecklistRows(rows, { q: "chike" }).map((row) => row.zone), ["LAGOS ZONE 6"]);
+});
+
+test("e-card data combines live country and zone coverage without database files", () => {
+  const payload = buildEcardData({
+    summary: { totalCountries: 3, registeredCount: 2, unregisteredCount: 1 },
+    unregisteredByContinent: [{ continent: "Africa", countries: [{ code: "DJ", name: "Djibouti" }] }],
+    gpdZones: { name: "GPD Zones", countryCount: 2, totalCrusades: 7, totalRegistrations: 5, countries: [{ country: "Nigeria", crusades: 7, registrations: 5 }] },
+    cellCrusades: { name: "Cell Crusades", countryCount: 1, totalCrusades: 4, totalRegistrations: 3, countries: [{ country: "Nigeria", crusades: 4, registrations: 3 }] },
+    networks: [{ network: "TNI", totalCrusades: 2, totalRegistrations: 2, countries: [{ country: "India", crusades: 2, registrations: 2 }] }],
+  }, {
+    summary: { zones: { total: 2, registered: 1, not_registered: 1 } },
+    zones: [
+      { name: "LAGOS ZONE 6", region: "Region 1", status: "registered" },
+      { name: "ABUJA ZONE", region: "Region 2", status: "not_registered" },
+    ],
+  }, new Date("2026-08-13T06:30:00.000Z"));
+
+  assert.equal(payload.schema_version, 1);
+  assert.equal(payload.generated_at, "2026-08-13T06:30:00.000Z");
+  assert.deepEqual(payload.coverage_groups.map((group) => [group.name, group.countryCount, group.totalCrusades]), [
+    ["GPD Zones", 2, 7], ["Cell Crusades", 1, 4], ["TNI", 1, 2],
+  ]);
+  assert.deepEqual(payload.countries.without_registrations[0].countries, [{ code: "DJ", name: "Djibouti" }]);
+  assert.deepEqual(payload.zones, {
+    official: 2,
+    registered: 1,
+    without_registrations: [{ zone: "ABUJA ZONE", region: "Region 2" }],
+  });
+
+  const response = {
+    headers: {},
+    setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
+    send(body) { this.body = body; },
+  };
+  sendEcardDataDownload(response, payload, new Date("2026-08-13T07:00:00.000Z"));
+  assert.equal(response.headers["content-type"], "application/json; charset=utf-8");
+  assert.equal(response.headers["content-disposition"], 'attachment; filename="notc-ecard-data-2026-08-13.json"');
+  assert.equal(response.headers["content-length"], Buffer.byteLength(response.body));
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.deepEqual(JSON.parse(response.body), payload);
 });
 
 test("the live churches directory includes additions and excludes removed zones", () => {
@@ -677,11 +718,11 @@ test("country coverage can be assigned from the super-admin access settings", ()
   });
 });
 
-test("pastoral checklist can be assigned from the super-admin access settings", () => {
+test("zone checklist can be assigned from the super-admin access settings", () => {
   assert.deepEqual(ASSIGNABLE_PAGES.find((page) => page.key === "dashboard/pastoral-checklist"), {
     key: "dashboard/pastoral-checklist",
-    label: "Pastoral checklist",
-    path: "/dashboard/pastoral-checklist",
+    label: "Zone checklist",
+    path: "/dashboard/zone-checklist",
   });
 });
 

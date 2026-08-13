@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Copy, Download, FileText, Globe, Maximize2, Minimize2 } from "lucide-react";
+import { Copy, Download, FileJson, FileText, Globe, Maximize2, Minimize2 } from "lucide-react";
 import { toast } from "sonner";
 import { getJSON } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -142,6 +142,13 @@ export function CountryCoverage() {
     link.remove();
   };
 
+  const exportEcardData = () => {
+    const link = Object.assign(document.createElement("a"), { href: "/api/country-coverage/ecard-data" });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   if (!data) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
@@ -186,6 +193,9 @@ export function CountryCoverage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={exportEcardData}>
+            <FileJson className="size-4" /> E-card data
+          </Button>
           <Button variant="outline" size="sm" onClick={exportBreakdownCsv}>
             <Download className="size-4" /> Export CSV
           </Button>

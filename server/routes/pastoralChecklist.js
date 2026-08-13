@@ -60,8 +60,8 @@ pastoralChecklist.get("/export", requirePageAccess(PAGE_KEY), wrap(async (req, r
   const data = await pastoralChecklistData();
   const rows = filterPastoralChecklistRows(data.rows, req.query);
   const format = ["csv", "xlsx", "pdf"].includes(req.query.format) ? req.query.format : "xlsx";
-  await sendExport(res, format, "zonal-pastoral-checklist", exportColumns, rows, {
-    title: "Zonal Pastoral Checklist",
+  await sendExport(res, format, "zone-accountability-checklist", exportColumns, rows, {
+    title: "Zone Checklist for NOTC Accountability",
     subtitle: "Cellular crusades, nation adoption, Prayer March, Wonders to Diamond conference, and NOTC registration",
   });
 }));

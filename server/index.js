@@ -65,7 +65,7 @@ app.use("/api/upcoming-crusades", upcomingCrusades);
 app.use("/api/translation", translation);
 app.use("/api/coverage", coverage);
 app.use("/api/country-coverage", countryCoverage);
-app.use("/api/pastoral-checklist", pastoralChecklist);
+app.use("/api/zone-checklist", pastoralChecklist);
 app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 
