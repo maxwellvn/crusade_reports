@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
+import { requireSuperAdmin } from "../auth.js";
 
 export const networks = Router();
 
@@ -12,7 +13,7 @@ networks.get("/", wrap((_req, res) => {
 
 const nameSchema = z.object({ name: z.string().trim().min(2).max(120) });
 
-networks.post("/", wrap((req, res) => {
+networks.post("/", requireSuperAdmin, wrap((req, res) => {
   const parsed = nameSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", "A network name (2+ chars) is required");
   try {

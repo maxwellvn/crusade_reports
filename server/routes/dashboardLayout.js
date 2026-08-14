@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 
 export const dashboardLayout = Router();
 
@@ -13,13 +13,16 @@ const setStmt = db.prepare(
 );
 
 const layoutId = (req) => req.query.scope === "registrations" ? 2 : 1;
+const requireLayoutAccess = (req, res, next) => requirePageAccess(
+  req.query.scope === "registrations" ? "registrations/live" : "dashboard"
+)(req, res, next);
 
-dashboardLayout.get("/", requireAdmin, wrap((req, res) => {
+dashboardLayout.get("/", requireLayoutAccess, wrap((req, res) => {
   const row = getStmt.get(layoutId(req));
   res.json({ layout: row ? JSON.parse(row.layout) : null });
 }));
 
-dashboardLayout.put("/", requireAdmin, wrap((req, res) => {
+dashboardLayout.put("/", requireLayoutAccess, wrap((req, res) => {
   const layout = req.body?.layout;
   if (!Array.isArray(layout)) throw new ApiError(422, "VALIDATION", "layout must be an array");
   setStmt.run({ id: layoutId(req), layout: JSON.stringify(layout) });

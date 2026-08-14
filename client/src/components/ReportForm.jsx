@@ -28,13 +28,14 @@ import "../landing.css"; // campaign fonts; report theme lives in the .reg-page 
 // difference: this captures RESULTS (attendance, salvations, outcomes) for
 // crusades that have already held, whether or not they were pre-registered.
 
-const STEPS = ["Who is reporting", "Your crusades", "Review"];
+const STEPS = ["Who is reporting", "Your crusades", "Evidence & media", "Review"];
 const DRAFT_KEY = "crusade-report-draft-v1";
 const clearStoredDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ } };
 const STEP_FIELDS = [
   ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
     "contact_name", "contact_email", "phone_country_code", "phone_number"],
   ["crusades"],
+  ["highlights", "photo_links", "video_links"],
   [],
 ];
 
@@ -146,21 +147,9 @@ export function ReportForm() {
     setValue("network_name", scope.kind === "network" ? scope.zone : "", { shouldValidate: true });
   }
 
-  async function onSelectNetwork(opt) {
-    if (opt.created) {
-      try {
-        const saved = await postJSON("/networks", { name: opt.value });
-        setNetworks((n) => (n.some((x) => x.name === saved.name) ? n : [...n, saved]));
-        setValue("network_name", saved.name, { shouldValidate: true });
-        setValue("network_type", "other");
-        toast.success(`Added network "${saved.name}"`);
-      } catch (e) {
-        toast.error(e.message);
-      }
-    } else {
-      setValue("network_name", opt.value, { shouldValidate: true });
-      setValue("network_type", "predefined");
-    }
+  function onSelectNetwork(opt) {
+    setValue("network_name", opt.value, { shouldValidate: true });
+    setValue("network_type", "predefined");
   }
 
   function addCrusade(type = batchType) {
@@ -374,7 +363,7 @@ export function ReportForm() {
                       <Field label="Network" required error={errors.network_name?.message} hint="Search, or type a new one to add it">
                         {portalScope ? <Input value={portalScope.zone} readOnly /> : <Controller control={control} name="network_name" render={({ field }) => (
                           <Combobox value={field.value} invalid={!!errors.network_name} caps placeholder="Select or add network" searchPlaceholder="Search networks…"
-                            emptyText="No match — type to add" allowCreate fetcher={fetchNetworks} onSelect={onSelectNetwork} />
+                            emptyText="No approved network found" fetcher={fetchNetworks} onSelect={onSelectNetwork} />
                         )} />}
                       </Field>
                     )}
@@ -471,6 +460,30 @@ export function ReportForm() {
               )}
 
               {step === 2 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Evidence & media</CardTitle>
+                    <CardDescription>Add report highlights, upload image evidence, and include links to photo albums or videos.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Field label="Highlights" error={errors.highlights?.message} hint="Optional — notable testimonies, miracles, decisions, and moments from the crusades">
+                      <Textarea {...register("highlights")} rows={5} maxLength={2000} placeholder="Share notable testimonies, miracles, and key moments…" />
+                    </Field>
+                    <ReportMediaFields
+                      photos={photos}
+                      onPhotosChange={setPhotos}
+                      photoLinks={watch("photo_links") || ""}
+                      onPhotoLinksChange={(value) => setValue("photo_links", value, { shouldValidate: true })}
+                      videoLinks={watch("video_links") || ""}
+                      onVideoLinksChange={(value) => setValue("video_links", value, { shouldValidate: true })}
+                      photoLinksError={errors.photo_links?.message}
+                      videoLinksError={errors.video_links?.message}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {step === 3 && (
                 <>
                   <Card>
                     <CardHeader>
@@ -493,6 +506,9 @@ export function ReportForm() {
                         <Summary label="Total attendance" value={nfull.format(totals.att)} />
                         <Summary label="Onsite attendance" value={nfull.format(totals.onsite)} />
                         <Summary label="Online attendance" value={nfull.format(totals.online)} />
+                        <Summary label="Uploaded images" value={nfull.format(photos.length)} />
+                        <Summary label="Photo links" value={watch("photo_links")?.trim() ? "Added" : "None"} />
+                        <Summary label="Video links" value={watch("video_links")?.trim() ? "Added" : "None"} />
                       </div>
                       <div className="rounded-lg border divide-y">
                         {(crusades || []).map((c, i) => (
@@ -505,27 +521,6 @@ export function ReportForm() {
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Highlights & media</CardTitle>
-                      <CardDescription>Optional — upload photos up to 50MB total, or add Google Drive and other links for photos and videos.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <Field label="Highlights" error={errors.highlights?.message}>
-                        <Textarea {...register("highlights")} rows={4} placeholder="Notable testimonies, moments…" />
-                      </Field>
-                      <ReportMediaFields
-                        photos={photos}
-                        onPhotosChange={setPhotos}
-                        photoLinks={watch("photo_links") || ""}
-                        onPhotoLinksChange={(value) => setValue("photo_links", value, { shouldValidate: true })}
-                        videoLinks={watch("video_links") || ""}
-                        onVideoLinksChange={(value) => setValue("video_links", value, { shouldValidate: true })}
-                        photoLinksError={errors.photo_links?.message}
-                        videoLinksError={errors.video_links?.message}
-                      />
-                    </CardContent>
-                  </Card>
                 </>
               )}
             </div>

@@ -4,10 +4,10 @@ Single Node app (Express) serving a React + shadcn form that captures crusade re
 
 - **DB:** SQLite (`better-sqlite3`) — file at `data/reports.sqlite`, WAL mode, with automatic verified snapshots and guarded restores.
 - **Data model:** `reports` (submitter/context) + `crusades` **fact table** (one row per crusade, the single source of truth). Every metric is stored once, per crusade; all dashboards aggregate from `crusades` with `GROUP BY` — no derived columns to drift. Attribution (zone/group/church/network) is denormalized onto each crusade so any hierarchy level rolls up with a plain `SUM` (reported once → rolls up).
-- **Form:** a 3-step stepper (Reporting → Crusades → Review). Countries browse-on-open from a static list; cities via Google Places; one row = one crusade (no bulk multiplier); soft plausibility warnings.
-- **Import:** app-generated `.xlsx` template (category dropdown, instructions) → upload → preview + row errors → commit. Template and validator share `client/src/lib/constants.js` so they never drift.
-- **Places:** Google Places API (New) proxied server-side (`GOOGLE_PLACES_API_KEY` in `.env`, never exposed to the browser). City search only; countries are a static ISO list (`/api/countries`).
-- **Translation:** Public pages can be translated through Google Cloud Translation Basic. Requests are proxied server-side (`GOOGLE_TRANSLATE_API_KEY` in `.env`) so the credential is never sent to the browser.
+- **Form:** a 3-step stepper (Reporting → Crusades → Review). Countries and 34,000+ cities are served locally; one row = one crusade (no bulk multiplier); soft plausibility warnings.
+- **Import:** app-generated `.xlsx` template (category dropdown and instructions) → upload → preview + row errors → load the validated rows into the report form for review and normal submission. Template and validator share `client/src/lib/constants.js` so they never drift.
+- **Places:** country and city search is local and makes no Google Places requests. The bundled GeoNames catalogue includes coordinates; users can still type smaller places manually.
+- **Translation:** Public pages translate only after the visitor chooses a language. Results persist in SQLite so the same text is not purchased again after a restart. `GOOGLE_TRANSLATE_API_KEY` is optional and never sent to the browser.
 - **Zones/groups:** fetched from `ZONES_URL`, normalized, cached 5 minutes in memory + `data/zones_cache.json` fallback.
 - **Networks:** stored in SQLite. Edit `server/seed.js` and re-run `npm run seed` to add more.
 
@@ -15,7 +15,7 @@ Single Node app (Express) serving a React + shadcn form that captures crusade re
 
 ```bash
 npm install
-cp .env.example .env      # fill the required Google API keys
+cp .env.example .env      # configure the services you use
 npm run seed              # create DB + seed networks (idempotent)
 
 # Development (two processes, HMR + API on :4000):
@@ -35,14 +35,13 @@ npm start                 # http://localhost:4000
 | GET  | `/api/reports` / `/api/reports/:id` | list / fetch (with crusades) |
 | GET  | `/api/stats` | dashboard aggregates: totals + by category / zone / network / country / month |
 | GET  | `/api/countries` | static ISO country list (browse-on-open) |
-| GET  | `/api/networks` · POST | list / add network |
+| GET  | `/api/networks` | list approved networks |
 | GET  | `/api/zones` · `/api/zones/groups?zone=` | zones / groups |
-| GET  | `/api/places/autocomplete?input=&country=` | Places city proxy |
+| GET  | `/api/places/autocomplete?input=&country=` | local city search |
 | GET  | `/api/translation/languages` | public page-translation language list |
-| GET  | `/api/translation/location` | visitor country for automatic public-page language selection |
 | POST | `/api/translation/translate` | server-side Google Translation proxy |
 | GET  | `/api/import/template` | download the `.xlsx` import template |
-| POST | `/api/import` (`?commit=1`) | preview (validate) / commit a filled template |
+| POST | `/api/import` | validate a filled template and return rows to the report form for review |
 | GET  | `/api/auth/kingschat/login` | start KingsChat dashboard sign-in |
 | GET  | `/api/auth/accounts` | list approved dashboard usernames |
 | GET · PUT | `/api/campaign-settings` | public reporting status · super-admin reporting toggle |
@@ -60,7 +59,7 @@ and unregistered-crusade reports to the correct zone or network.
 
 ## Notes / deferred
 
-- No file uploads — media captured as links (`media_links`). Add `multer` + storage when binary upload is needed.
+- Report submissions support photo links, video links, and verified JPEG, PNG, WebP, GIF, HEIC, or HEIF photo uploads. Uploaded report photos are private to approved report administrators.
 - Errors: full stack + context logged server-side (pino); the client only ever sees a safe message.
 
 ## Deploy (Coolify)
@@ -68,7 +67,7 @@ and unregistered-crusade reports to the correct zone or network.
 Dockerfile-based. In Coolify:
 
 1. New resource → this git repo → build pack **Dockerfile** (port 4000).
-2. Env vars: `GOOGLE_PLACES_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`, `ZONES_URL`, `KINGSCHAT_CLIENT_ID`, and `KINGSCHAT_REDIRECT_URI` (see `.env.example`).
+2. Env vars: `KINGSCHAT_CLIENT_ID` and `KINGSCHAT_REDIRECT_URI`; optionally `GOOGLE_TRANSLATE_API_KEY` for visitor-selected translations (see `.env.example`).
 3. **Persistent storage**: mount a volume at `/app/data` — the SQLite database, resource files, and report photos (`/app/data/report-photos`) live there; without it, data resets on every deploy.
 4. **Proxy upload limit**: set the Coolify/Traefik request body limit to at least **30MB** so crusade report photo uploads are not rejected with `413`.
 5. Health check: `GET /api/health` (already declared in the Dockerfile).

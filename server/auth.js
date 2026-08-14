@@ -34,7 +34,6 @@ export const ASSIGNABLE_PAGES = [
   { key: "dashboard/resources", label: "Resources admin", path: "/dashboard/resources" },
   { key: "dashboard/blue-elite", label: "Blue Elite", path: "/dashboard/blue-elite" },
   { key: "registrations/blue-elite", label: "Blue Elite registrations", path: "/registrations/blue-elite" },
-  { key: "dashboard/database-protection", label: "Backups", path: "/dashboard/database-protection" },
 ];
 
 // The pages new accounts get by default (the standard non-super-admin set).
@@ -51,8 +50,11 @@ export const DEFAULT_PAGE_KEYS = [
 
 function getUserPermissions(username) {
   if (isSuperAdminUsername(username)) return ASSIGNABLE_PAGES.map((p) => p.key);
-  const rows = db.prepare("SELECT page_key FROM dashboard_permissions WHERE username = ? COLLATE NOCASE ORDER BY page_key").all(username);
-  return rows.length ? rows.map((r) => r.page_key) : [...DEFAULT_PAGE_KEYS];
+  const validKeys = new Set(ASSIGNABLE_PAGES.map((page) => page.key));
+  const rows = db.prepare("SELECT page_key FROM dashboard_permissions WHERE username = ? COLLATE NOCASE ORDER BY page_key").all(username)
+    .map((row) => row.page_key).filter((key) => validKeys.has(key));
+  const account = db.prepare("SELECT permissions_configured FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(username);
+  return rows.length || account?.permissions_configured ? rows : [...DEFAULT_PAGE_KEYS];
 }
 
 export function canAccessPage(user, pageKey) {
@@ -230,6 +232,20 @@ export function requirePageAccess(pageKey) {
   };
 }
 
+export function requireAnyPageAccess(pageKeys) {
+  return async (req, _res, next) => {
+    try {
+      req.admin = await authorizedUser(req);
+      if (!pageKeys.some((pageKey) => canAccessPage(req.admin, pageKey))) {
+        throw new ApiError(403, "PAGE_FORBIDDEN", "You do not have access to this page.");
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
 export async function requireSuperAdmin(req, _res, next) {
   try {
     req.admin = await authorizedUser(req);
@@ -386,6 +402,7 @@ auth.put("/permissions/:username", requireSuperAdmin, wrap((req, res) => {
   const validKeys = new Set(ASSIGNABLE_PAGES.map((p) => p.key));
   const clean = [...new Set(requested.filter((k) => validKeys.has(k)))];
   const tx = db.transaction(() => {
+    db.prepare("UPDATE dashboard_accounts SET permissions_configured = 1 WHERE username = ? COLLATE NOCASE").run(username);
     db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
     const stmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
     for (const key of clean) stmt.run(username, key);

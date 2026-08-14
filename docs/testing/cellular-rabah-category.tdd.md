@@ -15,6 +15,7 @@
 | Dashboard drill-down filtering returns the same merged population | Same test | PASS | The generated registration filter returns exactly the three union rows. |
 | RABAH is no longer emitted as a second zone-breakdown category | `registered crusades are broken down by type and cellular level for each zone` | PASS | The RABAH amount remains in the total and merged cellular figure but not in `types`. |
 | Existing cell hierarchy analysis still works | `cell analysis is structured by zone, group, church, and cell` | PASS | Existing hierarchy regression remains green. |
+| Live Registrations and Planned-vs-Held use the same merged category | `cell and RABAH registrations merge into one cellular category without double counting` | PASS | Both dashboard sources emit `cellular`, omit raw `rabah`, and add the same union total. |
 
 ## RED/GREEN evidence
 
@@ -22,7 +23,8 @@
 - GREEN: `npm test -- --test-name-pattern='registered crusades are broken down|cell and RABAH registrations merge|cell analysis is structured'` passed after implementation and again after refactoring.
 - Full suite: `npm test` passed 58/58 tests.
 - Build: `npm run build` passed; Vite emitted its existing large-chunk warning.
-- Syntax/diff: `node --check server/routes/registrations.js && node --check server/validation.test.js && git diff --check` passed.
+- Syntax/diff: `node --check server/routes/registrations.js && node --check server/routes/stats.js && node --check server/validation.test.js && git diff --check` passed.
+- Review completion: the same focused test first failed because `registrationTypeBreakdown` did not exist, then passed after Live Registrations and Planned-vs-Held were routed through the merged category.
 
 ## Data-safety evidence
 

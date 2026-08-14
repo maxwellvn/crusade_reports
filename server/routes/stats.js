@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
-import { requireAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 
 export const stats = Router();
 
@@ -43,6 +43,31 @@ export function registrationProgress(column) {
        ORDER BY planned DESC, key COLLATE NOCASE`
     ).all(YOUTHS_AGLOW);
   }
+  if (column === "event_type") {
+    return db.prepare(
+      `SELECT ri.event_type AS key,
+              COALESCE(SUM(ri.planned_count), 0) AS planned,
+              COUNT(ri.id) AS items,
+              COUNT(c.id) AS held,
+              COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
+       FROM registration_items ri
+       LEFT JOIN crusades c ON c.registration_item_id = ri.id
+       WHERE (ri.program = 'public' OR ri.program IS NULL) AND ri.event_type <> 'rabah'
+       GROUP BY ri.event_type
+       UNION ALL
+       SELECT 'cellular' AS key,
+              COALESCE(SUM(ri.planned_count), 0) AS planned,
+              COUNT(ri.id) AS items,
+              COUNT(c.id) AS held,
+              COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
+       FROM registration_items ri
+       LEFT JOIN crusades c ON c.registration_item_id = ri.id
+       WHERE (ri.program = 'public' OR ri.program IS NULL)
+         AND (ri.organization_type = 'cell' OR ri.event_type = 'rabah')
+       HAVING COUNT(ri.id) > 0
+       ORDER BY planned DESC, key COLLATE NOCASE`
+    ).all();
+  }
   return db.prepare(
     `SELECT ${qualified} AS key,
             COALESCE(SUM(ri.planned_count), 0) AS planned,
@@ -59,7 +84,7 @@ export function registrationProgress(column) {
 }
 
 // GET /api/stats  -> overall totals + breakdowns by category / zone / network / country / month.
-stats.get("/", requireAdmin, wrap((_req, res) => {
+stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
   const totals = db.prepare(`SELECT COUNT(*) AS crusades, SUM(attendance) AS attendance, ${SUMS} FROM crusades`).get();
 
   // attendance = onsite; online_attendance = online_participation. Bars rank by combined reach.

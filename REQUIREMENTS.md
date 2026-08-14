@@ -381,7 +381,7 @@
 1. The application must support Dockerfile-based deployment.
 2. The production server must serve both the built React client and API from one Express process.
 3. The production service must listen on port 4000 unless configured otherwise.
-4. Required environment variables must include `GOOGLE_PLACES_API_KEY`, `ZONES_URL`, and `ADMIN_KEY`.
+4. City and country selection must work without a paid places API key; optional integrations must use server-side environment variables.
 5. SQLite data must be stored in the `data` directory.
 6. Production deployments must mount persistent storage at `/app/data`.
 7. The deployment health check must call `/api/health`.

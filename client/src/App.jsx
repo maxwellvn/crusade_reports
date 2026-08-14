@@ -167,10 +167,10 @@ function AdminRedirect() {
 
 // Settings is super-admin only. Non-super-admins who hit the URL directly are
 // redirected to the dashboard instead of seeing the "only @maxwellvn" message.
-function SettingsRoute() {
+function SettingsRoute({ children }) {
   const admin = useAdmin();
   if (!admin?.is_super_admin) return <Navigate to="/dashboard" replace />;
-  return <Settings />;
+  return children || <Settings />;
 }
 
 // Leadership self-service access links. The access marker sets a short-lived

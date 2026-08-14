@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
@@ -216,6 +216,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS dashboard_accounts (
     username   TEXT PRIMARY KEY COLLATE NOCASE,
     created_by TEXT,
+    permissions_configured INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -309,6 +310,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reg_items_country ON registration_items(country);
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
 `);
+
+const dashboardAccountCols = new Set(db.prepare("PRAGMA table_info(dashboard_accounts)").all().map((column) => column.name));
+if (!dashboardAccountCols.has("permissions_configured")) {
+  db.exec("ALTER TABLE dashboard_accounts ADD COLUMN permissions_configured INTEGER NOT NULL DEFAULT 0");
+  db.exec(`UPDATE dashboard_accounts SET permissions_configured = 1
+    WHERE username IN (SELECT DISTINCT username FROM dashboard_permissions)`);
+}
 
 // Keep access aligned with Live registrations for existing explicitly scoped users.
 db.exec(`
@@ -720,7 +728,57 @@ db.exec(`
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_report_photos_report ON report_photos(report_id);
+
+  CREATE TABLE IF NOT EXISTS translation_cache (
+    target_language TEXT NOT NULL,
+    source_text      TEXT NOT NULL,
+    translated_text TEXT NOT NULL,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (target_language, source_text)
+  );
 `);
+
+// Seed translation_cache from the bundled JSON files in server/data/translations/.
+// Runs on every boot — safe because ON CONFLICT only adds/updates, never deletes.
+// This ships pre-translated UI text so the public translator works without a
+// Google Translate API key.
+const translationsDir = join(__dirname, "data", "translations");
+if (existsSync(translationsDir)) {
+  const applyGlossary = (target, value, source) => {
+    let v = String(value);
+    if (target === "id") v = v.replace(/\bperang\s+salib\b/gi, "Kebaktian Kebangunan Rohani (KKR)");
+    if (target === "de" && /\bcrusades?\b/i.test(source)) {
+      v = v
+        .replace(/\bKreuzzügen\b/gi, "Evangelisationen")
+        .replace(/\bKreuzzüge\b/gi, "Evangelisationen")
+        .replace(/\bKreuzzug(?:es|s)?\b/gi, "Evangelisation")
+        .replace(/\bKampagnen\b/gi, "Evangelisationen")
+        .replace(/\bKampagne\b/gi, "Evangelisation")
+        .replace(/\bBürgerversammlungen\b/gi, "Evangelisationsveranstaltungen")
+        .replace(/\bBürgerversammlung\b/gi, "Evangelisationsveranstaltung");
+    }
+    return v;
+  };
+  const seedTranslation = db.prepare(
+    `INSERT INTO translation_cache (target_language, source_text, translated_text)
+     VALUES (?, ?, ?)
+     ON CONFLICT(target_language, source_text) DO UPDATE SET translated_text = excluded.translated_text`
+  );
+  const seedAll = db.transaction(() => {
+    for (const file of readdirSync(translationsDir)) {
+      if (!file.endsWith(".json")) continue;
+      const lang = file.replace(/\.json$/, "");
+      try {
+        const data = JSON.parse(readFileSync(join(translationsDir, file), "utf8"));
+        for (const [source, translated] of Object.entries(data)) {
+          if (!translated || translated === source) continue;
+          seedTranslation.run(lang, source, applyGlossary(lang, translated, source));
+        }
+      } catch { /* malformed file — skip, don't crash boot */ }
+    }
+  });
+  seedAll();
+}
 
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crusades_registration_item ON crusades(registration_item_id) WHERE registration_item_id IS NOT NULL");
 // This backfill must run after the registration_item_id migration above so

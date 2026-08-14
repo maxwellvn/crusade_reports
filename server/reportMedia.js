@@ -1,6 +1,6 @@
 import multer from "multer";
-import { mkdirSync, unlinkSync, createReadStream, existsSync } from "node:fs";
-import { extname, join, basename } from "node:path";
+import { mkdirSync, unlinkSync, createReadStream, createWriteStream, existsSync, openSync, readSync, closeSync, renameSync } from "node:fs";
+import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
@@ -23,36 +23,77 @@ function tooManyPhotosMessage() {
   return `You can upload up to ${MAX_REPORT_PHOTO_FILES} photos per report. Remove some and try again.`;
 }
 
-const ALLOWED_PHOTO_MIME = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/heic",
-  "image/heif",
-]);
+export function detectPhotoType(buffer) {
+  if (!Buffer.isBuffer(buffer)) return null;
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { extension: ".jpg", mime: "image/jpeg" };
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { extension: ".png", mime: "image/png" };
+  if (buffer.length >= 6 && ["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString("ascii"))) return { extension: ".gif", mime: "image/gif" };
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return { extension: ".webp", mime: "image/webp" };
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString("ascii") === "ftyp") {
+    const brand = buffer.subarray(8, 12).toString("ascii").toLowerCase();
+    if (["heic", "heix", "hevc", "hevx"].includes(brand)) return { extension: ".heic", mime: "image/heic" };
+    if (["mif1", "msf1"].includes(brand)) return { extension: ".heif", mime: "image/heif" };
+  }
+  return null;
+}
 
-const ALLOWED_PHOTO_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"]);
-
-const storage = multer.diskStorage({
-  destination: REPORT_PHOTOS_DIR,
-  filename: (_req, file, cb) => {
-    const ext = extname(file.originalname || "").toLowerCase().slice(0, 12);
-    cb(null, `${randomUUID()}${ALLOWED_PHOTO_EXT.has(ext) ? ext : ".jpg"}`);
+// Count bytes while streams are being written so one multipart request cannot
+// temporarily consume 40 times the documented combined upload allowance.
+const storage = {
+  _handleFile(req, file, cb) {
+    const filename = `${randomUUID()}.upload`;
+    const path = join(REPORT_PHOTOS_DIR, filename);
+    const output = createWriteStream(path, { flags: "wx" });
+    let size = 0;
+    let finished = false;
+    const done = (error, result) => {
+      if (finished) return;
+      finished = true;
+      if (error) { try { unlinkSync(path); } catch { /* best effort */ } }
+      cb(error, result);
+    };
+    file.stream.on("data", (chunk) => {
+      size += chunk.length;
+      req.reportPhotoUploadBytes = (req.reportPhotoUploadBytes || 0) + chunk.length;
+      if (req.reportPhotoUploadBytes > MAX_REPORT_PHOTOS_BYTES) {
+        const error = new ApiError(400, "PHOTOS_TOO_LARGE", photosTooLargeMessage());
+        file.stream.unpipe(output);
+        output.destroy(error);
+        file.stream.resume();
+      }
+    });
+    output.on("error", (error) => done(error));
+    output.on("finish", () => done(null, { destination: REPORT_PHOTOS_DIR, filename, path, size }));
+    file.stream.pipe(output);
   },
-});
+  _removeFile(_req, file, cb) {
+    if (!file.path) return cb(null);
+    unlinkSync(file.path);
+    cb(null);
+  },
+};
 
-function photoFilter(_req, file, cb) {
-  const ext = extname(file.originalname || "").toLowerCase();
-  const mime = String(file.mimetype || "").toLowerCase();
-  if (ALLOWED_PHOTO_MIME.has(mime) || ALLOWED_PHOTO_EXT.has(ext)) return cb(null, true);
-  cb(new ApiError(400, "INVALID_PHOTO", "Only image files can be uploaded (JPEG, PNG, WebP, GIF, HEIC)."));
+function verifyUploadedPhotos(files = []) {
+  for (const file of files) {
+    const descriptor = openSync(file.path, "r");
+    const header = Buffer.alloc(16);
+    const bytes = readSync(descriptor, header, 0, header.length, 0);
+    closeSync(descriptor);
+    const detected = detectPhotoType(header.subarray(0, bytes));
+    if (!detected) {
+      removeUploadedFiles(files);
+      throw new ApiError(400, "INVALID_PHOTO", "Only genuine JPEG, PNG, WebP, GIF, HEIC, or HEIF image files can be uploaded.");
+    }
+    const filename = `${basename(file.filename, ".upload")}${detected.extension}`;
+    const path = join(REPORT_PHOTOS_DIR, filename);
+    renameSync(file.path, path);
+    Object.assign(file, { filename, path, mimetype: detected.mime });
+  }
 }
 
 export const reportPhotoUpload = multer({
   storage,
-  fileFilter: photoFilter,
-  limits: { files: MAX_REPORT_PHOTO_FILES, fileSize: MAX_REPORT_PHOTOS_BYTES },
+  limits: { files: MAX_REPORT_PHOTO_FILES },
 }).array("photos", MAX_REPORT_PHOTO_FILES);
 
 export function removeUploadedFiles(files) {
@@ -168,6 +209,13 @@ export function resolveReportPhotoPath(storedName) {
   if (!existsSync(path)) throw new ApiError(404, "NOT_FOUND", "Photo not found.");
   const row = db.prepare("SELECT * FROM report_photos WHERE stored_name = ?").get(safe);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Photo not found.");
+  const descriptor = openSync(path, "r");
+  const header = Buffer.alloc(16);
+  const bytes = readSync(descriptor, header, 0, header.length, 0);
+  closeSync(descriptor);
+  const detected = detectPhotoType(header.subarray(0, bytes));
+  if (!detected) throw new ApiError(415, "INVALID_PHOTO", "This stored file is not a supported image.");
+  row.mime_type = detected.mime;
   return { path, row, stream: createReadStream(path) };
 }
 
@@ -185,6 +233,7 @@ export function withReportPhotoUpload(handler) {
         }
         return next(new ApiError(400, "UPLOAD", "Could not upload photos. Check that each file is an image and the total is within the limit, then try again."));
       }
+      try { verifyUploadedPhotos(req.files); } catch (verificationError) { return next(verificationError); }
       Promise.resolve(handler(req, res, next)).catch(next);
     });
   };

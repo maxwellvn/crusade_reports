@@ -42,7 +42,15 @@ app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", auth);
-app.use("/resource-files", express.static(RESOURCE_FILES_DIR, { fallthrough: false, maxAge: "1d" }));
+app.use("/resource-files", express.static(RESOURCE_FILES_DIR, {
+  fallthrough: false,
+  maxAge: "1d",
+  setHeaders: (res, path) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+    if (!/\.(?:jpe?g|png|webp|gif)$/i.test(path)) res.setHeader("Content-Disposition", "attachment");
+  },
+}));
 // Cheap probe retained for clients that only need an authenticated check.
 app.get("/api/admin/check", requireAdmin, (req, res) => res.json({ ok: true, user: req.admin }));
 app.use("/api/reports", reports);

@@ -6,14 +6,15 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
 import { blueEliteRegistrationSchema, confirmationSchema, mediaTrainingRegistrationSchema, missionNationSelectionSchema, missionTripVolunteerSchema, portalCrusadeReportSchema, registrationCrusadeEditSchema, registrationSchema, reportSchema, upcomingCrusadeInterestSchema } from "./validation.js";
-import { ASSIGNABLE_PAGES, createDashboardSession, dashboardSessionUser, DASHBOARD_SESSION_MAX_AGE_MS, isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
+import { ASSIGNABLE_PAGES, canAccessPage, createDashboardSession, dashboardSessionUser, DASHBOARD_SESSION_MAX_AGE_MS, isSuperAdminUsername, lookupKingsChatUser, normalizeKingsChatUsername, requirePageAccess, requireSuperAdmin, SUPER_ADMIN_USERNAME } from "./auth.js";
 import { db } from "./db.js";
-import { applyTranslationGlossary } from "./routes/translation.js";
+import { applyTranslationGlossary, cachedTranslation, storeTranslation } from "./routes/translation.js";
+import { cityAutocomplete, localCityDetails } from "./routes/places.js";
 import { UPCOMING_CRUSADES } from "./upcomingCrusadesData.js";
 import { upcomingCrusadeCatalogue } from "./routes/upcomingCrusades.js";
 import { registrationProgress } from "./routes/stats.js";
 import { crusades, crusadeFilterOptions, deleteCrusadeReport } from "./routes/crusades.js";
-import { registrations, attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, cellularRegistrationsBy, deleteRegistrationCrusade, registrationFilterOptions, registrationFilters, updateRegistrationCrusade, validateRegistrationOrganization } from "./routes/registrations.js";
+import { registrations, attachCellRegions, buildZoneCrusadeBreakdown, cellRegistrationsByZone, cellularRegistrationsBy, deleteRegistrationCrusade, registrationFilterOptions, registrationFilters, registrationTypeBreakdown, updateRegistrationCrusade, validateRegistrationOrganization } from "./routes/registrations.js";
 import { ensureReportingOpen, isReportingOpen, setReportingOpen } from "./appSettings.js";
 import { applyPortalScope } from "./portalScope.js";
 import { normalizeZones } from "./routes/zones.js";
@@ -31,7 +32,8 @@ import { renderPageMetadata } from "./pageMeta.js";
 import { buildCoverageRows } from "./coverage.js";
 import { buildPastoralChecklistRows, filterPastoralChecklistRows, pastoralChecklistSummary } from "./pastoralChecklist.js";
 import { sendExport } from "./routes/exporter.js";
-import { assertPhotoUploadBudget, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
+import { assertPhotoUploadBudget, detectPhotoType, MAX_REPORT_PHOTOS_BYTES } from "./reportMedia.js";
+import { redactLogValue } from "./logger.js";
 import { citySelectionFields } from "../client/src/lib/citySelection.js";
 import { buildEcardData, sendEcardDataDownload } from "./routes/countryCoverage.js";
 import { buildPortalReportWorkbook, parsePortalReportWorkbook, PORTAL_TEMPLATE_COLUMNS, PORTAL_TEMPLATE_EDITABLE_KEYS } from "./portalReportTemplate.js";
@@ -363,6 +365,32 @@ test("German translations use evangelistic terminology for crusades", () => {
   assert.equal(applyTranslationGlossary("de", "Medienkampagne", "Media campaign"), "Medienkampagne");
 });
 
+test("city autocomplete is served locally with coordinates and no Google Places key", async () => {
+  const previousKey = process.env.GOOGLE_PLACES_API_KEY;
+  delete process.env.GOOGLE_PLACES_API_KEY;
+  try {
+    const suggestions = await cityAutocomplete("lag", "NG");
+    const lagos = suggestions.find(({ main }) => main === "Lagos");
+    assert.ok(lagos);
+    assert.match(lagos.place_id, /^geonames:/);
+    assert.equal(lagos.secondary, "Nigeria");
+    const details = localCityDetails(lagos.place_id);
+    assert.equal(typeof details.lat, "number");
+    assert.equal(typeof details.lng, "number");
+  } finally {
+    if (previousKey === undefined) delete process.env.GOOGLE_PLACES_API_KEY;
+    else process.env.GOOGLE_PLACES_API_KEY = previousKey;
+  }
+});
+
+test("translation cache persists reusable translations in SQLite", () => {
+  const source = `Cost control ${Date.now()}`;
+  assert.equal(cachedTranslation("fr", source), undefined);
+  storeTranslation("fr", source, "Contrôle des coûts");
+  assert.equal(cachedTranslation("fr", source), "Contrôle des coûts");
+  db.prepare("DELETE FROM translation_cache WHERE target_language = ? AND source_text = ?").run("fr", source);
+});
+
 test("media training accepts an individual trainee and supports admin filtering", () => {
   const registration = {
     zone_name: "Lagos Zone 1", group_name: "Lekki Group", church_name: "Christ Embassy Lekki", church_country_code: "NG", church_city: "Lagos", church_city_place_id: "place-lagos", languages_spoken: ["English", "Yoruba"], full_name: "Ada Example",
@@ -670,6 +698,10 @@ test("assignable admin pages use their delegated permission middleware", async (
     });
 
     const routeCases = [
+      [crusades, "/", "get", "crusades"],
+      [registrations, "/", "get", "registrations"],
+      [registrations, "/live", "get", "registrations/live"],
+      [registrations, "/crusade-analysis", "get", "dashboard/crusade-analysis"],
       [crusades, "/:id/edit", "get", "crusades/edit"],
       [registrations, "/manual-organizations", "get", "registrations/manual-organizations"],
       [mediaTraining, "/admin", "get", "dashboard/media-training"],
@@ -677,7 +709,6 @@ test("assignable admin pages use their delegated permission middleware", async (
       [resources, "/categories", "post", "dashboard/resources"],
       [blueElite, "/registrations/live", "get", "dashboard/blue-elite"],
       [blueElite, "/registrations", "get", "registrations/blue-elite"],
-      [databaseProtection, "/", "get", "dashboard/database-protection"],
     ];
 
     for (const [router, path, method, pageKey] of routeCases) {
@@ -691,11 +722,63 @@ test("assignable admin pages use their delegated permission middleware", async (
         get: (name) => name === "authorization" ? `Bearer assigned-${pageKey}` : "",
       }, {}, (nextError) => resolve(nextError)));
       assert.equal(error, undefined, `${pageKey} accepts its assigned administrator`);
+
+      db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
+      db.prepare("INSERT INTO dashboard_permissions (username, page_key) VALUES (?, 'dashboard/resources')").run(username);
+      const denied = await new Promise((resolve) => middleware({
+        headers: {},
+        get: (name) => name === "authorization" ? `Bearer denied-${pageKey}` : "",
+      }, {}, (nextError) => resolve(nextError)));
+      if (pageKey !== "dashboard/resources") assert.equal(denied?.code, "PAGE_FORBIDDEN", `${pageKey} rejects an administrator assigned elsewhere`);
     }
   } finally {
     global.fetch = originalFetch;
     db.exec("ROLLBACK");
   }
+});
+
+test("an explicitly empty delegated permission set stays empty", () => {
+  const username = `empty.permissions.${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO dashboard_accounts (username, created_by, permissions_configured) VALUES (?, 'test', 1)").run(username);
+    assert.equal(canAccessPage({ username, is_super_admin: false }, "dashboard"), false);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("database restore remains super-admin only", () => {
+  const route = databaseProtection.stack.find((entry) => entry.route?.path === "/restore" && entry.route.methods.post);
+  assert.ok(route);
+  assert.match(String(route.route.stack[0].handle), /requireSuperAdmin/);
+});
+
+test("network creation requires super-admin access", async () => {
+  const { networks } = await import("./routes/networks.js");
+  const route = networks.stack.find((entry) => entry.route?.path === "/" && entry.route.methods.post);
+  assert.ok(route);
+  assert.match(String(route.route.stack[0].handle), /requireSuperAdmin/);
+});
+
+test("report photos are recognized from file signatures, not supplied metadata", () => {
+  assert.equal(detectPhotoType(Buffer.from("<script>alert(1)</script>")), null);
+  assert.deepEqual(detectPhotoType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), { extension: ".png", mime: "image/png" });
+  assert.deepEqual(detectPhotoType(Buffer.from("GIF89a", "ascii")), { extension: ".gif", mime: "image/gif" });
+});
+
+test("error-log redaction removes credentials and portal tokens recursively", () => {
+  const redacted = redactLogValue({ accessToken: "secret", payload: JSON.stringify({ portal_token: "portal-secret", contact_email: "person@example.com" }), nested: { password: "hidden" } });
+  assert.equal(redacted.accessToken, "[REDACTED]");
+  assert.equal(redacted.nested.password, "[REDACTED]");
+  assert.doesNotMatch(redacted.payload, /portal-secret/);
+  assert.doesNotMatch(redacted.payload, /person@example\.com/);
+});
+
+test("shared Field supplies accessible names to unlabeled form controls", () => {
+  const source = readFileSync(join(process.cwd(), "client/src/components/ui/field.jsx"), "utf8");
+  assert.match(source, /aria-label/);
+  assert.match(source, /labelChildren/);
 });
 
 test("admin report editing uses the shared multipart photo workflow", () => {
@@ -708,6 +791,21 @@ test("admin report editing uses the shared multipart photo workflow", () => {
   assert.ok(route, "PUT /:id route exists");
   assert.equal(route.route.stack.length, 2, "permission and multipart update handlers are installed");
   assert.match(String(route.route.stack[1].handle), /reportPhotoUpload/);
+});
+
+test("public report has an explicit evidence step with the shared image and link workflow", () => {
+  const reportFormSource = readFileSync(join(process.cwd(), "client/src/components/ReportForm.jsx"), "utf8");
+  assert.match(reportFormSource, /const STEPS = \["Who is reporting", "Your crusades", "Evidence & media", "Review"\]/);
+  assert.match(reportFormSource, /step === 2[\s\S]*?<ReportMediaFields/);
+  assert.match(reportFormSource, /step === 3[\s\S]*?Review your report/);
+  assert.match(reportFormSource, /postForm\("\/reports", buildReportFormData/);
+});
+
+test("shared select dropdown supports touch and wheel scrolling within the available viewport", () => {
+  const selectSource = readFileSync(join(process.cwd(), "client/src/components/ui/select.jsx"), "utf8");
+  assert.match(selectSource, /--radix-popover-content-available-height/);
+  assert.match(selectSource, /overscroll-contain/);
+  assert.match(selectSource, /touch-pan-y/);
 });
 
 test("country coverage can be assigned from the super-admin access settings", () => {
@@ -974,6 +1072,8 @@ test("cell and RABAH registrations merge into one cellular category without doub
   const marker = `Merged Cellular ${Date.now()}`;
   db.exec("BEGIN");
   try {
+    const liveBefore = new Map(registrationTypeBreakdown().map((row) => [row.key, row]));
+    const progressBefore = new Map(registrationProgress("event_type").map((row) => [row.key, row]));
     const insertRegistration = db.prepare(
       `INSERT INTO registrations (organization_type, zone, country, plan_date)
        VALUES (?, ?, 'Nigeria', '2026-08-28')`
@@ -1007,6 +1107,13 @@ test("cell and RABAH registrations merge into one cellular category without doub
        ${filter.clause}`
     ).all(filter.params);
     assert.equal(filteredRows.length, 3);
+
+    const liveAfter = new Map(registrationTypeBreakdown().map((row) => [row.key, row]));
+    const progressAfter = new Map(registrationProgress("event_type").map((row) => [row.key, row]));
+    assert.equal(liveAfter.has("rabah"), false);
+    assert.equal(progressAfter.has("rabah"), false);
+    assert.equal(liveAfter.get("cellular").planned - (liveBefore.get("cellular")?.planned || 0), 10);
+    assert.equal(progressAfter.get("cellular").planned - (progressBefore.get("cellular")?.planned || 0), 10);
   } finally {
     db.exec("ROLLBACK");
   }

@@ -41,7 +41,6 @@ const ASSIGNABLE_PAGES = [
   { key: "dashboard/resources", label: "Resources admin" },
   { key: "dashboard/blue-elite", label: "Blue Elite" },
   { key: "registrations/blue-elite", label: "Blue Elite registrations" },
-  { key: "dashboard/database-protection", label: "Backups" },
 ];
 
 function SettingsSection({ title, description, children }) {

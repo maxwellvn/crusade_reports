@@ -21,7 +21,8 @@ const storage = multer.diskStorage({
   destination: RESOURCE_FILES_DIR,
   filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase().slice(0, 12)}`),
 });
-const upload = multer({ storage, limits: { fileSize: 150 * 1024 * 1024, files: 1 } });
+const upload = multer({ storage, limits: { fileSize: 150 * 1024 * 1024, files: 2 } });
+const SAFE_THUMBNAIL_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const clean = (value, max = 500) => String(value || "").trim().slice(0, max);
 const publicRow = (row) => ({
@@ -158,7 +159,7 @@ resources.post("/", requirePageAccess("dashboard/resources"), upload.fields([{ n
     if (!ALLOWED_TYPES.has(type)) throw new ApiError(400, "INVALID_TYPE", "Choose a valid resource type.");
     if (!file && !externalUrl) throw new ApiError(400, "RESOURCE_REQUIRED", "Upload a file or add a web link.");
     if (file && externalUrl) throw new ApiError(400, "ONE_SOURCE_ONLY", "Use either a file or a web link, not both.");
-    if (thumbnailFile && (!thumbnailFile.mimetype.startsWith("image/") || thumbnailFile.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a thumbnail image no larger than 8 MB.");
+    if (thumbnailFile && (!SAFE_THUMBNAIL_TYPES.has(thumbnailFile.mimetype) || thumbnailFile.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a JPEG, PNG, WebP, or GIF thumbnail no larger than 8 MB.");
     if (externalUrl && !validHttpUrl(externalUrl)) throw new ApiError(400, "INVALID_URL", "The link must start with http:// or https://.");
     if (suppliedThumbnail && (!externalUrl || !validHttpUrl(suppliedThumbnail))) throw new ApiError(400, "INVALID_THUMBNAIL", "The thumbnail must be a valid web image URL.");
     // Documents and generic files do not need a remote preview lookup. Avoid
@@ -195,7 +196,7 @@ resources.put("/:id", requirePageAccess("dashboard/resources"), upload.single("t
     if (!db.prepare("SELECT 1 FROM resource_categories WHERE name = ? COLLATE NOCASE").get(category)) throw new ApiError(400, "INVALID_CATEGORY", "Choose one of the available resource categories.");
     if (row.external_url && !validHttpUrl(requestedUrl)) throw new ApiError(400, "INVALID_URL", "The link must start with http:// or https://.");
     if (!row.external_url && requestedUrl) throw new ApiError(400, "SOURCE_LOCKED", "An uploaded resource cannot be changed into a link.");
-    if (req.file && (!req.file.mimetype.startsWith("image/") || req.file.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a thumbnail image no larger than 8 MB.");
+    if (req.file && (!SAFE_THUMBNAIL_TYPES.has(req.file.mimetype) || req.file.size > 8 * 1024 * 1024)) throw new ApiError(400, "INVALID_THUMBNAIL_FILE", "Choose a JPEG, PNG, WebP, or GIF thumbnail no larger than 8 MB.");
     let thumbnailUrl = row.thumbnail_url;
     if (row.external_url && requestedUrl !== row.external_url && !req.file && !suppliedThumbnail) thumbnailUrl = await discoverThumbnail(requestedUrl);
     if (suppliedThumbnail && !req.file) { try { thumbnailUrl = (await assertPublicUrl(suppliedThumbnail)).href; } catch { throw new ApiError(400, "INVALID_THUMBNAIL", "Use a publicly accessible thumbnail image URL."); } }

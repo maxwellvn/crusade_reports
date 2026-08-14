@@ -6,7 +6,7 @@ import { DOTS, CENTROIDS } from "@/lib/worldDots";
 export const DATA_COLORS = ["#2563eb", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#db2777"];
 export const nf = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 export const nfull = new Intl.NumberFormat("en");
-export const typeLabel = (v) => CRUSADE_TYPES.find(([c]) => c === v)?.[1] || v;
+export const typeLabel = (v) => v === "cellular" ? "Cellular Crusades (including RABAH)" : CRUSADE_TYPES.find(([c]) => c === v)?.[1] || v;
 export const OUTCOME_LABELS = Object.fromEntries([...CORE_OUTCOMES, ...EXTENDED_OUTCOMES]);
 
 // ---- Chart primitives -------------------------------------------------------

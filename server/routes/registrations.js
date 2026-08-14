@@ -3,7 +3,7 @@ import { db } from "../db.js";
 import { backupDatabase } from "../databaseProtection.js";
 import { registrationCrusadeEditSchema, registrationSchema, manualOrgUpdateSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
-import { requireAdmin, requirePageAccess, requireSuperAdmin } from "../auth.js";
+import { requirePageAccess, requireSuperAdmin } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen, isManualGroupsEnabled, isManualZonesEnabled } from "../appSettings.js";
@@ -266,7 +266,7 @@ export function updateRegistrationCrusade(id, d) {
     readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ?`).get(crusade.id);
 }
 
-registrations.put("/:id", requireAdmin, wrap((req, res) => {
+registrations.put("/:id", requirePageAccess("registrations"), wrap((req, res) => {
   const parsed = registrationCrusadeEditSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid crusade details.");
   const updated = updateRegistrationCrusade(req.params.id, parsed.data);
@@ -278,7 +278,7 @@ registrations.delete("/:id", requireSuperAdmin, wrap((req, res) => {
   res.json(deleteRegistrationCrusade(req.params.id));
 }));
 
-registrations.post("/:id/report", requireAdmin, withReportPhotoUpload(wrap((req, res) => {
+registrations.post("/:id/report", requirePageAccess("registrations"), withReportPhotoUpload(wrap((req, res) => {
   ensureReportingOpen();
   const files = req.files || [];
   const item = db.prepare(`
@@ -330,6 +330,21 @@ export function cellularRegistrationsBy(column) {
        AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
      GROUP BY ${column} COLLATE NOCASE
      ORDER BY planned DESC, key COLLATE NOCASE`
+  ).all();
+}
+
+export function registrationTypeBreakdown() {
+  return db.prepare(
+    `SELECT event_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items i
+     WHERE ${PUBLIC_PROGRAM_FILTER} AND event_type <> 'rabah'
+     GROUP BY event_type
+     UNION ALL
+     SELECT 'cellular' AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items i
+     WHERE ${PUBLIC_PROGRAM_FILTER} AND ${CELLULAR_ITEM_FILTER}
+     HAVING COUNT(*) > 0
+     ORDER BY planned DESC`
   ).all();
 }
 
@@ -407,11 +422,11 @@ async function crusadeAnalysisData() {
   };
 }
 
-registrations.get("/crusade-analysis", requireAdmin, wrap(async (_req, res) => {
+registrations.get("/crusade-analysis", requirePageAccess("dashboard/crusade-analysis"), wrap(async (_req, res) => {
   res.json(await crusadeAnalysisData());
 }));
 
-registrations.get("/crusade-analysis/export", requireAdmin, wrap(async (req, res) => {
+registrations.get("/crusade-analysis/export", requirePageAccess("dashboard/crusade-analysis"), wrap(async (req, res) => {
   const data = await crusadeAnalysisData();
   const format = ["xlsx", "pdf"].includes(req.query.format) ? req.query.format : "csv";
   if (req.query.view === "cellular") {
@@ -453,7 +468,7 @@ registrations.get("/crusade-analysis/export", requireAdmin, wrap(async (req, res
   });
 }));
 
-registrations.get("/live", requireAdmin, wrap((_req, res) => {
+registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, res) => {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
@@ -481,10 +496,7 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
 
   res.json({
     totals,
-    by_type: db.prepare(
-      `SELECT event_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY event_type ORDER BY planned DESC`
-    ).all(),
+    by_type: registrationTypeBreakdown(),
     by_country: db.prepare(
       `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY country ORDER BY planned DESC`
@@ -546,7 +558,7 @@ registrations.get("/live", requireAdmin, wrap((_req, res) => {
 }));
 
 // Returns all countries without any registrations.
-registrations.get("/countries-without-registrations", requireAdmin, wrap((_req, res) => {
+registrations.get("/countries-without-registrations", requirePageAccess("dashboard/crusade-analysis"), wrap((_req, res) => {
   const registeredCountries = new Set(
     db.prepare(
       `SELECT DISTINCT country FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
@@ -556,7 +568,7 @@ registrations.get("/countries-without-registrations", requireAdmin, wrap((_req, 
   res.json({ countries: missing, total: missing.length });
 }));
 
-registrations.get("/country-report.pdf", requireAdmin, wrap(async (_req, res) => {
+registrations.get("/country-report.pdf", requirePageAccess("dashboard/crusade-analysis"), wrap(async (_req, res) => {
   const continentByCountry = new Map(COUNTRIES.map((country) => [country.name.toLowerCase(), country.continent || "Other"]));
   const rows = db.prepare(
     `SELECT country, COALESCE(SUM(planned_count), 0) AS crusades, COUNT(DISTINCT registration_id) AS registrations
@@ -661,14 +673,14 @@ const REGISTRATION_EXPORT_COLUMNS = [
 ];
 
 // GET /api/registrations/export?format=csv|xlsx — all rows matching the current filters.
-registrations.get("/export", requireAdmin, wrap(async (req, res) => {
+registrations.get("/export", requirePageAccess("registrations"), wrap(async (req, res) => {
   const { clause, params } = registrationFilters(req.query);
   const rows = db.prepare(`${REGISTRATION_EXPORT_SELECT} ${clause} ORDER BY r.created_at DESC, i.id DESC`).all(params);
   await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "registered-crusades", REGISTRATION_EXPORT_COLUMNS, rows);
 }));
 
 // GET /api/registrations — paginated, filtered, sorted table for the admin view.
-registrations.get("/", requireAdmin, wrap((req, res) => {
+registrations.get("/", requirePageAccess("registrations"), wrap((req, res) => {
   const { clause, params } = registrationFilters(req.query);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);

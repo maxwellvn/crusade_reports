@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { wrap } from "../logger.js";
 import { loadZones } from "./zones.js";
 import { sendExport, sendTextDownload } from "./exporter.js";
@@ -33,9 +33,9 @@ export async function coverageData() {
   return buildCoverageRows(directory, reported);
 }
 
-coverage.get("/", requireAdmin, wrap(async (_req, res) => res.json(await coverageData())));
+coverage.get("/", requirePageAccess("dashboard/coverage"), wrap(async (_req, res) => res.json(await coverageData())));
 
-coverage.get("/export", requireAdmin, wrap(async (req, res) => {
+coverage.get("/export", requirePageAccess("dashboard/coverage"), wrap(async (req, res) => {
   const type = req.query.type === "groups" ? "groups" : "zones";
   const status = ["registered", "not_registered"].includes(req.query.status) ? req.query.status : "";
   const query = String(req.query.q || "").trim().toLowerCase();
@@ -46,7 +46,7 @@ coverage.get("/export", requireAdmin, wrap(async (req, res) => {
   await sendExport(res, format, `${type}-crusade-coverage`, exportColumns(type), rows);
 }));
 
-coverage.get("/unregistered-zones/export", requireAdmin, wrap(async (req, res) => {
+coverage.get("/unregistered-zones/export", requirePageAccess("dashboard/coverage"), wrap(async (req, res) => {
   const data = await coverageData();
   const rows = data.zones.filter((row) => row.status === "not_registered")
     .map((row, index) => ({ ...row, number: index + 1 }));

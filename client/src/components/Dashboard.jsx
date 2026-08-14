@@ -83,6 +83,7 @@ export function Dashboard() {
   }
 
   function goToRegistrations(filters = {}) {
+    if (filters.event_type === "cellular") filters = { cellular: "1" };
     navigate(`/registrations?${new URLSearchParams(filters).toString()}`);
   }
 

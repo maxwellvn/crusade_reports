@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAdmin, requirePageAccess, requireSuperAdmin } from "../auth.js";
+import { requireAnyPageAccess, requirePageAccess, requireSuperAdmin } from "../auth.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
 import {
@@ -108,14 +108,14 @@ const CRUSADE_EXPORT_COLUMNS = [
 ];
 
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
-crusades.get("/export", requireAdmin, wrap(async (req, res) => {
+crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
   const { clause, params } = crusadeFilters(req.query);
   const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY c.event_date DESC, c.id DESC`).all(params);
   await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "crusade-reports", CRUSADE_EXPORT_COLUMNS, rows);
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
-crusades.get("/", requireAdmin, wrap((req, res) => {
+crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
   const { clause, params } = crusadeFilters(req.query);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);

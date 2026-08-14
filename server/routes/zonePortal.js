@@ -2,7 +2,7 @@ import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAdmin } from "../auth.js";
+import { requirePageAccess } from "../auth.js";
 import { portalCrusadeReportSchema, registrationCrusadeEditSchema } from "../validation.js";
 import { updateRegistrationCrusade } from "./registrations.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
@@ -59,7 +59,7 @@ export const currentDirectoryZoneNames = (directory) => [...new Set(directory.ma
 // GET /api/zone-links — current Churches API zones and all networks, each with
 // its token if one exists. The directory is authoritative for zone visibility:
 // deleted/renamed zones must not be reintroduced by stale tokens or old reports.
-zonePortal.get("/zone-links", requireAdmin, wrap(async (req, res) => {
+zonePortal.get("/zone-links", requirePageAccess("dashboard/zone-links"), wrap(async (req, res) => {
   const tokens = db.prepare("SELECT zone AS name, token, kind FROM zone_tokens").all();
   const tokenFor = (kind, name) => tokens.find((t) => t.kind === kind && t.name === name)?.token || null;
 
@@ -79,7 +79,7 @@ zonePortal.get("/zone-links", requireAdmin, wrap(async (req, res) => {
 }));
 
 // POST /api/zone-links { name, kind } — create or regenerate a token.
-zonePortal.post("/zone-links", requireAdmin, wrap((req, res) => {
+zonePortal.post("/zone-links", requirePageAccess("dashboard/zone-links"), wrap((req, res) => {
   const name = String(req.body?.name || "").trim();
   const kind = req.body?.kind === "network" ? "network" : "zone";
   if (!name) throw new ApiError(422, "VALIDATION", "Name is required");

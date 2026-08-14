@@ -6,20 +6,6 @@ import { getJSON, postJSON } from "@/lib/api";
 const ADMIN_PATHS = ["/admin", "/dashboard", "/registrations", "/crusades"];
 const originals = new Map();
 const translations = new Map();
-const COUNTRY_LANGUAGE = {};
-[
-  ["fr", "FR BE MC LU CD CG CI SN ML NE BF BJ TG GA GN DJ HT MG CM CF TD KM RW BI"],
-  ["es", "ES MX AR BO CL CO CR CU DO EC SV GQ GT HN NI PA PY PE PR UY VE"],
-  ["pt", "PT BR AO MZ GW CV ST TL"], ["ar", "SA AE DZ BH EG IQ JO KW LB LY MA MR OM PS QA SD SY TN YE"],
-  ["de", "DE AT LI"], ["it", "IT SM VA"], ["nl", "NL SR"], ["ru", "RU BY KZ KG"],
-  ["zh-CN", "CN SG"], ["zh-TW", "TW"], ["sw", "TZ KE UG"], ["en", "NG GB US CA AU NZ IE ZA GH GM LR SL ZM ZW BW NA SZ LS JM TT BB BS BZ GY MT FJ PG SB VU WS TO KI NR PW MH FM"],
-  ["af", "ZA NA"], ["am", "ET"], ["bn", "BD"], ["bg", "BG"], ["hr", "HR"], ["cs", "CZ"],
-  ["da", "DK"], ["fi", "FI"], ["el", "GR CY"], ["he", "IL"], ["hi", "IN"], ["hu", "HU"],
-  ["id", "ID"], ["ja", "JP"], ["ko", "KR KP"], ["ms", "MY BN"], ["ne", "NP"], ["no", "NO"],
-  ["fa", "IR AF"], ["pl", "PL"], ["ro", "RO MD"], ["sr", "RS ME"], ["sk", "SK"], ["so", "SO"],
-  ["sv", "SE"], ["th", "TH"], ["tr", "TR"], ["uk", "UA"], ["ur", "PK"], ["vi", "VN"],
-].forEach(([language, countries]) => countries.split(" ").forEach((country) => { COUNTRY_LANGUAGE[country] = language; }));
-
 function decode(value) {
   const textarea = document.createElement("textarea"); textarea.innerHTML = value; return textarea.value;
 }
@@ -46,16 +32,8 @@ export function PublicTranslator() {
 
   React.useEffect(() => {
     if (!isPublic) return;
-    getJSON("/translation/languages").then(async (available) => {
+    getJSON("/translation/languages").then((available) => {
       setLanguages(available);
-      if (storedLanguage) return;
-      const supported = new Set(available.map(({ code }) => code));
-      const location = await getJSON("/translation/location").catch(() => ({ country_code: "" }));
-      const country = String(location.country_code || "").toUpperCase();
-      if (country === "NG") return setLanguage("en");
-      const localeLanguage = navigator.language?.split("-")[0];
-      const automatic = COUNTRY_LANGUAGE[country] || (supported.has(localeLanguage) ? localeLanguage : "en");
-      setLanguage(supported.has(automatic) ? automatic : "en");
     }).catch(() => {});
   }, [isPublic, storedLanguage]);
 

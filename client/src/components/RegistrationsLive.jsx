@@ -386,7 +386,7 @@ export function RegistrationsLive() {
 
   const hidden = Object.keys(LIVE_WIDGETS).filter((id) => !layout.some((widget) => widget.id === id));
   const patch = (id, values) => setLayout((current) => current.map((widget) => widget.id === id ? { ...widget, ...values } : widget));
-  const go = (field, value) => navigate(`/registrations?${new URLSearchParams({ [field]: value }).toString()}`);
+  const go = (field, value) => navigate(`/registrations?${new URLSearchParams(field === "event_type" && value === "cellular" ? { cellular: "1" } : { [field]: value }).toString()}`);
   const goFilters = (filters) => navigate(`/registrations?${new URLSearchParams(filters).toString()}`);
 
   function dropOn(targetId) {

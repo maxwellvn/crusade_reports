@@ -125,10 +125,17 @@ const Select = React.forwardRef(({
         </button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent
+        className="max-h-[var(--radix-popover-content-available-height)] w-[--radix-popover-trigger-width] overflow-hidden p-0"
+        align="start"
+        collisionPadding={12}
+      >
         <Command>
           <CommandInput placeholder="Type to search…" />
-          <CommandList>
+          <CommandList
+            className="max-h-[min(16rem,calc(var(--radix-popover-content-available-height)-3rem))] touch-pan-y overscroll-contain [-webkit-overflow-scrolling:touch]"
+            onWheelCapture={(event) => event.stopPropagation()}
+          >
             <CommandEmpty>No matching options</CommandEmpty>
             <CommandGroup>
               {options.map((option) => (

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { ApiError, wrap } from "../logger.js";
+import { db } from "../db.js";
+import { applyCrusadeGlossary } from "../crusadeGlossary.js";
 
 export const translation = Router();
 
@@ -16,8 +18,19 @@ const LANGUAGES = [
   ["yo", "Yoruba"], ["zu", "Zulu"],
 ].map(([code, name]) => ({ code, name }));
 const CODES = new Set(LANGUAGES.map(({ code }) => code));
-const cache = new Map();
 const usage = new Map();
+
+const readCachedTranslation = db.prepare("SELECT translated_text FROM translation_cache WHERE target_language = ? AND source_text = ?");
+const writeCachedTranslation = db.prepare(`INSERT INTO translation_cache (target_language, source_text, translated_text)
+  VALUES (?, ?, ?) ON CONFLICT(target_language, source_text) DO UPDATE SET translated_text = excluded.translated_text`);
+
+export function cachedTranslation(target, source) {
+  return readCachedTranslation.get(target, source)?.translated_text;
+}
+
+export function storeTranslation(target, source, translated) {
+  writeCachedTranslation.run(target, source, translated);
+}
 
 export function applyTranslationGlossary(target, value, source = "") {
   if (target === "id") return String(value).replace(/\bperang\s+salib\b/gi, "Kebaktian Kebangunan Rohani (KKR)");
@@ -32,38 +45,27 @@ export function applyTranslationGlossary(target, value, source = "") {
     .replace(/\bBürgerversammlung\b/gi, "Evangelisationsveranstaltung");
 }
 
-function publicIp(value) {
-  const ip = String(value || "").split(",")[0].trim().replace(/^::ffff:/, "");
-  if (!ip || ip === "::1" || ip.startsWith("10.") || ip.startsWith("127.") || ip.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return "";
-  return ip;
-}
-
 translation.get("/languages", (_req, res) => res.json(LANGUAGES));
 
-translation.get("/location", wrap(async (req, res) => {
-  const forwardedCountry = [req.get("cf-ipcountry"), req.get("x-vercel-ip-country"), req.get("cloudfront-viewer-country")]
-    .find((value) => /^[A-Z]{2}$/i.test(String(value || "")));
-  if (forwardedCountry) return res.json({ country_code: forwardedCountry.toUpperCase() });
-
-  const ip = publicIp(req.ip);
-  if (!ip) return res.json({ country_code: "" });
-  const response = await fetch(`https://api.country.is/${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(4_000) }).catch(() => null);
-  const body = response?.ok ? await response.json().catch(() => null) : null;
-  const country = /^[A-Z]{2}$/i.test(String(body?.country || "")) ? body.country.toUpperCase() : "";
-  res.json({ country_code: country });
-}));
-
 translation.post("/translate", wrap(async (req, res) => {
-  const key = process.env.GOOGLE_TRANSLATE_API_KEY;
-  if (!key) throw new ApiError(503, "TRANSLATION_UNAVAILABLE", "Page translation is not configured yet.");
   const target = String(req.body.target || "");
   const texts = Array.isArray(req.body.texts) ? req.body.texts.map((text) => String(text).trim()) : [];
   if (!CODES.has(target) || target === "en") throw new ApiError(400, "INVALID_LANGUAGE", "Choose an available translation language.");
   if (!texts.length || texts.length > 50 || texts.some((text) => !text || text.length > 600) || texts.join("").length > 12000) throw new ApiError(400, "INVALID_TEXT", "The page contains too much text to translate at once.");
 
   const translated = new Array(texts.length); const missing = []; const indexes = [];
-  texts.forEach((text, index) => { const cached = cache.get(`${target}\0${text}`); if (cached) translated[index] = cached; else { missing.push(text); indexes.push(index); } });
+  texts.forEach((text, index) => { const cached = cachedTranslation(target, text); if (cached !== undefined) translated[index] = cached; else { missing.push(text); indexes.push(index); } });
   if (missing.length) {
+    const key = process.env.GOOGLE_TRANSLATE_API_KEY;
+    if (!key) {
+      // No API key — return cached translations and fall back to the original
+      // English for anything not in the local cache. Apply the crusade glossary
+      // to every string so "crusade(s)" is always rendered as evangelistic
+      // outreach, never as a military crusade — even in user-generated names.
+      indexes.forEach((idx, pos) => { translated[idx] = applyCrusadeGlossary(target, missing[pos]); });
+      res.json({ translations: translated.map((t) => applyCrusadeGlossary(target, t)) });
+      return;
+    }
     const ip = req.ip || "unknown"; const now = Date.now(); const recent = (usage.get(ip) || []).filter((time) => now - time < 60_000);
     if (recent.length >= 30) throw new ApiError(429, "TRANSLATION_LIMIT", "Too many translation requests. Please wait a moment and try again.");
     usage.set(ip, [...recent, now]);
@@ -78,9 +80,8 @@ translation.post("/translate", wrap(async (req, res) => {
     results.forEach((item, position) => {
       const value = applyTranslationGlossary(target, item.translatedText || "", missing[position]);
       translated[indexes[position]] = value;
-      cache.set(`${target}\0${missing[position]}`, value);
+      storeTranslation(target, missing[position], value);
     });
-    if (cache.size > 5000) cache.delete(cache.keys().next().value);
   }
   res.json({ translations: translated });
 }));

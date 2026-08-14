@@ -15,3 +15,11 @@ video/node_modules/
 video/out/
 kingschat/
 logs/kc_token_storage.json
+backups/
+*.pdf
+orca-paste-*
+outputs/
+video/
+videos/
+untitled.md
+skills-lock.json

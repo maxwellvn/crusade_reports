@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { portalCrusadeReportSchema, reportSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAdmin } from "../auth.js";
+import { requireAnyPageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { ensureReportingOpen } from "../appSettings.js";
 import { applyPortalScope } from "../portalScope.js";
@@ -177,14 +177,14 @@ reports.post("/", withReportPhotoUpload(wrap((req, res) => {
   res.status(201).json({ id, photos: listReportPhotos(id) });
 })));
 
-reports.get("/", requireAdmin, wrap((_req, res) => {
+reports.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((_req, res) => {
   const rows = db.prepare("SELECT * FROM reports ORDER BY created_at DESC LIMIT 500").all();
   const crus = db.prepare("SELECT * FROM crusades WHERE report_id = ?");
   res.json(rows.map((r) => ({ ...r, crusades: crus.all(r.id), photos: listReportPhotos(r.id) })));
 }));
 
 // Authenticated photo download for admins reviewing submitted reports.
-reports.get("/photo-file/:storedName", requireAdmin, wrap((req, res) => {
+reports.get("/photo-file/:storedName", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
   const { row, stream } = resolveReportPhotoPath(req.params.storedName);
   res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
   res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(row.original_name || row.stored_name)}"`);
@@ -193,7 +193,7 @@ reports.get("/photo-file/:storedName", requireAdmin, wrap((req, res) => {
   stream.pipe(res);
 }));
 
-reports.get("/:id", requireAdmin, wrap((req, res) => {
+reports.get("/:id", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
   const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found");
   row.crusades = db.prepare("SELECT * FROM crusades WHERE report_id = ?").all(row.id);
