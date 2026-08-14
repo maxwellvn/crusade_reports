@@ -72,6 +72,7 @@ export function Combobox({
           type="button"
           variant="outline"
           role="combobox"
+          data-combobox-trigger
           aria-expanded={open}
           aria-invalid={invalid}
           aria-label={ariaLabel || placeholder}

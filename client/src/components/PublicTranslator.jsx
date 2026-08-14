@@ -14,7 +14,7 @@ function textNodes() {
   const root = document.getElementById("root"); if (!root) return [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode(node) {
     const parent = node.parentElement; const text = node.nodeValue?.trim();
-    if (!parent || !text || text.length > 600 || parent.closest("[data-page-translator], [translate='no'], script, style, noscript, textarea, input, code, pre")) return NodeFilter.FILTER_REJECT;
+    if (!parent || !text || text.length > 600 || parent.closest("[data-page-translator], [translate='no'], script, style, noscript, textarea, input, code, pre, [role='combobox'], [cmdk-root], [data-radix-popper-content-wrapper], [data-combobox-trigger]")) return NodeFilter.FILTER_REJECT;
     return NodeFilter.FILTER_ACCEPT;
   } });
   const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode); return nodes;
