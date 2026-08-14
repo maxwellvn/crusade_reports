@@ -13,6 +13,8 @@ const PAGES = [
   [/^\/mission-trips\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", "/mission-trips", "/global-missions-trip-volunteer.png"],
   [/^\/upcoming-crusades\/?$/, "UPCOMING NIGHT OF A THOUSAND CRUSADES", "Participants can select one planned international crusade they would like to attend and review the relevant travel details.", "/upcoming-crusades", "/logo.png"],
   [/^\/avatar\/?$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", "/avatar", "/notc-avatar-frame.jpg"],
+  [/^\/privacy\/?$/, "Privacy Policy", "How the Night of a Thousand Crusades platform collects, uses, stores, and protects your personal information.", "/privacy", "/logo.png"],
+  [/^\/terms\/?$/, "Terms of Service", "The terms governing your use of the Night of a Thousand Crusades platform.", "/terms", "/logo.png"],
 ];
 
 const escapeAttribute = (value) => String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

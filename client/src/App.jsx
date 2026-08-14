@@ -30,6 +30,7 @@ import { MissionTripAdmin } from "@/components/MissionTripAdmin";
 import { UpcomingCrusades } from "@/components/UpcomingCrusades";
 import { UpcomingCrusadesAdmin } from "@/components/UpcomingCrusadesAdmin";
 import { AvatarFrame } from "@/components/AvatarFrame";
+import { PrivacyPolicy, TermsOfService } from "@/components/LegalPage";
 import { PublicTranslator } from "@/components/PublicTranslator";
 import { CrusadeCoverage } from "@/components/CrusadeCoverage";
 import { CountryCoverage } from "@/components/CountryCoverage";
@@ -57,6 +58,8 @@ const PAGE_META = [
   [/^\/mission-trips$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", true, "/mission-trips", "/global-missions-trip-volunteer.png"],
   [/^\/upcoming-crusades$/, "UPCOMING NIGHT OF A THOUSAND CRUSADES", "Participants can select one planned international crusade they would like to attend and review the relevant travel details.", true, "/upcoming-crusades"],
   [/^\/avatar$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", true, "/avatar", "/notc-avatar-frame.jpg"],
+  [/^\/privacy$/, "Privacy Policy", "How the Night of a Thousand Crusades platform collects, uses, stores, and protects your personal information.", true, "/privacy"],
+  [/^\/terms$/, "Terms of Service", "The terms governing your use of the Night of a Thousand Crusades platform.", true, "/terms"],
   [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
@@ -231,6 +234,8 @@ export default function App() {
         <Route path="/mission-trips" element={<MissionTripRegistration />} />
         <Route path="/upcoming-crusades" element={<UpcomingCrusades />} />
         <Route path="/avatar" element={<AvatarFrame />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />

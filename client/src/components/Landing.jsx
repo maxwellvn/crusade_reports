@@ -151,7 +151,7 @@ const EVENT_CALENDAR = [
     dateTime: "2026-08-01",
     title: "Join the Prayer March",
     copy: "Join the Prayer March on the road to NOTC.",
-    status: "Started",
+    startedAt: "2026-08-01",
     tone: "gold",
   },
   {
@@ -159,6 +159,7 @@ const EVENT_CALENDAR = [
     dateTime: "2026-08-14",
     title: "Road to NOTC Live Show",
     copy: "A two-week showcase of ongoing crusade activities leading up to the main event.",
+    startsAt: "17:00",
     tone: "cyan",
   },
   {
@@ -285,6 +286,45 @@ function timeLeft(target) {
     minutes: Math.floor((ms % 3600000) / 60000),
     seconds: Math.floor((ms % 60000) / 1000),
   };
+}
+
+// Today's timestamp for the given "HH:MM", or null once that time has passed.
+function todayAt(hhmm) {
+  const [hours, minutes] = hhmm.split(":").map(Number);
+  const at = new Date();
+  at.setHours(hours, minutes, 0, 0);
+  return at.getTime() > Date.now() ? at.getTime() : null;
+}
+
+// Live badge for an event starting later today — ticks down to the start time,
+// then flips to "Live now".
+function StartsToday({ at }) {
+  const [left, setLeft] = React.useState(() => at - Date.now());
+
+  React.useEffect(() => {
+    const id = setInterval(() => setLeft(at - Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [at]);
+
+  const pad = (n) => String(n).padStart(2, "0");
+  if (left <= 0) return <span className="event-calendar-live">Live now</span>;
+  return (
+    <span className="event-calendar-live" role="timer" aria-label={`Starting today at ${pad(Math.floor(left / 3600000))} hours`}>
+      Starting today · {pad(Math.floor(left / 3600000))}:{pad(Math.floor((left % 3600000) / 60000))}:{pad(Math.floor((left % 60000) / 1000))}
+    </span>
+  );
+}
+
+// Live counter of prayer hours since the Prayer March began on 1 August.
+function PrayerHours({ from }) {
+  const [hours, setHours] = React.useState(() => Math.floor(Math.max(0, Date.now() - from) / 3600000));
+
+  React.useEffect(() => {
+    const id = setInterval(() => setHours(Math.floor(Math.max(0, Date.now() - from) / 3600000)), 1000);
+    return () => clearInterval(id);
+  }, [from]);
+
+  return <span className="event-calendar-hours">{hours.toLocaleString("en-US")} hrs of prayer</span>;
 }
 
 function Countdown() {
@@ -577,6 +617,8 @@ export function Landing() {
                 <h3>{event.title}</h3>
                 {event.copy && <p>{event.copy}</p>}
               </div>
+              {event.startsAt && todayAt(event.startsAt) && <StartsToday at={todayAt(event.startsAt)} />}
+              {event.startedAt && <PrayerHours from={new Date(`${event.startedAt}T00:00:00`).getTime()} />}
               {event.status && <span className="event-calendar-status">{event.status}</span>}
             </li>
           ))}
@@ -627,8 +669,6 @@ export function Landing() {
             </li>
           ))}
         </ol>
-
-        <RegisterButton>Start Registration</RegisterButton>
       </section>
 
       {/* ===== Footer ===== */}
@@ -694,8 +734,8 @@ export function Landing() {
           <div className="footer-bottom">
             <p className="footer-copy">© 2026 Rhapsody End-Time Teaching Crusades. All rights reserved.</p>
             <nav className="footer-legal">
-              <a href="#">Privacy Policy</a>
-              <a href="#">Terms of Service</a>
+              <Link to="/privacy">Privacy Policy</Link>
+              <Link to="/terms">Terms of Service</Link>
               <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer">rhapsodycrusades.org</a>
             </nav>
           </div>
