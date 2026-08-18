@@ -34,8 +34,8 @@ const CRUSADE_COLS = [
   // them so a network reporter can fill everything in one pass.
   { h: "Crusade Collaborators", k: "crusade_collaborators", d: "NETWORK ONLY. Zones/networks/ministries partnering on this crusade. Separate multiple with commas." },
   { h: "Zone Contribution", k: "zone_contribution", d: "NETWORK ONLY. How the zone contributes. Pick from the dropdown (multi-select via commas): " + ZONE_CONTRIBUTIONS.join(", ") + "." },
-  { h: "Estimated Budget", k: "estimated_budget", d: "NETWORK ONLY. Estimated crusade budget in Espees (e.g. 2,000,000)." },
-  { h: "Rhapsody Copies Confirmed", k: "rhapsody_copies_confirmed", d: "NETWORK ONLY. Number of Rhapsody of Realities copies confirmed (e.g. 5,000)." },
+  { h: "Estimated Budget (Espees)", k: "estimated_budget", d: "NETWORK ONLY. Estimated crusade budget in Espees. Numbers only — no letters or currency symbols (e.g. 2,000,000)." },
+  { h: "Rhapsody Copies Confirmed", k: "rhapsody_copies_confirmed", d: "NETWORK ONLY. Number of Rhapsody of Realities copies confirmed. Numbers only — no letters (e.g. 5,000)." },
   { h: "Permits Obtained", k: "permits_obtained", d: "NETWORK ONLY. Have the required permits been obtained? Pick from the dropdown: " + PERMIT_OPTIONS.join(", ") + "." },
   { h: "Media Coverage Plan", k: "media_coverage_plan", d: "NETWORK ONLY. Your media coverage plan (TV, radio, social media, press…). Up to 2000 characters." },
 ];
@@ -98,9 +98,11 @@ registrationImporter.get("/template", wrap(async (_req, res) => {
     ["5. ONE ROW = ONE CRUSADE. Registering 5 street crusades? That's 5 rows (copy the row and change the details)."],
     ["6. Date format: YYYY-MM-DD (e.g. 2026-12-05). Expected Attendance is a whole number, 1 or more."],
     ["7. Minister(s): separate multiple ministers with commas (e.g. 'Pastor John, Pastor Mary')."],
-    ["8. The last 6 columns (Collaborators, Zone Contribution, Budget, Rhapsody Copies, Permits, Media Plan) are NETWORK REGISTRATIONS ONLY."],
+    ["8. The last 6 columns (Collaborators, Zone Contribution, Estimated Budget, Rhapsody Copies, Permits, Media Plan) are NETWORK REGISTRATIONS ONLY."],
     ["   Leave them blank if you are not registering as a network."],
-    ["9. Save and upload in the app. You'll see a preview and exact row/column errors before anything is saved."],
+    ["9. NUMBER FIELDS (Expected Attendance, Estimated Budget, Rhapsody Copies Confirmed) accept DIGITS AND COMMAS ONLY."],
+    ["   No letters, currency symbols, or text — e.g. enter 2,000,000 not '2 million Espees' or '₦2,000,000'."],
+    ["10. Save and upload in the app. You'll see a preview and exact row/column errors before anything is saved."],
     [""],
     ["EXAMPLE (values like these in the Crusades sheet):"],
     ["Crusade Type", "Event Name", "Event Date (YYYY-MM-DD)", "Venue", "Expected Attendance", "Minister(s)", "Country", "City"],
@@ -127,11 +129,13 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   const ws = wb.getWorksheet("Crusades");
   if (!ws) throw new ApiError(422, "NO_SHEET", "The file has no 'Crusades' sheet — use the template");
 
-  // Map header text -> column index (tolerant of reordering + the " *" required marks).
+  // Map header text -> column index (tolerant of reordering, the " *" required
+  // marks, and parenthetical suffixes like "(Espees)" added in later templates).
   const colByKey = {};
   ws.getRow(1).eachCell((cell, col) => {
     const h = normHeader(cell.value);
-    const found = ALL_COLS.find((c) => normHeader(c.h) === h);
+    const found = ALL_COLS.find((c) => normHeader(c.h) === h)
+      || ALL_COLS.find((c) => normHeader(c.h.replace(/\s*\([^)]*\)\s*$/, "")) === h);
     if (found) colByKey[found.k] = col;
   });
   // Surface missing REQUIRED columns up front (a common "wrong file" mistake).
@@ -173,29 +177,43 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     if (CRUSADE_COLS.every((c) => raw(c.k) === "")) continue; // fully blank row
 
     for (const c of CRUSADE_COLS.filter((c) => c.req)) {
-      if (raw(c.k) === "") rowErrors.push(`Row ${r}: "${c.h}" is required but empty.`);
+      if (raw(c.k) === "") rowErrors.push(`Row ${r}, column "${c.h}": this field is required and cannot be empty.`);
     }
 
     const rawType = raw("event_type");
     const code = CODES.has(rawType) ? rawType : LABEL_TO_CODE.get(rawType.toLowerCase());
-    if (rawType && !code) rowErrors.push(`Row ${r}: Crusade Type "${rawType}" is not in the list — pick from the dropdown.`);
+    if (rawType && !code) rowErrors.push(`Row ${r}, column "Crusade Type": "${rawType}" is not a valid crusade type. Pick one from the dropdown: ${TYPE_LABELS.slice(0, 5).join(", ")}, …`);
 
     const date = normalizeDate(get("event_date"));
-    if (raw("event_date") && !/^\d{4}-\d{2}-\d{2}$/.test(date)) rowErrors.push(`Row ${r}: Event Date "${raw("event_date")}" must be formatted YYYY-MM-DD.`);
+    if (raw("event_date") && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      rowErrors.push(`Row ${r}, column "Event Date": "${raw("event_date")}" is not a valid date. Use the format YYYY-MM-DD (e.g. 2026-12-05).`);
+    }
+
+    // Number fields: digits and commas only. Letters, currency symbols, and
+    // words like "million" are rejected with a precise message naming the
+    // column, the offending value, and what is expected.
     if (raw("expected_attendance") && !/^\d[\d, ]*$/.test(raw("expected_attendance"))) {
-      rowErrors.push(`Row ${r}: Expected Attendance "${raw("expected_attendance")}" must be a whole number (1 or more).`);
+      rowErrors.push(`Row ${r}, column "Expected Attendance": "${raw("expected_attendance")}" contains non-numeric characters. Enter digits only (commas allowed), e.g. 500.`);
     }
     const attendance = toInt(get("expected_attendance"), 0);
-    if (raw("expected_attendance") && attendance < 1) rowErrors.push(`Row ${r}: Expected Attendance must be at least 1.`);
+    if (raw("expected_attendance") && attendance < 1) {
+      rowErrors.push(`Row ${r}, column "Expected Attendance": must be at least 1 (got ${attendance}).`);
+    }
 
     // Network-only field sanity checks. These are optional for non-network orgs;
     // we still validate format when present so a typo doesn't silently drop.
+    if (raw("estimated_budget") && !/^\d[\d, ]*$/.test(raw("estimated_budget"))) {
+      rowErrors.push(`Row ${r}, column "Estimated Budget (Espees)": "${raw("estimated_budget")}" contains non-numeric characters. Enter digits only (commas allowed), e.g. 2,000,000. No letters or currency symbols.`);
+    }
+    if (raw("rhapsody_copies_confirmed") && !/^\d[\d, ]*$/.test(raw("rhapsody_copies_confirmed"))) {
+      rowErrors.push(`Row ${r}, column "Rhapsody Copies Confirmed": "${raw("rhapsody_copies_confirmed")}" contains non-numeric characters. Enter digits only (commas allowed), e.g. 5,000. No letters.`);
+    }
     if (raw("permits_obtained") && !PERMIT_SET.has(raw("permits_obtained").toLowerCase())) {
-      rowErrors.push(`Row ${r}: Permits Obtained "${raw("permits_obtained")}" must be one of: ${PERMIT_OPTIONS.join(", ")}.`);
+      rowErrors.push(`Row ${r}, column "Permits Obtained": "${raw("permits_obtained")}" is not a valid option. Pick one of: ${PERMIT_OPTIONS.join(", ")}.`);
     }
     if (raw("zone_contribution")) {
       const bad = raw("zone_contribution").split(",").map((s) => s.trim().toLowerCase()).filter((s) => s && !CONTRIBUTION_SET.has(s));
-      if (bad.length) rowErrors.push(`Row ${r}: Zone Contribution has unknown value(s): ${bad.join(", ")}. Pick from: ${ZONE_CONTRIBUTIONS.join(", ")}.`);
+      if (bad.length) rowErrors.push(`Row ${r}, column "Zone Contribution": unknown value(s) "${bad.join(", ")}". Pick from: ${ZONE_CONTRIBUTIONS.join(", ")}.`);
     }
 
     const item = {
