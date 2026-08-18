@@ -26,7 +26,9 @@ import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page blo
 // The API still receives individual items, never an unaccounted aggregate.
 
 const STEPS = ["Who you are", "Your crusades", "Review"];
-const DRAFT_KEY = "crusade-registration-draft-v1";
+// Shared with RegistrationBulkUpload so the bulk page can hand its parsed rows
+// off to this form via the same draft slot. Keep one source of truth.
+export const DRAFT_KEY = "crusade-registration-draft-v1";
 const clearStoredDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ } };
 const STEP_FIELDS = [
   ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",

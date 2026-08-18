@@ -700,6 +700,7 @@ export function Landing() {
               <div className="footer-col">
                 <h4>Explore</h4>
                 <Link to={REGISTER}>Register</Link>
+                <Link to="/crusade-registration/bulk-upload">Bulk register</Link>
                 <Link to="/resources">Resources</Link>
                 <Link to="/select-nation">Select a nation</Link>
                 <Link to="/media-training">Media training</Link>

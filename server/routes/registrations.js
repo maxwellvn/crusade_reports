@@ -10,6 +10,7 @@ import { ensureReportingOpen, isManualGroupsEnabled, isManualZonesEnabled } from
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 import { sendExport } from "./exporter.js";
+import { registrationImporter } from "./registrationImporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 import { COUNTRIES } from "./countries.js";
 import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
@@ -181,6 +182,10 @@ registrations.post("/", wrap(async (req, res) => {
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed"));
   res.status(201).json({ id });
 }));
+
+// Bulk registration upload (xlsx). Public — mirrors the report importer: parse,
+// validate, geocode, return rows to the client for review. No DB commit here.
+registrations.use("/import", registrationImporter);
 
 // Directory gaps are intentionally visible to admins for reconciliation. These
 // rows remain ordinary registrations; the flags only identify names typed by a

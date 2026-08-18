@@ -2,7 +2,8 @@ import { Router } from "express";
 import { requireSuperAdmin } from "../auth.js";
 import { isReportingOpen, setReportingOpen, getDefaultLandingPage, setDefaultLandingPage, landingPageOptions,
   isManualZonesEnabled, setManualZonesEnabled, isManualGroupsEnabled, setManualGroupsEnabled,
-  isManualCitiesEnabled, setManualCitiesEnabled } from "../appSettings.js";
+  isManualCitiesEnabled, setManualCitiesEnabled,
+  isBulkUploadOpenToAll, setBulkUploadOpenToAll, BULK_UPLOAD_ALLOWED_NETWORKS } from "../appSettings.js";
 import { wrap } from "../logger.js";
 
 export const campaignSettings = Router();
@@ -14,6 +15,8 @@ export const getCampaignSettings = () => ({
   manual_zones_enabled: isManualZonesEnabled(),
   manual_groups_enabled: isManualGroupsEnabled(),
   manual_cities_enabled: isManualCitiesEnabled(),
+  bulk_upload_open_to_all: isBulkUploadOpenToAll(),
+  bulk_upload_allowed_networks: [...BULK_UPLOAD_ALLOWED_NETWORKS],
 });
 
 export function updateCampaignSettings(body = {}) {
@@ -22,6 +25,7 @@ export function updateCampaignSettings(body = {}) {
   if (body.manual_zones_enabled != null) setManualZonesEnabled(body.manual_zones_enabled === true);
   if (body.manual_groups_enabled != null) setManualGroupsEnabled(body.manual_groups_enabled === true);
   if (body.manual_cities_enabled != null) setManualCitiesEnabled(body.manual_cities_enabled === true);
+  if (body.bulk_upload_open_to_all != null) setBulkUploadOpenToAll(body.bulk_upload_open_to_all === true);
   return getCampaignSettings();
 }
 

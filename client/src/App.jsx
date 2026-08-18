@@ -14,6 +14,7 @@ import { Landing } from "@/components/Landing";
 import { NotFound } from "@/components/NotFound";
 import { AdminGate, useAdmin } from "@/components/AdminGate";
 import { RegistrationForm } from "@/components/RegistrationForm";
+import { RegistrationBulkUpload } from "@/components/RegistrationBulkUpload";
 import { BlueEliteLanding } from "@/components/BlueEliteLanding";
 import { BlueEliteRegistrationForm } from "@/components/BlueEliteRegistrationForm";
 import { BlueEliteDashboard } from "@/components/BlueEliteDashboard";
@@ -48,6 +49,7 @@ const DEFAULT_DESCRIPTION = "Join A Night of a Thousand Crusades, register crusa
 const PAGE_META = [
   [/^\/$/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/"],
   [/^\/crusade-registration\/register/, "Register Your Crusades", "Register confirmed crusades for A Night of a Thousand Crusades and add them to the global record.", true, "/crusade-registration/register"],
+  [/^\/crusade-registration\/bulk-upload/, "Bulk Register Crusades", "Register many crusades at once by uploading a spreadsheet for A Night of a Thousand Crusades.", true, "/crusade-registration/bulk-upload"],
   [/^\/crusade-registration/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/crusade-registration"],
   [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register confirmed crusades for the Loveworld Blue Elite staff.", true, "/blue-elite/register"],
   [/^\/blue-elite/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", true, "/blue-elite"],
@@ -216,6 +218,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/crusade-registration" element={<Landing />} />
         <Route path="/crusade-registration/register" element={<RegistrationForm />} />
+        <Route path="/crusade-registration/bulk-upload" element={<RegistrationBulkUpload />} />
 
         {/* Loveworld Blue Elite staff registration — standalone surface, same
             crusade logic as the public form but a separate audience and data
