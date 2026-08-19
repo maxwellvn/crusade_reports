@@ -159,7 +159,8 @@ const EVENT_CALENDAR = [
     dateTime: "2026-08-14",
     title: "Road to NOTC Live Show",
     copy: "A two-week showcase of ongoing crusade activities leading up to the main event.",
-    startsAt: "17:00",
+    liveFrom: "2026-08-14",
+    liveTo: "2026-08-27",
     tone: "cyan",
   },
   {
@@ -313,6 +314,13 @@ function StartsToday({ at }) {
       Starting today · {pad(Math.floor(left / 3600000))}:{pad(Math.floor((left % 3600000) / 60000))}:{pad(Math.floor((left % 60000) / 1000))}
     </span>
   );
+}
+
+// "Now showing" pill for a multi-day event that already began — no countdown.
+function LiveWindow({ from, to }) {
+  const now = Date.now();
+  if (now < new Date(`${from}T00:00:00`).getTime() || now > new Date(`${to}T23:59:59`).getTime()) return null;
+  return <span className="event-calendar-live">Started</span>;
 }
 
 // Live counter of prayer hours since the Prayer March began on 1 August.
@@ -617,6 +625,7 @@ export function Landing() {
                 <h3>{event.title}</h3>
                 {event.copy && <p>{event.copy}</p>}
               </div>
+              {event.liveFrom && <LiveWindow from={event.liveFrom} to={event.liveTo} />}
               {event.startsAt && todayAt(event.startsAt) && <StartsToday at={todayAt(event.startsAt)} />}
               {event.startedAt && <PrayerHours from={new Date(`${event.startedAt}T00:00:00`).getTime()} />}
               {event.status && <span className="event-calendar-status">{event.status}</span>}
