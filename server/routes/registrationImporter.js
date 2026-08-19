@@ -6,7 +6,7 @@ import { loadZones } from "./zones.js";
 import { db } from "../db.js";
 import { registrationSchema } from "../validation.js";
 import { validateRegistrationOrganization, insertRegistration } from "./registrations.js";
-import { isManualZonesEnabled, isManualGroupsEnabled, canUseBulkUpload } from "../appSettings.js";
+import { isManualZonesEnabled, isManualGroupsEnabled } from "../appSettings.js";
 import { loadWorkbook } from "../xlsxSanitize.js";
 import { resolveCity } from "../cityResolve.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
@@ -161,13 +161,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     kingschat_username: String(req.body.kingschat_username || "").trim(),
   };
 
-  // Access gate: by default only REON and TNI networks can use bulk upload.
-  // A super admin can flip bulk_upload_open_to_all in Settings to allow anyone.
-  // The server is the source of truth — the client UI is just a hint.
-  if (!canUseBulkUpload(reg.organization_type, reg.network_name)) {
-    throw new ApiError(403, "BULK_UPLOAD_RESTRICTED",
-      "Bulk upload is currently limited to REON and TNI networks. Register crusades one at a time, or contact an admin to enable bulk upload for your organization.");
-  }
+  // Bulk upload is open to every organization type.
 
   // ---- Parse rows with precise, per-row/per-field errors ----
   const rowErrors = [];

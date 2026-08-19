@@ -70,9 +70,6 @@ export function Settings() {
   const [manualGroups, setManualGroups] = React.useState(null);
   const [manualCities, setManualCities] = React.useState(null);
   const [savingManualOrg, setSavingManualOrg] = React.useState(false);
-  const [bulkUploadOpen, setBulkUploadOpen] = React.useState(null);
-  const [bulkUploadAllowedNetworks, setBulkUploadAllowedNetworks] = React.useState([]);
-  const [savingBulkUpload, setSavingBulkUpload] = React.useState(false);
   const [editingPermissions, setEditingPermissions] = React.useState(null);
   const [permissionDraft, setPermissionDraft] = React.useState([]);
   const [savingPermissions, setSavingPermissions] = React.useState(false);
@@ -95,8 +92,6 @@ export function Settings() {
         setManualZones(settings.manual_zones_enabled ?? false);
         setManualGroups(settings.manual_groups_enabled ?? false);
         setManualCities(settings.manual_cities_enabled ?? true);
-        setBulkUploadOpen(settings.bulk_upload_open_to_all ?? false);
-        setBulkUploadAllowedNetworks(Array.isArray(settings.bulk_upload_allowed_networks) ? settings.bulk_upload_allowed_networks : []);
       })
       .catch((error) => toast.error(error.message));
   }, [admin]);
@@ -226,22 +221,6 @@ export function Settings() {
     }
   }
 
-  async function toggleBulkUpload() {
-    const next = !bulkUploadOpen;
-    setSavingBulkUpload(true);
-    try {
-      const settings = await putJSON("/campaign-settings", { bulk_upload_open_to_all: next });
-      setBulkUploadOpen(settings.bulk_upload_open_to_all);
-      toast.success(settings.bulk_upload_open_to_all
-        ? "Bulk upload is now open to all networks and organizations."
-        : `Bulk upload is now limited to ${settings.bulk_upload_allowed_networks?.join(" and ") || "REON and TNI"}.`);
-    } catch (error) {
-      toast.error(error.message);
-    } finally {
-      setSavingBulkUpload(false);
-    }
-  }
-
   if (!admin?.is_super_admin) {
     return <div className="mx-auto max-w-3xl border-y border-slate-200 py-8 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard settings.</div>;
   }
@@ -294,25 +273,6 @@ export function Settings() {
           <ManualOrgToggle label="Manual zones" description="Allow registrants to type a zone name not in the directory. Off by default — zones should come from the churches API." checked={manualZones} disabled={manualZones === null || savingManualOrg} onChange={() => toggleManualOrg("zones")} />
           <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. Off by default — groups should come from the churches API." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
           <ManualOrgToggle label="Manual cities" description="Allow registrants to type a city name not found in the search results. On by default — the create option only appears when no match is found." checked={manualCities} disabled={manualCities === null || savingManualOrg} onChange={() => toggleManualOrg("cities")} />
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Bulk registration upload" description="Control who can use the bulk spreadsheet upload page to register many crusades at once.">
-        <div className="flex items-center justify-between gap-6 border-b border-slate-200 pb-6">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-950">{bulkUploadOpen === null ? "Checking bulk upload access…" : bulkUploadOpen ? "Open to all organizations" : `Limited to ${bulkUploadAllowedNetworks.join(" and ")}`}</p>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
-              {bulkUploadOpen
-                ? "Any network, zone, group, church or cell can use the bulk upload page."
-                : `Only ${bulkUploadAllowedNetworks.join(" and ")} networks can use bulk upload. Other organizations must register one crusade at a time.`}
-            </p>
-          </div>
-          <button type="button" role="switch" aria-checked={Boolean(bulkUploadOpen)} disabled={bulkUploadOpen === null || savingBulkUpload}
-            onClick={toggleBulkUpload}
-            className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4 disabled:opacity-50 ${bulkUploadOpen ? "border-slate-950 bg-slate-950" : "border-slate-300 bg-slate-200"}`}>
-            <span className={`absolute top-1 block size-4 rounded-full bg-white transition-transform ${bulkUploadOpen ? "translate-x-6" : "translate-x-1"}`} />
-            <span className="sr-only">{bulkUploadOpen ? "Restrict bulk upload to REON and TNI" : "Open bulk upload to all organizations"}</span>
-          </button>
         </div>
       </SettingsSection>
 

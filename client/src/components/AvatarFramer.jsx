@@ -2,14 +2,12 @@ import * as React from "react";
 import { Download, Hand, ImagePlus, Minus, Plus, RotateCcw, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const FRAME_SRC = "/notc-avatar-frame.jpg";
-const DOWNLOAD_NAME = "notc-avatar.png";
-
-/* The frame is an opaque JPEG whose photo slot is a solid black circle, so the
-   photo is drawn after the frame and clipped to that circle. Measured on the
+/* The NOTC frame is an opaque JPEG whose photo slot is a solid black circle, so
+   the photo is drawn after the frame and clipped to that circle. Measured on the
    1280px artwork: centre (656, 831), radius 177px; the radius carries a small
    bleed so the anti-aliased rim of the slot stays covered. */
-const HOLE = { cx: 0.5125, cy: 0.6492, r: 0.1409 };
+const NOTC_FRAME = "/notc-avatar-frame.jpg";
+const NOTC_HOLE = { cx: 0.5125, cy: 0.6492, r: 0.1409 };
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -21,7 +19,11 @@ function loadImage(src) {
   });
 }
 
-export function AvatarFramer() {
+// Campaign avatar framer. `frameSrc` is the primary frame artwork; if it fails
+// to load (e.g. a country avatar image not yet supplied), `fallbackSrc` is tried
+// next. `hole` gives the photo-slot geometry as fractions of the canvas (cx, cy
+// and r relative to the smaller dimension), so frames of any size work.
+export function AvatarFramer({ frameSrc = NOTC_FRAME, fallbackSrc = "", hole = NOTC_HOLE, downloadName = "notc-avatar.png" }) {
   const canvasRef = React.useRef(null);
   const frameRef = React.useRef(null);
   const photoRef = React.useRef(null);
@@ -36,14 +38,14 @@ export function AvatarFramer() {
   const [showHint, setShowHint] = React.useState(false);
   const [error, setError] = React.useState("");
 
-  const hole = React.useCallback(() => {
+  const activeHole = React.useCallback(() => {
     const canvas = canvasRef.current;
     return {
-      cx: canvas.width * HOLE.cx,
-      cy: canvas.height * HOLE.cy,
-      r: Math.min(canvas.width, canvas.height) * HOLE.r,
+      cx: canvas.width * hole.cx,
+      cy: canvas.height * hole.cy,
+      r: Math.min(canvas.width, canvas.height) * hole.r,
     };
-  }, []);
+  }, [hole]);
 
   const draw = React.useCallback(
     (scalePercent) => {
@@ -56,7 +58,7 @@ export function AvatarFramer() {
 
       const photo = photoRef.current;
       if (!photo) return;
-      const { cx, cy, r } = hole();
+      const { cx, cy, r } = activeHole();
       const ratio = scalePercent / 100;
       const maxX = Math.max(0, (photo.width * ratio) / 2 - r);
       const maxY = Math.max(0, (photo.height * ratio) / 2 - r);
@@ -75,31 +77,43 @@ export function AvatarFramer() {
       ctx.drawImage(photo, -photo.width / 2, -photo.height / 2, photo.width, photo.height);
       ctx.restore();
     },
-    [hole],
+    [activeHole],
   );
 
+  // Try the primary frame, then the fallback, then give up.
   React.useEffect(() => {
     let cancelled = false;
-    loadImage(FRAME_SRC)
-      .then((frame) => {
-        if (cancelled) return;
-        frameRef.current = frame;
-        const canvas = canvasRef.current;
-        canvas.width = frame.naturalWidth;
-        canvas.height = frame.naturalHeight;
-        setFrameReady(true);
-        draw(100);
-      })
-      .catch(() => !cancelled && setError("The campaign frame could not be loaded. Refresh the page to try again."));
+    setFrameReady(false);
+    setError("");
+    frameRef.current = null;
+    const sources = fallbackSrc ? [frameSrc, fallbackSrc] : [frameSrc];
+    (async () => {
+      for (const src of sources) {
+        try {
+          const frame = await loadImage(src);
+          if (cancelled) return;
+          frameRef.current = frame;
+          const canvas = canvasRef.current;
+          canvas.width = frame.naturalWidth;
+          canvas.height = frame.naturalHeight;
+          setFrameReady(true);
+          draw(100);
+          return;
+        } catch {
+          /* try the next source */
+        }
+      }
+      if (!cancelled) setError("The campaign frame could not be loaded. Refresh the page to try again.");
+    })();
     return () => {
       cancelled = true;
     };
-  }, [draw]);
+  }, [frameSrc, fallbackSrc, draw]);
 
   /* The photo starts at the smallest size that still fills the circular slot,
-     so no part of the frame's black slot shows through. */
+     so no part of the frame's slot shows through. */
   function fitPhoto(photo) {
-    const { r } = hole();
+    const { r } = activeHole();
     const diameter = r * 2;
     const fit = Math.ceil(Math.max(diameter / photo.width, diameter / photo.height) * 100);
     positionRef.current = { x: 0, y: 0 };
@@ -209,7 +223,7 @@ export function AvatarFramer() {
 
   function download() {
     const link = document.createElement("a");
-    link.download = DOWNLOAD_NAME;
+    link.download = downloadName;
     link.href = canvasRef.current.toDataURL("image/png");
     link.click();
   }

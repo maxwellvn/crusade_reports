@@ -60,7 +60,7 @@ export function useOrgData(zone, countryCode) {
   const fetchZones = React.useCallback(async (q) => {
     const currentZones = await getJSON("/zones");
     setZones(currentZones);
-    return currentZones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone, sublabel: z.region }));
+    return currentZones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone }));
   }, []);
   const fetchGroups = React.useCallback(async (q) => {
     if (!zone) return [];

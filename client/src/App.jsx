@@ -17,6 +17,7 @@ import { RegistrationForm } from "@/components/RegistrationForm";
 import { RegistrationBulkUpload } from "@/components/RegistrationBulkUpload";
 import { BlueEliteLanding } from "@/components/BlueEliteLanding";
 import { BlueEliteRegistrationForm } from "@/components/BlueEliteRegistrationForm";
+import { BlueEliteAvatar } from "@/components/BlueEliteAvatar";
 import { BlueEliteDashboard } from "@/components/BlueEliteDashboard";
 import { BlueEliteRegistrationsTable } from "@/components/BlueEliteRegistrationsTable";
 import { Settings } from "@/components/Settings";
@@ -51,7 +52,8 @@ const PAGE_META = [
   [/^\/crusade-registration\/register/, "Register Your Crusades", "Register confirmed crusades for A Night of a Thousand Crusades and add them to the global record.", true, "/crusade-registration/register"],
   [/^\/crusade-registration\/bulk-upload/, "Bulk Register Crusades", "Register many crusades at once by uploading a spreadsheet for A Night of a Thousand Crusades.", true, "/crusade-registration/bulk-upload"],
   [/^\/crusade-registration/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", true, "/crusade-registration"],
-  [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register confirmed crusades for the Loveworld Blue Elite staff.", true, "/blue-elite/register"],
+  [/^\/blue-elite\/avatar/, "Loveworld Blue Elite — Campaign Avatar", "The Loveworld Kingdom Blue-Elite aren’t left out. Add your photo to your country’s Blue-Elite campaign avatar and share your participation.", true, "/blue-elite/avatar"],
+  [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register your one confirmed crusade for the Loveworld Blue Elite staff.", true, "/blue-elite/register"],
   [/^\/blue-elite/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", true, "/blue-elite"],
   [/^\/report/, "Report a Crusade", "Submit the verified outcome of a completed A Night of a Thousand Crusades event.", true, "/report"],
   [/^\/resources$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) Approved Resources Hub", "Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.", true, "/resources"],
@@ -225,6 +227,7 @@ export default function App() {
             partition (program='blue_elite'). No portal connection. */}
         <Route path="/blue-elite" element={<BlueEliteLanding />} />
         <Route path="/blue-elite/register" element={<BlueEliteRegistrationForm />} />
+        <Route path="/blue-elite/avatar" element={<BlueEliteAvatar />} />
 
         {/* Zone capability-link dashboards — self-contained, token-scoped */}
         <Route path="/zone/:token" element={<ZonePortal />} />

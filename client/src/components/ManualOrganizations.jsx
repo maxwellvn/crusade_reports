@@ -87,7 +87,7 @@ function ReconcileDialog({ row, onClose, onSaved }) {
   }, [zone]);
 
   const fetchZones = React.useCallback(
-    (q) => Promise.resolve(zones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone, sublabel: z.region }))),
+    (q) => Promise.resolve(zones.filter((z) => z.zone.toLowerCase().includes(q.toLowerCase())).map((z) => ({ value: z.zone, label: z.zone }))),
     [zones],
   );
   const fetchGroups = React.useCallback(

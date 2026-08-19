@@ -57,7 +57,7 @@ export function MissionNationSelection() {
     const [rows, networks] = await Promise.all([getJSON("/zones"), getJSON("/networks")]);
     const value = search.toLowerCase();
     return [
-      ...rows.filter((row) => row.zone.toLowerCase().includes(value)).map((row) => ({ value: row.zone, label: row.zone, sublabel: `${row.region} · Zone` })),
+      ...rows.filter((row) => row.zone.toLowerCase().includes(value)).map((row) => ({ value: row.zone, label: row.zone, sublabel: "Zone" })),
       ...networks.filter((row) => row.name.toLowerCase().includes(value)).map((row) => ({ value: row.name, label: row.name, sublabel: "Network" })),
     ];
   }, []);

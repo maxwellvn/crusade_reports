@@ -60,8 +60,6 @@ export function RegistrationBulkUpload() {
 
   const [manualZones, setManualZones] = React.useState(false);
   const [manualGroups, setManualGroups] = React.useState(false);
-  const [bulkUploadOpen, setBulkUploadOpen] = React.useState(null); // null = loading, true/false = gate state
-  const [allowedNetworks, setAllowedNetworks] = React.useState([]);
   const [file, setFile] = React.useState(null);
   const [preview, setPreview] = React.useState(null); // { ok, errors, warnings, summary, organization, items }
   const [busy, setBusy] = React.useState(false);
@@ -69,15 +67,10 @@ export function RegistrationBulkUpload() {
 
   const orgType = watch("organization_type");
   const zone = watch("zone");
-  // When the gate is closed, only the allowed networks (REON, TNI) can use bulk
-  // upload — so the org type is locked to "network" and the other org fields are
-  // hidden. The server still re-checks; this is just a UX hint.
-  const restricted = bulkUploadOpen === false;
-  const effectiveOrgType = restricted ? "network" : orgType;
-  const needsZone = !restricted && ["zone", "group", "church", "cell"].includes(orgType);
-  const needsGroup = !restricted && ["group", "church", "cell"].includes(orgType);
-  const needsChurch = !restricted && ["church", "cell"].includes(orgType);
-  const needsCell = !restricted && orgType === "cell";
+  const needsZone = ["zone", "group", "church", "cell"].includes(orgType);
+  const needsGroup = ["group", "church", "cell"].includes(orgType);
+  const needsChurch = ["church", "cell"].includes(orgType);
+  const needsCell = orgType === "cell";
 
   const { fetchZones, fetchGroups, fetchNetworks, clearGroupCache } = useOrgData(zone);
 
@@ -87,17 +80,9 @@ export function RegistrationBulkUpload() {
     getJSON("/campaign-settings").then((s) => {
       setManualZones(s.manual_zones_enabled ?? false);
       setManualGroups(s.manual_groups_enabled ?? false);
-      setBulkUploadOpen(s.bulk_upload_open_to_all ?? false);
-      setAllowedNetworks(Array.isArray(s.bulk_upload_allowed_networks) ? s.bulk_upload_allowed_networks : []);
-      // Pre-lock the org type to network when the gate is closed, so the user
-      // lands on the only org shape they can actually submit under.
-      if (s.bulk_upload_open_to_all === false) setValue("organization_type", "network", { shouldValidate: true });
     }).catch(() => {
-      // Fail closed: treat as restricted with the known allowed networks so the
-      // page is still usable if the settings endpoint is temporarily down.
+      // Fail closed: default so free-text zones/groups are never silently enabled.
       setManualZones(false); setManualGroups(false);
-      setBulkUploadOpen(false);
-      setAllowedNetworks(["REON", "TNI"]);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -227,15 +212,8 @@ export function RegistrationBulkUpload() {
               <CardDescription>Tell us which organization these crusades belong to. This applies to every row in the spreadsheet.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {restricted && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-sm text-slate-700">
-                  Bulk upload is currently limited to <strong>{allowedNetworks.join(" and ")}</strong> networks.
-                  Other organizations can <Link to="/crusade-registration/register" className="font-medium underline underline-offset-4">register one crusade at a time</Link> instead.
-                </div>
-              )}
-
               <Field label="Registering as" required error={errors.organization_type?.message}>
-                <Select {...register("organization_type")} aria-invalid={!!errors.organization_type} disabled={restricted}
+                <Select {...register("organization_type")} aria-invalid={!!errors.organization_type}
                   onChange={(e) => setValue("organization_type", e.target.value, { shouldValidate: true })}>
                   <option value="">Select…</option>
                   <option value="zone">Zone</option>
@@ -276,22 +254,14 @@ export function RegistrationBulkUpload() {
                 </div>
               )}
 
-              {effectiveOrgType === "network" && (
+              {orgType === "network" && (
                 <Field label="Network" required error={errors.network_name?.message}>
-                  {restricted ? (
-                    <Select {...register("network_name")} aria-invalid={!!errors.network_name}
-                      onChange={(e) => setValue("network_name", e.target.value, { shouldValidate: true })}>
-                      <option value="">Select…</option>
-                      {allowedNetworks.map((name) => <option key={name} value={name}>{name}</option>)}
-                    </Select>
-                  ) : (
-                    <Controller control={control} name="network_name" render={({ field }) => (
-                      <Combobox value={field.value} invalid={!!errors.network_name} caps
-                        placeholder="Select network" searchPlaceholder="Search networks…"
-                        emptyText="No networks found" fetcher={fetchNetworks}
-                        onSelect={(o) => field.onChange(o.value)} />
-                    )} />
-                  )}
+                  <Controller control={control} name="network_name" render={({ field }) => (
+                    <Combobox value={field.value} invalid={!!errors.network_name} caps
+                      placeholder="Select network" searchPlaceholder="Search networks…"
+                      emptyText="No networks found" fetcher={fetchNetworks}
+                      onSelect={(o) => field.onChange(o.value)} />
+                  )} />
                 </Field>
               )}
 

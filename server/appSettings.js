@@ -49,23 +49,3 @@ export const isManualCitiesEnabled = () => {
 export const setManualCitiesEnabled = (enabled) => db.prepare(
   "INSERT INTO app_settings (key, value) VALUES ('manual_cities_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
 ).run(enabled ? "1" : "0");
-
-// Bulk registration upload access. By default only REON and TNI networks can
-// use the bulk upload page; a super admin can flip this to allow any network
-// (or, when the org type is a zone/group/church/cell, any organization). Off
-// by default so a fresh deployment keeps bulk upload restricted.
-export const isBulkUploadOpenToAll = () =>
-  db.prepare("SELECT value FROM app_settings WHERE key = 'bulk_upload_open_to_all'").get()?.value === "1";
-export const setBulkUploadOpenToAll = (enabled) => db.prepare(
-  "INSERT INTO app_settings (key, value) VALUES ('bulk_upload_open_to_all', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-).run(enabled ? "1" : "0");
-
-// The networks allowed to use bulk upload when the toggle is off. Kept here so
-// the gate (server) and the UI hint share one source of truth.
-export const BULK_UPLOAD_ALLOWED_NETWORKS = ["REON", "TNI"];
-export function canUseBulkUpload(organizationType, networkName) {
-  if (isBulkUploadOpenToAll()) return true;
-  if (organizationType !== "network") return false;
-  const name = String(networkName || "").trim().toUpperCase();
-  return BULK_UPLOAD_ALLOWED_NETWORKS.includes(name);
-}
