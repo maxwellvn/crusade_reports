@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Download, Upload, FileSpreadsheet, Loader2, ArrowUpRight, ArrowLeft, AlertTriangle, Check } from "lucide-react";
+import { Download, Upload, FileSpreadsheet, Loader2, ArrowUpRight, ArrowLeft, AlertTriangle, Check, ChevronDown } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,28 @@ import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page blo
 // parsed org + items into the same draft slot the RegistrationForm reads on
 // mount, then route there so the reporter reviews and submits like a manual
 // entry. This keeps the submit path identical for manual and bulk registrations.
+
+// Non-critical notices (city fallbacks etc.) collapse into a pane; blocking
+// validation errors stay fully visible below. Saves a tall wall of warnings on
+// big files while keeping the useful info one click away.
+function WarningList({ warnings }) {
+  if (!warnings?.length) return null;
+  return (
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+        {warnings.length} city {warnings.length === 1 ? "warning" : "warnings"} — click to expand
+      </summary>
+      <ul className="mt-1.5 max-h-40 space-y-0.5 overflow-y-auto pl-0.5">
+        {warnings.map((w, i) => (
+          <li key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <AlertTriangle className="size-3.5 shrink-0" /> {w}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 export function RegistrationBulkUpload() {
   const navigate = useNavigate();
@@ -79,7 +101,7 @@ export function RegistrationBulkUpload() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function send(f) {
+  async function send(f, commit = false) {
     // Validate the org identity first — the server canonicalizes against the
     // directory, but we don't want to accept a sheet under an incomplete org.
     const ok = await trigger(["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
@@ -93,6 +115,7 @@ export function RegistrationBulkUpload() {
       const v = getValues();
       const fd = new FormData();
       fd.append("file", f);
+      if (commit) fd.append("commit", "1");
       for (const k of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
         "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username"]) {
         fd.append(k, v[k] ?? "");
@@ -100,12 +123,26 @@ export function RegistrationBulkUpload() {
       const res = await fetch("/api/registrations/import", { method: "POST", body: fd });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message || "Import failed");
+      if (commit && body.committed) {
+        toast.success(`${body.count} crusades registered successfully.`);
+        setFile(null);
+        setPreview(null);
+        navigate("/crusade-registration");
+        return;
+      }
       setPreview(body);
     } catch (e) {
       toast.error(e.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  // Direct DB commit for files over the preview threshold (100 rows). The server
+  // inserts every row in one transaction — same path as the manual form submit.
+  function directSubmit() {
+    if (!file) return;
+    send(file, true);
   }
 
   function pick(f) {
@@ -116,6 +153,12 @@ export function RegistrationBulkUpload() {
 
   function loadIntoForm() {
     if (!preview?.ok || !preview.items?.length) return;
+    // The form caps at 500 crusades; the server rejects bigger files, but guard
+    // here too so a stale preview can never write a freeze-the-browser draft.
+    if (preview.items.length > 500) {
+      toast.error(`Too many crusades (${preview.items.length}). The maximum per registration is 500 — split the file into smaller batches.`);
+      return;
+    }
     const v = getValues();
     // Sync any canonicalized org fields the server returned (e.g. canonical zone
     // casing, manual flags) so the form the reporter lands on matches what the
@@ -308,14 +351,19 @@ export function RegistrationBulkUpload() {
                     {preview.summary?.countries?.length ? ` · ${preview.summary.countries.join(", ")}` : ""}
                   </p>
                   {preview.ok ? (
+                    preview.commit_required ? (
+                      <div className="space-y-2">
+                        <WarningList warnings={preview.warnings} />
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Check className="size-3.5 text-primary" /> {preview.summary?.crusades ?? 0} crusades validated. Files over 100 rows upload straight to the database.
+                        </p>
+                        <Button type="button" size="sm" onClick={directSubmit} disabled={busy}>
+                          {busy ? <Loader2 className="animate-spin" /> : <Upload />} Upload all {preview.summary?.crusades ?? 0} crusades directly
+                        </Button>
+                      </div>
+                    ) : (
                     <div className="space-y-2">
-                      {preview.warnings?.length > 0 && (
-                        <ul className="space-y-0.5 text-xs text-muted-foreground">
-                          {preview.warnings.map((w, i) => (
-                            <li key={i} className="flex items-center gap-1.5"><AlertTriangle className="size-3.5 shrink-0" /> {w}</li>
-                          ))}
-                        </ul>
-                      )}
+                      <WarningList warnings={preview.warnings} />
                       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Check className="size-3.5 text-primary" /> Rows validated. Load them into the form to review and submit.
                       </p>
@@ -323,6 +371,7 @@ export function RegistrationBulkUpload() {
                         Load {preview.items.length} crusade{preview.items.length === 1 ? "" : "s"} into form
                       </Button>
                     </div>
+                    )
                   ) : (
                     <div className="space-y-1">
                       <p className="flex items-center gap-1.5 font-medium text-destructive"><AlertTriangle className="size-4" /> Fix these, then re-upload:</p>

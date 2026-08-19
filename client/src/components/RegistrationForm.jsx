@@ -142,7 +142,12 @@ export function RegistrationForm() {
   React.useEffect(() => {
     try {
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
-      if (draft?.values && typeof draft.values === "object") {
+      // A draft past the form's 500-crusade ceiling would re-freeze the page on
+      // every load (31k form fields). Clear it instead of restoring it.
+      if (Array.isArray(draft?.values?.items) && draft.values.items.length > 500) {
+        clearStoredDraft();
+        toast.error("Your saved draft was too large to restore (over 500 crusades) and was cleared. Split the file into smaller batches.");
+      } else if (draft?.values && typeof draft.values === "object") {
         reset({ ...registrationDefaults, ...draft.values, items: Array.isArray(draft.values.items) ? draft.values.items : [] });
         setStep(Math.min(Math.max(Number(draft.step) || 0, 0), STEPS.length - 1));
         setBatchType(draft.batchType || "");

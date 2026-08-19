@@ -2,9 +2,9 @@ import { Router } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { logger, wrap, ApiError } from "../logger.js";
+import { loadWorkbook } from "../xlsxSanitize.js";
+import { resolveCity } from "../cityResolve.js";
 import { loadZones } from "./zones.js";
-import { cityAutocomplete } from "./places.js";
-import { countryCodeByName } from "./countries.js";
 import { db } from "../db.js";
 import { reportSchema } from "../validation.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
@@ -110,7 +110,8 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
 
   const wb = new ExcelJS.Workbook();
   try {
-    await wb.xlsx.load(req.file.buffer);
+    // Retry without comment parts if exceljs can't reconcile the file (see xlsxSanitize.js).
+    await loadWorkbook(wb, req.file.buffer);
   } catch {
     throw new ApiError(422, "BAD_FILE", "Could not read that file — use the .xlsx template");
   }
@@ -230,22 +231,9 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
   const warnings = [];
   for (const c of crusades) {
     if (!c.city) continue;
-    const cc = countryCodeByName(c.country);
-    const k = `${c.country.toLowerCase()}:${c.city.toLowerCase()}`;
-    if (!cityCache.has(k)) {
-      let resolved = { name: c.city, place_id: "" };
-      try {
-        const preds = await cityAutocomplete(c.city, cc);
-        if (preds.length && preds[0].main) resolved = { name: preds[0].main, place_id: preds[0].place_id || "" };
-        else warnings.push(`City "${c.city}" was not found in ${c.country} — kept as you typed it.`);
-      } catch (e) {
-        logger.warn({ err: e, city: c.city }, "import city geocode failed — keeping typed name");
-        warnings.push(`City "${c.city}" could not be checked — kept as you typed it.`);
-      }
-      cityCache.set(k, resolved);
-    }
-    c.city = cityCache.get(k).name;
-    c.city_place_id = cityCache.get(k).place_id;
+    const resolved = await resolveCity(c.city, c.country, cityCache, warnings, "import");
+    c.city = resolved.name;
+    c.city_place_id = resolved.place_id;
   }
 
   // Final schema gate (catches anything the field checks didn't, e.g. missing identity).

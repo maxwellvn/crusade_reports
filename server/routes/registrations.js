@@ -112,7 +112,7 @@ const insertItemStmt = db.prepare(
   `INSERT INTO registration_items (${ITEM_COLS.join(", ")}) VALUES (${ITEM_COLS.map((c) => "@" + c).join(", ")})`
 );
 
-const insertRegistration = db.transaction((d) => {
+export const insertRegistration = db.transaction((d) => {
   const planDate = d.items.map((item) => item.event_date).sort()[0];
   const base = {
     organization_type: d.organization_type,

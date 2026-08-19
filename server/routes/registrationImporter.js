@@ -3,12 +3,12 @@ import multer from "multer";
 import ExcelJS from "exceljs";
 import { logger, wrap, ApiError } from "../logger.js";
 import { loadZones } from "./zones.js";
-import { cityAutocomplete } from "./places.js";
-import { countryCodeByName } from "./countries.js";
 import { db } from "../db.js";
 import { registrationSchema } from "../validation.js";
-import { validateRegistrationOrganization } from "./registrations.js";
+import { validateRegistrationOrganization, insertRegistration } from "./registrations.js";
 import { isManualZonesEnabled, isManualGroupsEnabled, canUseBulkUpload } from "../appSettings.js";
+import { loadWorkbook } from "../xlsxSanitize.js";
+import { resolveCity } from "../cityResolve.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
 // options and the validator can never drift apart. constants.js is pure data.
 import { CRUSADE_TYPES, ZONE_CONTRIBUTIONS, PERMIT_OPTIONS } from "../../client/src/lib/constants.js";
@@ -42,6 +42,7 @@ const CRUSADE_COLS = [
 const ALL_COLS = CRUSADE_COLS;
 
 const TYPE_LABELS = CRUSADE_TYPES.map(([, l]) => l);
+const DIRECT_COMMIT_THRESHOLD = 100;
 const LABEL_TO_CODE = new Map(CRUSADE_TYPES.map(([v, l]) => [l.toLowerCase(), v]));
 const CODES = new Set(CRUSADE_TYPES.map(([v]) => v));
 const PERMIT_SET = new Set(PERMIT_OPTIONS.map((o) => o.toLowerCase()));
@@ -122,7 +123,8 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
 
   const wb = new ExcelJS.Workbook();
   try {
-    await wb.xlsx.load(req.file.buffer);
+    // Retry without comment parts if exceljs can't reconcile the file (see xlsxSanitize.js).
+    await loadWorkbook(wb, req.file.buffer);
   } catch {
     throw new ApiError(422, "BAD_FILE", "Could not read that file — use the .xlsx template");
   }
@@ -240,6 +242,11 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
 
   if (!items.length) throw new ApiError(422, "EMPTY", "No crusade rows found — fill at least one row under the headers.");
 
+  // Over the threshold the preview ships no rows and the client must commit
+  // directly (see the response block below) — the form would freeze loading
+  // tens of thousands of fields. commit=1 skips that gate and inserts to the DB.
+  const directCommit = String(req.body.commit || req.query.commit || "") === "1";
+
   // ---- Canonicalize the registration identity against the live directory ----
   // The server, not the spreadsheet, decides whether a zone/group is canonical.
   // Reuse the same validator the public POST /registrations uses so the rules
@@ -284,22 +291,9 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   const warnings = [];
   for (const c of items) {
     if (!c.city) continue;
-    const cc = countryCodeByName(c.country);
-    const k = `${c.country.toLowerCase()}:${c.city.toLowerCase()}`;
-    if (!cityCache.has(k)) {
-      let resolved = { name: c.city, place_id: "" };
-      try {
-        const preds = await cityAutocomplete(c.city, cc);
-        if (preds.length && preds[0].main) resolved = { name: preds[0].main, place_id: preds[0].place_id || "" };
-        else warnings.push(`City "${c.city}" was not found in ${c.country} — kept as you typed it.`);
-      } catch (e) {
-        logger.warn({ err: e, city: c.city }, "registration import city geocode failed — keeping typed name");
-        warnings.push(`City "${c.city}" could not be checked — kept as you typed it.`);
-      }
-      cityCache.set(k, resolved);
-    }
-    c.city = cityCache.get(k).name;
-    c.city_place_id = cityCache.get(k).place_id;
+    const resolved = await resolveCity(c.city, c.country, cityCache, warnings, "registration import");
+    c.city = resolved.name;
+    c.city_place_id = resolved.place_id;
   }
 
   // Final schema gate (catches anything the field checks didn't, e.g. missing
@@ -331,14 +325,31 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     return res.status(200).json({ ok: false, errors: rowErrors.slice(0, 100), summary });
   }
 
-  // No server-side commit: the parsed rows go back to the client, which loads
-  // them into the form so the reporter reviews and submits like a manual entry.
+  // ---- Commit straight to the database (bulk files over the threshold) -------
+  // Mirrors the manual submit path exactly: same schema, same canonicalization,
+  // same insert transaction — so imported rows are indistinguishable from manual
+  // registrations. city_place_id was already geocoded above.
+  if (directCommit) {
+    const registration = { ...parsed.data, items: parsed.data.items };
+    const id = insertRegistration(registration);
+    // Fire-and-forget housekeeping, same as the manual POST /registrations.
+    import("./places.js").then(({ backfillCityCoords }) => backfillCityCoords().catch(() => {}));
+    import("./registrations.js").then(({ backupDatabaseRolling }) => backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed")));
+    logger.info({ ...summary, id }, "registration import committed");
+    return res.status(201).json({ ok: true, committed: true, id, count: items.length, summary });
+  }
+
+  // Preview mode: the parsed rows go back to the client, which loads them into
+  // the form so the reporter reviews and submits like a manual entry. Over the
+  // threshold we ship no rows — just the flag that forces the direct commit.
   logger.info(summary, "registration import parsed");
   res.status(200).json({
     ok: true,
     errors: [],
-    warnings,
+    // Cap so a huge file (tens of thousands of rows) can't freeze the preview.
+    warnings: warnings.slice(0, 100),
     summary,
+    commit_required: items.length > DIRECT_COMMIT_THRESHOLD,
     // Echo the canonicalized org identity back so the client can sync its pickers
     // (e.g. a manual zone flag the server set, or a canonical zone casing).
     organization: {
@@ -351,7 +362,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
       cell_name: parsed.data.cell_name,
       network_name: parsed.data.network_name,
     },
-    items: parsed.data.items,
+    items: items.length > DIRECT_COMMIT_THRESHOLD ? null : parsed.data.items,
   });
 }));
 
