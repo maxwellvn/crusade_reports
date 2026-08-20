@@ -1378,6 +1378,56 @@
     padding: clamp(22px, 3vw, 36px) clamp(22px, 3.5vw, 40px);
     box-shadow: 0 24px 60px rgba(15, 17, 60, 0.2);
 }
+
+/* Blue Elite uses the clear royal-blue, white and gold language of its staff
+   artwork while the shared campaign avatar keeps its original NOTC styling. */
+.blue-elite-avatar-page {
+    background: #e9f6ff;
+    --primary: 229 100% 42%;
+    --ring: 229 100% 42%;
+}
+.blue-elite-avatar-page .reg-header {
+    border-color: rgba(1, 23, 205, 0.16);
+    box-shadow: 0 12px 30px rgba(2, 28, 108, 0.14);
+}
+.blue-elite-avatar-page .reg-header-link { color: #173b9d; }
+.blue-elite-avatar-page .reg-header-link:hover { color: #0117cd; }
+.blue-elite-avatar-page .avatar-hero,
+.blue-elite-avatar-page .avatar-cta {
+    background: #071d73;
+    box-shadow: 0 26px 64px rgba(2, 28, 108, 0.22);
+}
+.blue-elite-avatar-page .avatar-hero {
+    border: 1px solid rgba(120, 214, 255, 0.28);
+}
+.blue-elite-avatar-page .avatar-hero-glow { display: none; }
+.blue-elite-avatar-page .avatar-hero .reg-eyebrow { color: #ffd84d; }
+.blue-elite-avatar-page .avatar-hero .reg-eyebrow::before { background: #7ed7ff; }
+.blue-elite-avatar-page .avatar-hero-media {
+    border: 1px solid rgba(255, 216, 77, 0.72);
+    border-radius: 12px;
+    box-shadow: 0 18px 42px rgba(0, 10, 62, 0.34);
+}
+.blue-elite-avatar-page .avatar-tool {
+    border: 1px solid #c8e7f8;
+    box-shadow: 0 24px 60px rgba(2, 28, 108, 0.14);
+}
+.blue-elite-avatar-page .avatar-preview {
+    background: #dff3ff;
+    box-shadow: 0 18px 40px rgba(2, 28, 108, 0.14);
+}
+.blue-elite-avatar-page .avatar-upload {
+    border-color: rgba(1, 23, 205, 0.32);
+    background: #f2faff;
+}
+.blue-elite-avatar-page .avatar-upload:hover {
+    border-color: rgba(1, 23, 205, 0.62);
+    background: #e6f6ff;
+}
+.blue-elite-avatar-page .avatar-upload > span:first-of-type {
+    background: #0117cd;
+    box-shadow: 0 8px 20px rgba(1, 23, 205, 0.28);
+}
 @media (max-width: 720px) {
     .avatar-cta { flex-direction: column; align-items: stretch; }
     .avatar-cta a { justify-content: center; }

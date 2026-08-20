@@ -19,11 +19,63 @@ function loadImage(src) {
   });
 }
 
-// Campaign avatar framer. `frameSrc` is the primary frame artwork; if it fails
-// to load (e.g. a country avatar image not yet supplied), `fallbackSrc` is tried
-// next. `hole` gives the photo-slot geometry as fractions of the canvas (cx, cy
-// and r relative to the smaller dimension), so frames of any size work.
-export function AvatarFramer({ frameSrc = NOTC_FRAME, fallbackSrc = "", hole = NOTC_HOLE, downloadName = "notc-avatar.png" }) {
+function balancedLines(value) {
+  const words = value.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return words;
+  let best = [words.join(" ")];
+  let smallestDifference = Infinity;
+  for (let index = 1; index < words.length; index += 1) {
+    const lines = [words.slice(0, index).join(" "), words.slice(index).join(" ")];
+    const difference = Math.abs(lines[0].length - lines[1].length);
+    if (difference < smallestDifference) {
+      best = lines;
+      smallestDifference = difference;
+    }
+  }
+  return best;
+}
+
+function drawOverlayLabel(context, canvas, value, box) {
+  if (!value || !box) return;
+  const x = canvas.width * box.x;
+  const y = canvas.height * box.y;
+  const width = canvas.width * box.width;
+  const height = canvas.height * box.height;
+
+  context.save();
+  context.fillStyle = box.background || "#0117cd";
+  context.fillRect(x, y, width, height);
+
+  const label = String(value).trim().toUpperCase();
+  let lines = [label];
+  let fontSize = height * 0.48;
+  const setFont = () => { context.font = `900 ${fontSize}px "Arial Black", Arial, sans-serif`; };
+  setFont();
+  if (context.measureText(label).width > width * 0.92) {
+    lines = balancedLines(label);
+    fontSize = height * 0.34;
+    setFont();
+  }
+  while (Math.max(...lines.map((line) => context.measureText(line).width)) > width * 0.92 && fontSize > 22) {
+    fontSize -= 1;
+    setFont();
+  }
+
+  context.fillStyle = box.color || "#fff";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const lineHeight = fontSize * 1.02;
+  lines.forEach((line, index) => {
+    const lineY = y + height / 2 + (index - (lines.length - 1) / 2) * lineHeight;
+    context.fillText(line, x + width / 2, lineY, width * 0.92);
+  });
+  context.restore();
+}
+
+// Campaign avatar framer. `frameSrc` is the primary frame artwork and
+// `fallbackSrc` is tried if it cannot load. `hole` and `overlayLabelBox` use
+// fractions of the canvas, so frames and dynamic labels work at any size.
+export function AvatarFramer({ frameSrc = NOTC_FRAME, fallbackSrc = "", hole = NOTC_HOLE, overlayLabel = "", overlayLabelBox = null, downloadName = "notc-avatar.png" }) {
   const canvasRef = React.useRef(null);
   const frameRef = React.useRef(null);
   const photoRef = React.useRef(null);
@@ -57,27 +109,30 @@ export function AvatarFramer({ frameSrc = NOTC_FRAME, fallbackSrc = "", hole = N
       ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
 
       const photo = photoRef.current;
-      if (!photo) return;
-      const { cx, cy, r } = activeHole();
-      const ratio = scalePercent / 100;
-      const maxX = Math.max(0, (photo.width * ratio) / 2 - r);
-      const maxY = Math.max(0, (photo.height * ratio) / 2 - r);
-      const requested = positionRef.current;
-      const position = {
-        x: Math.min(maxX, Math.max(-maxX, requested.x)),
-        y: Math.min(maxY, Math.max(-maxY, requested.y)),
-      };
-      positionRef.current = position;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.translate(cx + position.x, cy + position.y);
-      ctx.scale(ratio, ratio);
-      ctx.drawImage(photo, -photo.width / 2, -photo.height / 2, photo.width, photo.height);
-      ctx.restore();
+      if (photo) {
+        const { cx, cy, r } = activeHole();
+        const ratio = scalePercent / 100;
+        const maxX = Math.max(0, (photo.width * ratio) / 2 - r);
+        const maxY = Math.max(0, (photo.height * ratio) / 2 - r);
+        const requested = positionRef.current;
+        const position = {
+          x: Math.min(maxX, Math.max(-maxX, requested.x)),
+          y: Math.min(maxY, Math.max(-maxY, requested.y)),
+        };
+        positionRef.current = position;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.translate(cx + position.x, cy + position.y);
+        ctx.scale(ratio, ratio);
+        ctx.drawImage(photo, -photo.width / 2, -photo.height / 2, photo.width, photo.height);
+        ctx.restore();
+      }
+
+      drawOverlayLabel(ctx, canvas, overlayLabel, overlayLabelBox);
     },
-    [activeHole],
+    [activeHole, overlayLabel, overlayLabelBox],
   );
 
   // Try the primary frame, then the fallback, then give up.

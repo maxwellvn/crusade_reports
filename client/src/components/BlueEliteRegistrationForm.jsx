@@ -22,7 +22,7 @@ import "../landing.css";
 // Loveworld Blue Elite staff registration — a single confirmed crusade with a
 // single country. Blue Elite members register one crusade (theirs is a country
 // campaign, not a multi-crusade run), then are taken to the Blue Elite campaign
-// avatar page where the frame is the selected country's avatar image. The
+// avatar page where the shared frame is labelled with the selected country. The
 // payload shape stays identical to the public registration (items array of one)
 // so the server stays untouched; submissions hit /api/blue-elite/registrations
 // and are tagged program='blue_elite' server-side.
@@ -288,7 +288,7 @@ export function BlueEliteRegistrationForm() {
                 <CardHeader>
                   <CardTitle>Register your crusade</CardTitle>
                   <CardDescription>
-                    Blue Elite staff register one confirmed crusade with one country — your campaign avatar will use this country’s image.
+                    Blue Elite staff register one confirmed crusade with one country — your campaign avatar will show this country.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -317,7 +317,7 @@ export function BlueEliteRegistrationForm() {
                       <Field label="Expected attendance" required error={rowErr.expected_attendance?.message}>
                         <Input type="number" min="1" placeholder="e.g. 500" {...register("items.0.expected_attendance")} aria-invalid={!!rowErr.expected_attendance} />
                       </Field>
-                      <Field label="Country" required error={rowErr.country?.message} hint="Where this crusade will hold — your avatar uses this country’s image">
+                      <Field label="Country" required error={rowErr.country?.message} hint="Where this crusade will hold — your avatar will show this country">
                         <Controller control={control} name="items.0.country" render={({ field }) => (
                           <Combobox value={field.value} invalid={!!rowErr.country} placeholder="Select or search country" searchPlaceholder="Scroll or type a country…"
                             minChars={0} emptyText="No countries found" fetcher={fetchCountries}
