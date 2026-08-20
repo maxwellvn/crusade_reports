@@ -266,7 +266,7 @@ const KPI_WIDGETS = {
     title: "Online Crusades",
     render: (s) => <StatTile label="Online Crusades" value={nfull.format(s.by_format?.find((r) => r.key === "online")?.crusades || 0)} sub="Fully virtual events held" />,
   },
-  countries_covered: { title: "Countries Covered", render: (s) => <StatTile label="Countries Covered" value={nfull.format(s.by_country?.length || 0)} /> },
+  countries_covered: { title: "Countries Covered", render: (s) => <StatTile label="Countries Covered" value={nfull.format(s.totals?.countries || 0)} /> },
   registered: {
     title: "Crusades Registered",
     render: (s) => <StatTile label="Crusades Registered" value={nfull.format(s.registered?.total || 0)}

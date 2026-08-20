@@ -100,9 +100,12 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
   const byCountryNormalized = [...byCountry]
     .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
     .sort((a, b) => Number(b.attendance || 0) + Number(b.online_attendance || 0) - (Number(a.attendance || 0) + Number(a.online_attendance || 0)));
+  const canonicalCountryCount = new Set(
+    byCountry.map((row) => resolveCountryName(row.key)).filter(Boolean)
+  ).size;
 
   res.json({
-    totals,
+    totals: { ...totals, countries: canonicalCountryCount },
     by_format: by("format"),
     reports: db.prepare("SELECT COUNT(*) AS n FROM reports").get().n,
     by_category: by("event_type"),

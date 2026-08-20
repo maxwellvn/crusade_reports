@@ -505,12 +505,16 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
   const byCountry = byCountryRaw
     .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
     .sort((a, b) => b.planned - a.planned || a.key.localeCompare(b.key));
+  const canonicalCountryCount = new Set(
+    byCountryRaw.map((row) => resolveCountryName(row.key)).filter(Boolean)
+  ).size;
 
   res.json({
     totals: {
       ...totals,
-      // Normalized country count can never exceed COUNTRIES.length.
-      countries: new Set(byCountry.map((row) => row.key)).size,
+      // Unresolved legacy upload values remain visible for cleanup, but they
+      // are not nations and must not inflate the canonical country KPI.
+      countries: Math.min(canonicalCountryCount, COUNTRIES.length),
     },
     by_type: registrationTypeBreakdown(),
     by_country: byCountry,

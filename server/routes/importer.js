@@ -179,10 +179,16 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
       if (raw(m.k) && !/^-?\d[\d, ]*$/.test(raw(m.k))) rowErrors.push(`Row ${r}: ${m.h} "${raw(m.k)}" must be a number.`);
     }
 
+    const rawCountry = raw("country");
+    const country = resolveCountryName(rawCountry);
+    if (rawCountry && !country) {
+      rowErrors.push(`Row ${r}: Country "${rawCountry}" is not recognized. Use a country from the template list.`);
+    }
+
     const c = {
       event_type: code || rawType, other_event_type: raw("other_event_type"), event_name: raw("event_name"),
       format: rawFormat === "online" ? "online" : "physical",
-      country: raw("country"), city: raw("city"), city_place_id: "", event_date: date, attendance: toInt(get("attendance"), 0),
+      country: country || rawCountry, city: raw("city"), city_place_id: "", event_date: date, attendance: toInt(get("attendance"), 0),
       online_participation: toInt(get("online_participation"), 0),
       minister_name: raw("minister_name"), venue: raw("venue"),
     };

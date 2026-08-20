@@ -213,6 +213,12 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
       if (bad.length) rowErrors.push(`Row ${r}, column "Zone Contribution": unknown value(s) "${bad.join(", ")}". Pick from: ${ZONE_CONTRIBUTIONS.join(", ")}.`);
     }
 
+    const rawCountry = raw("country");
+    const country = resolveCountryName(rawCountry);
+    if (rawCountry && !country) {
+      rowErrors.push(`Row ${r}, column "Country": "${rawCountry}" is not recognized. Use a country from the template list.`);
+    }
+
     const item = {
       event_type: code || rawType,
       event_name: raw("event_name"),
@@ -220,7 +226,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
       venue: raw("venue"),
       expected_attendance: attendance,
       minister_name: raw("minister_name"),
-      country: resolveCountryName(raw("country")) || raw("country"),
+      country: country || rawCountry,
       city: raw("city"),
       city_place_id: "",
       // Multi-select fields arrive as comma-joined strings; split into arrays so

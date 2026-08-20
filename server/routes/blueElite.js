@@ -126,9 +126,12 @@ blueElite.get("/registrations/live", requirePageAccess("dashboard/blue-elite"), 
   const byCountry = byCountryRaw
     .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
     .sort((a, b) => b.planned - a.planned || a.key.localeCompare(b.key));
+  const canonicalCountryCount = new Set(
+    byCountryRaw.map((row) => resolveCountryName(row.key)).filter(Boolean)
+  ).size;
 
   res.json({
-    totals: { ...totals, countries: new Set(byCountry.map((row) => row.key)).size },
+    totals: { ...totals, countries: canonicalCountryCount },
     by_type: db.prepare(
       `SELECT event_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items WHERE program = ? GROUP BY event_type ORDER BY planned DESC`).all(PROGRAM),

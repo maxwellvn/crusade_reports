@@ -1,7 +1,16 @@
 import { z } from "zod";
 import { METRIC_FIELDS } from "./db.js";
+import { resolveCountryName } from "./routes/countries.js";
 
 const nonNegInt = z.coerce.number().int().min(0);
+const canonicalCountry = z.string().trim().min(1, "Country is required").transform((value, ctx) => {
+  const country = resolveCountryName(value);
+  if (!country) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Choose a valid country; "${value}" is not recognized` });
+    return z.NEVER;
+  }
+  return country;
+});
 const contactFields = {
   contact_name: z.string().trim().min(2, "Full name is required").max(200),
   contact_email: z.string().trim().email("Enter a valid email address").max(254),
@@ -19,7 +28,7 @@ const crusade = z
     event_type: z.string().trim().min(1, "Crusade type is required"),
     other_event_type: z.string().trim().optional().default(""),
     event_name: z.string().trim().min(1, "Event name is required"),
-    country: z.string().trim().min(1, "Country is required"),
+    country: canonicalCountry,
     city: z.string().trim().min(1, "City is required"),
     city_place_id: z.string().trim().optional().default(""),
     event_date: z.string().trim().min(1, "Event date is required"),
@@ -109,7 +118,7 @@ const collaborationFields = {
 const registrationItem = z
   .object({
     ...registrationDetails,
-    country: z.string().trim().min(1, "Country is required"),
+    country: canonicalCountry,
     city_place_id: z.string().trim().optional().default(""),
     ...collaborationFields,
   });

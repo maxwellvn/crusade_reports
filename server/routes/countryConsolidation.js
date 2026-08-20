@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { requireSuperAdmin } from "../auth.js";
 import { wrap, ApiError } from "../logger.js";
+import { backupDatabase } from "../databaseProtection.js";
 import { COUNTRIES, resolveCountryName } from "./countries.js";
 
 // Tool for collapsing duplicate / variant country names left behind by bulk
@@ -72,11 +73,12 @@ countryConsolidation.get("/", requireSuperAdmin, wrap((_req, res) => {
   res.json(analyze());
 }));
 
-countryConsolidation.post("/apply", requireSuperAdmin, wrap((req, res) => {
+countryConsolidation.post("/apply", requireSuperAdmin, wrap(async (req, res) => {
   const { confirm } = req.body || {};
   if (confirm !== true) throw new ApiError(422, "CONFIRM_REQUIRED", "Pass confirm: true to apply the consolidation.");
 
   const analysis = analyze();
+  const backup = await backupDatabase("pre-country-consolidation");
   let itemsUpdated = 0;
   let registrationsUpdated = 0;
 
@@ -97,6 +99,7 @@ countryConsolidation.post("/apply", requireSuperAdmin, wrap((req, res) => {
   const after = analyze();
   res.json({
     ok: true,
+    backup: { name: backup.name, bytes: backup.bytes },
     updated: { registration_items: itemsUpdated, registrations: registrationsUpdated },
     before: analysis,
     after,
