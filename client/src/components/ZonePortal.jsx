@@ -15,12 +15,14 @@ import { getJSON, postForm, postJSON, putJSON } from "@/lib/api";
 import { useOrgData } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
+import { Pagination } from "@/lib/tableTools";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
 import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const PAGE_SIZE = 50;
 const SOURCE_LABELS = { network: "Network directly", zone: "Zones", group: "Groups", church: "Churches", cell: "Cells", other: "Other ministries" };
 const sourceLabel = (source, networkName) => source === "network" ? `${networkName} directly` : (SOURCE_LABELS[source] || "Other ministries");
 
@@ -39,9 +41,30 @@ export function ZonePortal() {
   const [typeFilter, setTypeFilter] = React.useState("");
   const [readinessFilter, setReadinessFilter] = React.useState("");
   const [sourceFilter, setSourceFilter] = React.useState("");
+  const [page, setPage] = React.useState(1);
 
-  const loadPortal = React.useCallback(() => getJSON(`/zone-portal/${token}`).then(setData).catch((e) => setError(e.message)), [token]);
+  // Filters and pagination are applied server-side so the dashboard stays fast
+  // even with thousands of crusades. A short debounce keeps the search box
+  // from firing a request per keystroke.
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
+  React.useEffect(() => {
+    const timer = setTimeout(() => { setDebouncedQuery(query.trim()); setPage(1); }, 350);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const loadPortal = React.useCallback(() => {
+    const params = new URLSearchParams();
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    if (typeFilter) params.set("event_type", typeFilter);
+    if (readinessFilter) params.set("readiness_status", readinessFilter);
+    if (sourceFilter) params.set("source", sourceFilter);
+    params.set("page", String(page));
+    params.set("page_size", String(PAGE_SIZE));
+    getJSON(`/zone-portal/${token}?${params.toString()}`).then(setData).catch((e) => setError(e.message));
+  }, [token, debouncedQuery, typeFilter, readinessFilter, sourceFilter, page]);
   React.useEffect(() => { loadPortal(); }, [loadPortal]);
+
+  const changeFilter = (setter) => (value) => { setter(value); setPage(1); };
 
   if (error)
     return (
@@ -55,18 +78,10 @@ export function ZonePortal() {
     );
 
   const editingCrusade = data?.items.find((item) => item.id === openCrusade) || null;
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredItems = (data?.items || []).filter((item) => {
-    const searchable = [item.event_name, item.event_type, typeLabel(item.event_type), item.country, item.city, item.venue, item.event_date]
-      .filter(Boolean).join(" ").toLowerCase();
-    return (!normalizedQuery || searchable.includes(normalizedQuery))
-      && (!typeFilter || item.event_type === typeFilter)
-      && (!readinessFilter || item.readiness_status === readinessFilter)
-      && (!sourceFilter || item.source_scope === sourceFilter);
-  });
-  const filteredUnregistered = (data?.crusades || []).filter((crusade) => !crusade.registration_item_id && (!normalizedQuery
-    || [crusade.event_name, crusade.event_type, typeLabel(crusade.event_type), crusade.country, crusade.city, crusade.venue, crusade.event_date]
-      .filter(Boolean).join(" ").toLowerCase().includes(normalizedQuery)) && (!sourceFilter || crusade.source_scope === sourceFilter));
+  const filteredItems = data?.items || [];
+  const filteredUnregistered = data?.crusades || [];
+  const itemsTotalPages = data ? Math.max(Math.ceil(data.items_total / PAGE_SIZE), 1) : 1;
+  const crusadesTotalPages = data ? Math.max(Math.ceil(data.crusades_total / PAGE_SIZE), 1) : 1;
 
   return (
     <div className="min-h-screen bg-background">
@@ -104,11 +119,11 @@ export function ZonePortal() {
                   <Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9"
                     placeholder="Search crusades by name, city, venue or date…" aria-label="Search crusades" />
                 </div>
-                <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="Filter by crusade type">
+                <Select value={typeFilter} onChange={(event) => changeFilter(setTypeFilter)(event.target.value)} aria-label="Filter by crusade type">
                   <option value="">All crusade types</option>
                   {CRUSADE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </Select>
-                <Select value={readinessFilter} onChange={(event) => setReadinessFilter(event.target.value)} aria-label="Filter by readiness">
+                <Select value={readinessFilter} onChange={(event) => changeFilter(setReadinessFilter)(event.target.value)} aria-label="Filter by readiness">
                   <option value="">All readiness statuses</option>
                   <option value="confirmed">Confirmed</option>
                   <option value="pending">Pending confirmation</option>
@@ -117,14 +132,14 @@ export function ZonePortal() {
                   <option value="holding">Holding as planned</option>
                   <option value="not_holding">Not holding</option>
                 </Select>
-                {data.kind === "network" && <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} aria-label="Filter by registration source"><option value="">All registration sources</option><option value="network">Registered directly by {data.zone}</option><option value="church">Registered by churches</option><option value="zone">Registered by zones</option><option value="group">Registered by groups</option><option value="cell">Registered by cells</option><option value="other">Other ministry registrations</option></Select>}
+                {data.kind === "network" && <Select value={sourceFilter} onChange={(event) => changeFilter(setSourceFilter)(event.target.value)} aria-label="Filter by registration source"><option value="">All registration sources</option><option value="network">Registered directly by {data.zone}</option><option value="church">Registered by churches</option><option value="zone">Registered by zones</option><option value="group">Registered by groups</option><option value="cell">Registered by cells</option><option value="other">Other ministry registrations</option></Select>}
               </CardContent>
             </Card>
 
             <div className="flex border-b" role="tablist" aria-label="Crusade records">
               {[['registrations', 'Registrations'], ...(data.reporting_open ? [['reports', 'Reports']] : [])].map(([value, label]) => (
                 <button key={value} type="button" role="tab" aria-selected={activeTab === value}
-                  onClick={() => setActiveTab(value)}
+                  onClick={() => { setActiveTab(value); setPage(1); }}
                   className={`border-b-2 px-4 py-2 text-sm font-medium ${activeTab === value ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                   {label}
                 </button>
@@ -195,6 +210,7 @@ export function ZonePortal() {
                     </tbody>
                   </table>
                 )}
+                {data.items_total > PAGE_SIZE && <div className="border-t pt-4"><Pagination page={page} totalPages={itemsTotalPages} onPage={setPage} /></div>}
               </CardContent>
             </Card>}
 
@@ -211,7 +227,7 @@ export function ZonePortal() {
                 <Button asChild variant="outline" size="sm"><a href={`/api/zone-portal/${encodeURIComponent(token)}/export/reports?format=csv`}><Download className="size-4" /> Export CSV</a></Button>
               </CardHeader>
               <CardContent className="space-y-4 overflow-x-auto">
-                <ReportTemplateWorkflow token={token} pendingCount={data.items.filter((item) => !item.visitor && !item.report_id).length} onImported={loadPortal} />
+                <ReportTemplateWorkflow token={token} pendingCount={data.pendingCount || 0} onImported={loadPortal} />
                 {!filteredItems.length ? (
                   <p className="py-10 text-center text-sm text-muted-foreground">No registered crusades match your search and filters.</p>
                 ) : (
@@ -260,6 +276,7 @@ export function ZonePortal() {
                     </tbody>
                   </table>
                 )}
+                {data.items_total > PAGE_SIZE && <div className="border-t pt-4"><Pagination page={page} totalPages={itemsTotalPages} onPage={setPage} /></div>}
                 {filteredUnregistered.length > 0 && <div className="space-y-3 border-t pt-5">
                   <div>
                     <p className="text-sm font-medium">Reports without prior registration</p>
@@ -285,6 +302,7 @@ export function ZonePortal() {
                     </tbody>
                   </table>
                 </div>}
+                {data.crusades_total > PAGE_SIZE && <div className="pt-4"><Pagination page={page} totalPages={crusadesTotalPages} onPage={setPage} /></div>}
               </CardContent>
             </Card>}
             {viewingCrusade && (

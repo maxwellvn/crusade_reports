@@ -4,6 +4,12 @@
 FROM node:22.14.0-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
+# Toolchain for better-sqlite3: when the prebuilt binary download aborts (flaky
+# CDN in a container build), node-gyp falls back to compiling from source and
+# needs Python + a C++ compiler. Removing them afterwards keeps the layer small.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 # Coolify may inject NODE_ENV=production at build time. Explicitly include dev
 # dependencies because Vite/Tailwind are build tools, then prune them below.
 # Avoid a shared BuildKit npm cache here. Coolify can leave that cache in a

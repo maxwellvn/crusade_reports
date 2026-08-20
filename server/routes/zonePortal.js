@@ -207,10 +207,53 @@ const PORTAL_REPORT_EXPORT_COLUMNS = [
   { header: "Had prior registration", value: (row) => yesNo(row.registration_item_id) },
 ];
 
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+// Escape LIKE wildcards so user searches match literally.
+const escapeLike = (value) => value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+
+// Build an extra SQL filter fragment for the portal list queries from the
+// dashboard's search box and filter selects. The scope clause (listWhere) is
+// always applied first; these are additive user filters.
+function buildListFilter({ q, eventType, readiness, source, scopeSql, scopeParams, scopeKind, prefix = "" }) {
+  const p = prefix;
+  const clauses = [];
+  const params = [];
+  if (q) {
+    const like = `%${escapeLike(q)}%`;
+    clauses.push(`(LOWER(COALESCE(${p}event_name, '')) LIKE LOWER(?) ESCAPE '\\'
+        OR LOWER(COALESCE(${p}event_type, '')) LIKE LOWER(?) ESCAPE '\\'
+        OR LOWER(COALESCE(${p}country, '')) LIKE LOWER(?) ESCAPE '\\'
+        OR LOWER(COALESCE(${p}city, '')) LIKE LOWER(?) ESCAPE '\\'
+        OR LOWER(COALESCE(${p}venue, '')) LIKE LOWER(?) ESCAPE '\\'
+        OR COALESCE(${p}event_date, '') LIKE ?)`);
+    params.push(like, like, like, like, like, like);
+  }
+  if (eventType) { clauses.push(`${p}event_type = ?`); params.push(eventType); }
+  if (readiness) { clauses.push(`${p}readiness_status = ?`); params.push(readiness); }
+  // The source filter only makes sense on network dashboards. It is derived
+  // from the same visitor logic the client used: a row whose scope column does
+  // not equal the portal's name is a "visitor" and its source is its
+  // organization_type (or "other"); the portal's own rows have source = kind.
+  if (source) {
+    clauses.push(`CASE WHEN ${scopeSql} = ? THEN '${scopeKind}' ELSE COALESCE(NULLIF(${p}organization_type, ''), 'other') END = ?`);
+    params.push(...scopeParams, source);
+  }
+  if (!clauses.length) return { sql: "", params };
+  return { sql: ` AND ${clauses.join(" AND ")}`, params };
+}
+
 // GET /api/zone-portal/:token — everything the zone dashboard shows. Every query
 // is scoped to the token's zone; there is no way to reach another zone's rows.
+// List payloads are paginated server-side so dashboards with thousands of
+// crusades stay fast; totals and breakdowns are always computed over the full
+// scoped set, never the page.
 zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   const { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere } = resolvePortalScope(req.params.token);
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(req.query.page_size, 10) || DEFAULT_PAGE_SIZE));
+  const offset = (page - 1) * pageSize;
 
   const registrations = db.prepare(`
     SELECT r.id, r.created_at, r.organization_type, r.group_name, r.church_name, r.country, r.plan_date,
@@ -219,6 +262,22 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     WHERE ${registrationsWhere} AND (r.program = 'public' OR r.program IS NULL)
     GROUP BY r.id ORDER BY r.created_at DESC LIMIT 500
   `).all(name);
+
+  // Items: scoped + filtered + paginated. The search/filters come from the
+  // dashboard's query params so the page reflects the applied filters.
+  const filter = buildListFilter({
+    q: (req.query.q || "").trim(),
+    eventType: req.query.event_type || "",
+    readiness: req.query.readiness_status || "",
+    source: req.query.source || "",
+    scopeSql: `registration_items.${col}`,
+    scopeParams: [name],
+    scopeKind: kind,
+    prefix: "registration_items.",
+  });
+  const scopeItemsSql = `(${listWhere("registration_items.")}) AND (registration_items.program = 'public' OR registration_items.program IS NULL)`;
+  const itemsTotal = db.prepare(`SELECT COUNT(*) n FROM registration_items WHERE ${scopeItemsSql}${filter.sql}`)
+    .get(...listParams, ...filter.params).n;
 
   const items = db.prepare(`
     SELECT registration_items.id, registration_items.registration_id, registration_items.event_type,
@@ -239,28 +298,62 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     FROM registration_items
     LEFT JOIN registrations reg ON reg.id = registration_items.registration_id
     LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
-    WHERE ${listWhere("registration_items.")} AND (registration_items.program = 'public' OR registration_items.program IS NULL)
+    WHERE ${scopeItemsSql}${filter.sql}
     ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
-  `).all(...listParams).map((r) => {
+    LIMIT ? OFFSET ?
+  `).all(...listParams, ...filter.params, pageSize, offset).map((r) => {
     const visitor = r[col] !== name;
     return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
   });
+
+  // Unregistered crusade reports (the "didn't register" form) — paginated too.
+  const crusadeFilter = buildListFilter({
+    q: (req.query.q || "").trim(),
+    eventType: req.query.event_type || "",
+    readiness: "",
+    source: req.query.source || "",
+    scopeSql: col,
+    scopeParams: [name],
+    scopeKind: kind,
+    prefix: "",
+  });
+  const scopeCrusadesSql = `(${listWhere("")}) AND registration_item_id IS NULL`;
+  const crusadesTotal = db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql}`)
+    .get(...listParams, ...crusadeFilter.params).n;
 
   const crusades = db.prepare(`
     SELECT id, registration_item_id, event_date, event_type, other_event_type, event_name, format, city, country,
            organization_type, zone, group_name, church_name, cell_name, network_name,
            attendance, online_participation, salvation, minister_name, venue
-    FROM crusades WHERE ${listWhere("")} ORDER BY event_date DESC, id DESC LIMIT 500
-  `).all(...listParams).map((r) => {
+    FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql} ORDER BY event_date DESC, id DESC LIMIT ? OFFSET ?
+  `).all(...listParams, ...crusadeFilter.params, pageSize, offset).map((r) => {
     const visitor = r[col] !== name;
     return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
   });
 
-  const sourceCounts = new Map();
-  for (const item of items) sourceCounts.set(item.source_scope, (sourceCounts.get(item.source_scope) || 0) + (item.planned_count || 0));
-  const source_breakdown = ["network", "zone", "group", "church", "cell", "other"]
-    .filter((source) => sourceCounts.has(source))
-    .map((source) => ({ source, planned: sourceCounts.get(source) }));
+  // Source breakdown over the FULL scoped set (not the page) so the network
+  // dashboard's aggregate card stays correct regardless of pagination.
+  let source_breakdown = db.prepare(`
+    SELECT CASE WHEN ${col} = ? THEN '${kind}'
+                ELSE COALESCE(NULLIF(organization_type, ''), 'other') END AS source,
+           COALESCE(SUM(planned_count), 0) AS planned
+    FROM registration_items
+    WHERE ${scopeItemsSql}
+    GROUP BY source
+  `).all(name, ...listParams);
+  const sourceOrder = ["network", "zone", "group", "church", "cell", "other"];
+  const sourceByKey = new Map(source_breakdown.map((entry) => [entry.source, entry.planned]));
+  source_breakdown = sourceOrder
+    .filter((source) => sourceByKey.has(source))
+    .map((source) => ({ source, planned: sourceByKey.get(source) }));
+
+  // Count of this portal's own registered crusades still awaiting a report.
+  const pendingCount = db.prepare(`
+    SELECT COUNT(*) n FROM registration_items
+    LEFT JOIN crusades c ON c.registration_item_id = registration_items.id
+    WHERE registration_items.${col} = ? AND c.report_id IS NULL
+      AND (registration_items.program = 'public' OR registration_items.program IS NULL)
+  `).get(name).n;
 
   const totals = {
     planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(name).n,
@@ -269,7 +362,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
   };
 
-  res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, source_breakdown, registrations, items, crusades });
+  res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, source_breakdown, pendingCount, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
 }));
 
 // CSV/Excel export of registered crusades visible on this dashboard.
