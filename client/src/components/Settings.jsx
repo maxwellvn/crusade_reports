@@ -73,6 +73,32 @@ export function Settings() {
   const [editingPermissions, setEditingPermissions] = React.useState(null);
   const [permissionDraft, setPermissionDraft] = React.useState([]);
   const [savingPermissions, setSavingPermissions] = React.useState(false);
+  const [consolidation, setConsolidation] = React.useState(null);
+  const [loadingConsolidation, setLoadingConsolidation] = React.useState(false);
+  const [applyingConsolidation, setApplyingConsolidation] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!admin?.is_super_admin) return;
+    setLoadingConsolidation(true);
+    getJSON("/admin/country-consolidation")
+      .then(setConsolidation)
+      .catch((error) => toast.error(error.message))
+      .finally(() => setLoadingConsolidation(false));
+  }, [admin]);
+
+  async function applyConsolidation() {
+    if (!confirm("Rewrite every stored country name to its canonical spelling? This updates all registration rows at once. Backups are taken automatically.")) return;
+    setApplyingConsolidation(true);
+    try {
+      const result = await postJSON("/admin/country-consolidation/apply", { confirm: true });
+      setConsolidation(result.after);
+      toast.success(`Consolidated ${result.updated.registration_items} crusade rows and ${result.updated.registrations} registrations.`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setApplyingConsolidation(false);
+    }
+  }
 
   React.useEffect(() => {
     if (!admin?.is_super_admin) { setLoading(false); return; }
@@ -274,6 +300,71 @@ export function Settings() {
           <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. Off by default — groups should come from the churches API." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
           <ManualOrgToggle label="Manual cities" description="Allow registrants to type a city name not found in the search results. On by default — the create option only appears when no match is found." checked={manualCities} disabled={manualCities === null || savingManualOrg} onChange={() => toggleManualOrg("cities")} />
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="Country consolidation" description="Clean up duplicate or variant country names left by bulk uploads. Dashboards already count them as one, but the stored values stay as typed until consolidated.">
+        {loadingConsolidation ? <p className="text-sm text-muted-foreground">Scanning country values…</p>
+          : consolidation ? (
+          <div className="max-w-xl space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <dl className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Stored</dt>
+                  <dd className="mt-1 text-xl font-semibold text-slate-950">{consolidation.distinctStored}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Canonical</dt>
+                  <dd className="mt-1 text-xl font-semibold text-slate-950">{consolidation.canonicalTotal}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Represented</dt>
+                  <dd className="mt-1 text-xl font-semibold text-slate-950">{consolidation.canonicalRepresented}</dd>
+                </div>
+              </dl>
+              {consolidation.distinctStored > consolidation.canonicalTotal && (
+                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {consolidation.distinctStored - consolidation.canonicalTotal} duplicate spellings — {consolidation.affected.registration_items} crusade rows, {consolidation.affected.registrations} registrations affected.
+                </p>
+              )}
+              {consolidation.distinctStored <= consolidation.canonicalTotal && (
+                <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">No duplicate country spellings found — stored values are already canonical.</p>
+              )}
+            </div>
+            {consolidation.variantGroups.length > 0 && (
+              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="px-3 py-2 font-medium">Canonical</th>
+                      <th className="px-3 py-2 font-medium">Stored variants</th>
+                      <th className="px-3 py-2 text-right font-medium">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consolidation.variantGroups.map((group) => (
+                      <tr key={group.canonical} className="border-t border-slate-100">
+                        <td className="px-3 py-2 font-medium text-slate-900">{group.canonical}</td>
+                        <td className="px-3 py-2 text-slate-600">{group.variants.join(", ")}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">{group.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {consolidation.unresolvable.length > 0 && (
+              <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">Unresolvable country names (kept as-is): {consolidation.unresolvable.join(", ")}</p>
+            )}
+            {consolidation.variantGroups.length > 0 && (
+              <div className="flex items-center gap-3">
+                <Button type="button" disabled={applyingConsolidation} onClick={applyConsolidation} className="rounded-full">
+                  {applyingConsolidation ? "Consolidating…" : "Consolidate country names"}
+                </Button>
+                <p className="text-xs text-slate-500">Rewrites stored values to canonical spellings across all registrations.</p>
+              </div>
+            )}
+          </div>
+        ) : <p className="text-sm text-muted-foreground">Could not load country consolidation.</p>}
       </SettingsSection>
 
       <SettingsSection title="Dashboard accounts" description="Grant a KingsChat account access to the main administration dashboards. Use the access button to choose which pages each account can open.">
