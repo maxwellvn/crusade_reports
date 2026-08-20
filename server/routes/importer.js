@@ -5,6 +5,7 @@ import { logger, wrap, ApiError } from "../logger.js";
 import { loadWorkbook } from "../xlsxSanitize.js";
 import { resolveCity } from "../cityResolve.js";
 import { loadZones } from "./zones.js";
+import { resolveCountryName } from "./countries.js";
 import { db } from "../db.js";
 import { reportSchema } from "../validation.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
@@ -216,7 +217,7 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
     online_attendance: crusades.reduce((s, c) => s + c.online_participation, 0),
     total_attendance: crusades.reduce((s, c) => s + c.attendance + c.online_participation, 0),
     reporting_as: report.organization_type,
-    countries: [...new Set(crusades.map((c) => c.country).filter(Boolean))],
+    countries: [...new Set(crusades.map((c) => resolveCountryName(c.country) || c.country).filter(Boolean))],
   };
 
   if (rowErrors.length) {

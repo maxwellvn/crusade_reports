@@ -9,6 +9,7 @@ import { validateRegistrationOrganization, insertRegistration } from "./registra
 import { isManualZonesEnabled, isManualGroupsEnabled } from "../appSettings.js";
 import { loadWorkbook } from "../xlsxSanitize.js";
 import { resolveCity } from "../cityResolve.js";
+import { resolveCountryName } from "./countries.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
 // options and the validator can never drift apart. constants.js is pure data.
 import { CRUSADE_TYPES, ZONE_CONTRIBUTIONS, PERMIT_OPTIONS } from "../../client/src/lib/constants.js";
@@ -219,7 +220,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
       venue: raw("venue"),
       expected_attendance: attendance,
       minister_name: raw("minister_name"),
-      country: raw("country"),
+      country: resolveCountryName(raw("country")) || raw("country"),
       city: raw("city"),
       city_place_id: "",
       // Multi-select fields arrive as comma-joined strings; split into arrays so

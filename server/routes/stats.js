@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
 import { requirePageAccess } from "../auth.js";
+import { resolveCountryName } from "./countries.js";
 
 export const stats = Router();
 
@@ -95,6 +96,11 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
        FROM crusades ${where} GROUP BY ${col} ORDER BY (SUM(attendance) + SUM(online_participation)) DESC`
     ).all();
 
+  const byCountry = by("country");
+  const byCountryNormalized = [...byCountry]
+    .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
+    .sort((a, b) => Number(b.attendance || 0) + Number(b.online_attendance || 0) - (Number(a.attendance || 0) + Number(a.online_attendance || 0)));
+
   res.json({
     totals,
     by_format: by("format"),
@@ -120,7 +126,7 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
          AND ((i.network_name IS NOT NULL AND TRIM(i.network_name) <> '') OR LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow')
        GROUP BY key ORDER BY crusades DESC`
     ).all(YOUTHS_AGLOW),
-    by_country: by("country"),
+    by_country: byCountryNormalized,
     by_city: by("city"),
     // Real geocoded city points for the map — no coordinates, no row.
     geo: db.prepare(

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { requirePageAccess } from "../auth.js";
 import { wrap } from "../logger.js";
-import { COUNTRIES } from "./countries.js";
+import { COUNTRIES, resolveCountryName } from "./countries.js";
 import { coverageData } from "./coverage.js";
 
 export const countryCoverage = Router();
@@ -71,7 +71,7 @@ function getCountriesWithoutRegistrations() {
   const registeredCountries = new Set(
     db.prepare(
       `SELECT DISTINCT country FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
-    ).all().map((row) => row.country)
+    ).all().map((row) => resolveCountryName(row.country)).filter(Boolean)
   );
   return COUNTRIES.filter((c) => !registeredCountries.has(c.name));
 }
@@ -94,7 +94,7 @@ function groupByContinent(countries) {
 
 // Aggregate all zones into a single "GPD Zones" group
 function getGpdZonesCountryBreakdown() {
-  const rows = db.prepare(`
+  const raw = db.prepare(`
     SELECT i.country, SUM(i.planned_count) AS crusades, COUNT(DISTINCT i.registration_id) AS registrations
     FROM registration_items i
     WHERE ${PUBLIC_PROGRAM_FILTER} AND i.zone IS NOT NULL AND i.country IS NOT NULL
@@ -102,6 +102,7 @@ function getGpdZonesCountryBreakdown() {
     ORDER BY crusades DESC
   `).all();
 
+  const rows = mergeByCanonicalCountry(raw);
   const totalCrusades = rows.reduce((sum, r) => sum + r.crusades, 0);
   const totalRegistrations = rows.reduce((sum, r) => sum + r.registrations, 0);
   const uniqueCountries = new Set(rows.map((r) => r.country));
@@ -115,8 +116,25 @@ function getGpdZonesCountryBreakdown() {
   };
 }
 
+// Merge raw country-name rows into canonical countries so variant spellings
+// collapse into one row (keeps counts capped at the canonical country list).
+function mergeByCanonicalCountry(rawRows) {
+  const byCanonical = new Map();
+  for (const row of rawRows) {
+    const key = resolveCountryName(row.country) || row.country;
+    const existing = byCanonical.get(key);
+    if (existing) {
+      existing.crusades += Number(row.crusades);
+      existing.registrations += Number(row.registrations);
+    } else {
+      byCanonical.set(key, { country: key, crusades: Number(row.crusades), registrations: Number(row.registrations) });
+    }
+  }
+  return [...byCanonical.values()].sort((a, b) => Number(b.crusades) - Number(a.crusades) || a.country.localeCompare(b.country));
+}
+
 function getCellCrusadesCountryBreakdown() {
-  const countries = db.prepare(`
+  const raw = db.prepare(`
     SELECT i.country, SUM(i.planned_count) AS crusades, COUNT(DISTINCT i.registration_id) AS registrations
     FROM registration_items i
     WHERE ${PUBLIC_PROGRAM_FILTER}
@@ -126,6 +144,7 @@ function getCellCrusadesCountryBreakdown() {
     ORDER BY crusades DESC, i.country COLLATE NOCASE
   `).all();
 
+  const countries = mergeByCanonicalCountry(raw);
   return {
     name: "Cell Crusades",
     countryCount: countries.length,
@@ -156,13 +175,20 @@ function getNetworkCountryBreakdown() {
 
   const networkMap = new Map();
   for (const row of rows) {
+    const country = resolveCountryName(row.country) || row.country;
     if (!networkMap.has(row.network)) {
       networkMap.set(row.network, { network: row.network, countries: [], totalCrusades: 0, totalRegistrations: 0 });
     }
     const network = networkMap.get(row.network);
-    network.countries.push({ country: row.country, crusades: row.crusades, registrations: row.registrations });
-    network.totalCrusades += row.crusades;
-    network.totalRegistrations += row.registrations;
+    const existing = network.countries.find((c) => c.country === country);
+    if (existing) {
+      existing.crusades += Number(row.crusades);
+      existing.registrations += Number(row.registrations);
+    } else {
+      network.countries.push({ country, crusades: Number(row.crusades), registrations: Number(row.registrations) });
+    }
+    network.totalCrusades += Number(row.crusades);
+    network.totalRegistrations += Number(row.registrations);
   }
 
   return [...networkMap.values()].sort((a, b) => b.totalCrusades - a.totalCrusades);

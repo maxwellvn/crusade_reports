@@ -7,6 +7,7 @@ import { backfillCityCoords } from "./places.js";
 import { sendExport } from "./exporter.js";
 import { backupDatabaseRolling } from "./registrations.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
+import { resolveCountryName } from "./countries.js";
 
 export const blueElite = Router();
 
@@ -45,7 +46,7 @@ const insertBlueEliteRegistration = db.transaction((d) => {
     church_name: d.church_name,
     cell_name: d.cell_name || null,
     network_name: d.network_name || null,
-    country: d.items[0].country,
+    country: resolveCountryName(d.items[0].country) || d.items[0].country,
     plan_date: planDate,
     contact_name: d.contact_name,
     contact_email: d.contact_email,
@@ -58,7 +59,7 @@ const insertBlueEliteRegistration = db.transaction((d) => {
     insertItemStmt.run({
       ...base,
       registration_id: regId,
-      country: it.country,
+      country: resolveCountryName(it.country) || it.country,
       event_type: it.event_type,
       other_event_type: it.other_event_type || null,
       planned_count: 1,
@@ -119,14 +120,19 @@ blueElite.get("/registrations/live", requirePageAccess("dashboard/blue-elite"), 
     WHERE i.program = ?
   `).get(PROGRAM, PROGRAM, PROGRAM, PROGRAM);
 
+  const byCountryRaw = db.prepare(
+    `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items WHERE program = ? GROUP BY country ORDER BY planned DESC`).all(PROGRAM);
+  const byCountry = byCountryRaw
+    .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
+    .sort((a, b) => b.planned - a.planned || a.key.localeCompare(b.key));
+
   res.json({
-    totals,
+    totals: { ...totals, countries: new Set(byCountry.map((row) => row.key)).size },
     by_type: db.prepare(
       `SELECT event_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items WHERE program = ? GROUP BY event_type ORDER BY planned DESC`).all(PROGRAM),
-    by_country: db.prepare(
-      `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items WHERE program = ? GROUP BY country ORDER BY planned DESC`).all(PROGRAM),
+    by_country: byCountry,
     by_zone: db.prepare(
       `SELECT zone AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items WHERE program = ? AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`).all(PROGRAM),

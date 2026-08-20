@@ -12,7 +12,7 @@ import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "
 import { sendExport } from "./exporter.js";
 import { registrationImporter } from "./registrationImporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
-import { COUNTRIES } from "./countries.js";
+import { COUNTRIES, resolveCountryName } from "./countries.js";
 import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
 import { loadZones } from "./zones.js";
 
@@ -125,7 +125,7 @@ export const insertRegistration = db.transaction((d) => {
     network_name: d.network_name || null,
     // Country is per crusade now; the registration row keeps the first crusade's
     // country as its primary (the column is NOT NULL and drives registration-level grouping).
-    country: d.items[0].country,
+    country: resolveCountryName(d.items[0].country) || d.items[0].country,
     plan_date: planDate,
     contact_name: d.contact_name,
     contact_email: d.contact_email,
@@ -140,7 +140,7 @@ export const insertRegistration = db.transaction((d) => {
       registration_id: regId,
       zone_manual: d.zone_manual ? 1 : 0,
       group_manual: d.group_manual ? 1 : 0,
-      country: it.country,
+      country: resolveCountryName(it.country) || it.country,
       event_type: it.event_type,
       other_event_type: it.other_event_type || null,
       planned_count: 1,
@@ -478,7 +478,6 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
     SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
            COUNT(*)                             AS items,
-           COUNT(DISTINCT country)              AS countries,
            COUNT(DISTINCT zone)                 AS zones,
            COUNT(DISTINCT group_name)           AS groups,
            COUNT(DISTINCT church_name)          AS churches,
@@ -499,13 +498,22 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
     FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
   `).get();
 
+  const byCountryRaw = db.prepare(
+    `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
+     FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY country ORDER BY planned DESC`
+  ).all();
+  const byCountry = byCountryRaw
+    .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
+    .sort((a, b) => b.planned - a.planned || a.key.localeCompare(b.key));
+
   res.json({
-    totals,
+    totals: {
+      ...totals,
+      // Normalized country count can never exceed COUNTRIES.length.
+      countries: new Set(byCountry.map((row) => row.key)).size,
+    },
     by_type: registrationTypeBreakdown(),
-    by_country: db.prepare(
-      `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY country ORDER BY planned DESC`
-    ).all(),
+    by_country: byCountry,
     by_zone: db.prepare(
       `SELECT zone AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
@@ -567,7 +575,7 @@ registrations.get("/countries-without-registrations", requirePageAccess("dashboa
   const registeredCountries = new Set(
     db.prepare(
       `SELECT DISTINCT country FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
-    ).all().map((row) => row.country)
+    ).all().map((row) => resolveCountryName(row.country)).filter(Boolean)
   );
   const missing = COUNTRIES.filter((c) => !registeredCountries.has(c.name)).sort((a, b) => a.name.localeCompare(b.name));
   res.json({ countries: missing, total: missing.length });
@@ -575,14 +583,26 @@ registrations.get("/countries-without-registrations", requirePageAccess("dashboa
 
 registrations.get("/country-report.pdf", requirePageAccess("dashboard/crusade-analysis"), wrap(async (_req, res) => {
   const continentByCountry = new Map(COUNTRIES.map((country) => [country.name.toLowerCase(), country.continent || "Other"]));
-  const rows = db.prepare(
+  const raw = db.prepare(
     `SELECT country, COALESCE(SUM(planned_count), 0) AS crusades, COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
      WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL AND TRIM(country) <> ''
      GROUP BY country COLLATE NOCASE`
-  ).all().map((row) => ({
+  ).all();
+  const byCanonical = new Map();
+  for (const row of raw) {
+    const key = resolveCountryName(row.country) || row.country;
+    const existing = byCanonical.get(key);
+    if (existing) {
+      existing.crusades += Number(row.crusades);
+      existing.registrations += Number(row.registrations);
+    } else {
+      byCanonical.set(key, { country: key, crusades: Number(row.crusades), registrations: Number(row.registrations) });
+    }
+  }
+  const rows = [...byCanonical.values()].map((row) => ({
     ...row,
-    continent: continentByCountry.get(String(row.country).toLowerCase()) || "Other",
+    continent: continentByCountry.get(row.country.toLowerCase()) || "Other",
   })).sort((a, b) => a.continent.localeCompare(b.continent)
     || Number(b.crusades) - Number(a.crusades)
     || a.country.localeCompare(b.country));
