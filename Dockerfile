@@ -1,15 +1,9 @@
-# Debian/glibc lets better-sqlite3 use its published Node 22 prebuilt binary.
-# Alpine/musl fell back to downloading a full C++ toolchain, which made Coolify
-# builds take 25+ minutes and hit the deployment command timeout.
-FROM node:22.14.0-bookworm-slim AS build
+# The full Debian build image includes the native toolchain that better-sqlite3
+# needs when its prebuilt binary is unavailable. This avoids downloading Debian
+# package indexes during every Coolify build; the runtime stage remains slim.
+FROM node:22.14.0-bookworm AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-# Toolchain for better-sqlite3: when the prebuilt binary download aborts (flaky
-# CDN in a container build), node-gyp falls back to compiling from source and
-# needs Python + a C++ compiler. Removing them afterwards keeps the layer small.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
 # Coolify may inject NODE_ENV=production at build time. Explicitly include dev
 # dependencies because Vite/Tailwind are build tools, then prune them below.
 # Avoid a shared BuildKit npm cache here. Coolify can leave that cache in a
