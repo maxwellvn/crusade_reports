@@ -23,8 +23,36 @@ import { ReportMediaFields, buildReportFormData, formatBytes, MAX_REPORT_PHOTOS_
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const PAGE_SIZE = 50;
+const PORTAL_REPORT_DRAFT_VERSION = 1;
+const PORTAL_REPORT_DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const SOURCE_LABELS = { network: "Network directly", zone: "Zones", group: "Groups", church: "Churches", cell: "Cells", other: "Other ministries" };
 const sourceLabel = (source, networkName) => source === "network" ? `${networkName} directly` : (SOURCE_LABELS[source] || "Other ministries");
+
+// Scope drafts without placing the private portal capability token in storage.
+function portalReportDraftKey(token, crusadeId) {
+  let hash = 2166136261;
+  for (const char of String(token || "")) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `zone-report-draft-v${PORTAL_REPORT_DRAFT_VERSION}:${crusadeId}:${(hash >>> 0).toString(36)}`;
+}
+
+function readPortalReportDraft(key) {
+  if (!key) return null;
+  try {
+    const draft = JSON.parse(localStorage.getItem(key));
+    if (!draft || draft.version !== PORTAL_REPORT_DRAFT_VERSION || typeof draft.report !== "object") return null;
+    if (Date.now() - Number(draft.savedAt || 0) > PORTAL_REPORT_DRAFT_MAX_AGE) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return draft;
+  } catch {
+    try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
+    return null;
+  }
+}
 
 // Zone dashboard, opened via a capability link (/zone/<token>). The server
 // scopes every read and readiness update to the token's zone/network.
@@ -414,7 +442,7 @@ function ZoneCrusadeEditDialog({ crusade, token, onClose, onSaved }) {
 
 function SourceBadge({ source, networkName }) {
   const direct = source === "network";
-  return <span className={`inline-flex whitespace-nowrap border px-2 py-1 text-xs font-medium ${direct ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-slate-700"}`}>{sourceLabel(source, networkName)}</span>;
+  return <span className={`inline-flex whitespace-nowrap border px-2 py-1 text-xs font-medium ${direct ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-300 bg-slate-50 text-foreground"}`}>{sourceLabel(source, networkName)}</span>;
 }
 
 function ReportStatusBadge({ reported }) {
@@ -497,23 +525,44 @@ function useCityFetcher(countryName) {
 
 export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmitted }) {
   const ref = React.useRef(null);
+  const draftKey = token ? portalReportDraftKey(token, crusade.id) : "";
+  const draft = React.useMemo(() => readPortalReportDraft(draftKey), [draftKey]);
+  const draftCleared = React.useRef(false);
   const [saving, setSaving] = React.useState(false);
   const [visualViewport, setVisualViewport] = React.useState(null);
-  const [report, setReport] = React.useState({
+  const defaultReport = {
     format: ONLINE_TYPES.includes(crusade.event_type) ? "online" : "physical",
     event_type: crusade.event_type || "", other_event_type: "", event_name: crusade.event_name || "",
     country: crusade.country || "", city: crusade.city || "", city_place_id: crusade.city_place_id || "", event_date: crusade.event_date || "",
     attendance: 0, crusade_expense: 0, minister_name: crusade.minister_name || "", venue: crusade.venue || "",
     ...Object.fromEntries(METRIC_KEYS.map((key) => [key, 0])),
-  });
-  const [highlights, setHighlights] = React.useState("");
-  const [photoLinks, setPhotoLinks] = React.useState("");
-  const [videoLinks, setVideoLinks] = React.useState("");
+  };
+  const [report, setReport] = React.useState(() => ({ ...defaultReport, ...(draft?.report || {}) }));
+  const [highlights, setHighlights] = React.useState(() => String(draft?.highlights || ""));
+  const [photoLinks, setPhotoLinks] = React.useState(() => String(draft?.photoLinks || ""));
+  const [videoLinks, setVideoLinks] = React.useState(() => String(draft?.videoLinks || ""));
   const [photos, setPhotos] = React.useState([]);
   const photoTotal = totalPhotoBytes(photos);
   const fetchCities = useCityFetcher(crusade.country);
 
   React.useEffect(() => { ref.current?.showModal(); }, []);
+  React.useEffect(() => {
+    if (!draftKey) return undefined;
+    const timer = window.setTimeout(() => {
+      if (draftCleared.current) return;
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({
+          version: PORTAL_REPORT_DRAFT_VERSION,
+          report,
+          highlights,
+          photoLinks,
+          videoLinks,
+          savedAt: Date.now(),
+        }));
+      } catch { /* storage unavailable or full */ }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [draftKey, report, highlights, photoLinks, videoLinks]);
   React.useEffect(() => {
     const viewport = window.visualViewport;
 
@@ -564,6 +613,10 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
       const submitted = photos.length
         ? await postForm(path, buildReportFormData(payload, photos), { timeoutMs: REPORT_UPLOAD_TIMEOUT_MS })
         : await postJSON(path, payload);
+      draftCleared.current = true;
+      if (draftKey) {
+        try { localStorage.removeItem(draftKey); } catch { /* storage unavailable */ }
+      }
       toast.success("Crusade report submitted.");
       onSubmitted(submitted);
     } catch (error) {
@@ -583,6 +636,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Submit crusade report</p>
             <h2 className="mt-1 truncate text-xl font-semibold tracking-tight">{crusade.event_name || typeLabel(crusade.event_type)}</h2>
+            {draft && <p className="mt-1 text-xs text-blue-700">Saved text restored. Please reselect any photos.</p>}
           </div>
           <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => ref.current?.close()} aria-label="Close report form"><X /></Button>
         </div>
