@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-700",
+        "createdAt": "2026-08-21T10:00:42.615Z",
+        "reason": "Pre-existing neutral source badge intentionally pairs high-contrast slate text with a slate background; unrelated to the report-upload fix"
+      }
+    ]
+  }
+}
