@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # The full Debian build image includes the native toolchain that better-sqlite3
 # needs when its prebuilt binary is unavailable. This avoids downloading Debian
 # package indexes during every Coolify build; the runtime stage remains slim.
@@ -6,13 +8,18 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 # Coolify may inject NODE_ENV=production at build time. Explicitly include dev
 # dependencies because Vite/Tailwind are build tools, then prune them below.
-# Avoid a shared BuildKit npm cache here. Coolify can leave that cache in a
-# partial state after a slow/interrupted registry download, which makes npm
-# terminate with "Exit handler never called" on the next build. npm 10.8.2+
-# also has a known Docker exit-handler regression, so use the last unaffected
-# npm 10 release for the deterministic install.
-RUN npm install --global npm@10.8.1 --no-audit --no-fund \
-    && npm ci --include=dev --no-audit --no-fund
+# Keep the known-good npm release in its own layer. If dependency installation
+# is interrupted, Coolify can reuse this completed step instead of spending ten
+# minutes installing npm again.
+RUN --mount=type=cache,id=crusade-reports-npm,target=/root/.npm,sharing=locked \
+    npm install --global npm@10.8.1 --no-audit --no-fund --prefer-offline
+# npm's cache is content-addressed and integrity-checked. The locked BuildKit
+# mount lets retries reuse completed package downloads without concurrent builds
+# corrupting the cache. Build native addons locally so a slow GitHub prebuild
+# download cannot leave npm silent until Coolify's deployment deadline.
+RUN --mount=type=cache,id=crusade-reports-npm,target=/root/.npm,sharing=locked \
+    npm_config_build_from_source=true \
+    npm ci --include=dev --no-audit --no-fund --prefer-offline --foreground-scripts
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
