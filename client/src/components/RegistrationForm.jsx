@@ -526,7 +526,15 @@ export function RegistrationForm() {
                               </div>
                             </Field>
                           </div>
-                          <Field label="Ministers' names" required error={rowErr.minister_name?.message} className="mt-3" hint="Type a name and press comma to add another minister">
+                          <Field
+                            label="Ministers' names"
+                            required
+                            error={rowErr.minister_name?.message}
+                            className="mt-3"
+                            hint={items?.[i]?.event_type === "rabah"
+                              ? "If you will minister, enter your own name. If you will use the provided ministry video, enter Pastor Chris. Press comma to add another minister."
+                              : "Type a name and press comma to add another minister"}
+                          >
                             <Controller control={control} name={`items.${i}.minister_name`} render={({ field }) => (
                               <MinisterTags value={field.value} onChange={field.onChange} invalid={!!rowErr.minister_name} />
                             )} />
