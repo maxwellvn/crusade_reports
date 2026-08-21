@@ -11,13 +11,13 @@ import { Field } from "@/components/ui/field";
 import { LoadingRows } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/Combobox";
 import { CollaboratorPicker, ContributionChecklist, splitCollaboration } from "@/components/CollaborationFields";
-import { getJSON, postForm, postJSON, putJSON } from "@/lib/api";
+import { getJSON, postForm, postJSON, putJSON, REPORT_UPLOAD_TIMEOUT_MS } from "@/lib/api";
 import { useOrgData } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets";
 import { Pagination } from "@/lib/tableTools";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
-import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
+import { ReportMediaFields, buildReportFormData, formatBytes, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
@@ -510,6 +510,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
   const [photoLinks, setPhotoLinks] = React.useState("");
   const [videoLinks, setVideoLinks] = React.useState("");
   const [photos, setPhotos] = React.useState([]);
+  const photoTotal = totalPhotoBytes(photos);
   const fetchCities = useCityFetcher(crusade.country);
 
   React.useEffect(() => { ref.current?.showModal(); }, []);
@@ -551,7 +552,6 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
     if (required.some((value) => !String(value || "").trim()) || (report.event_type === "other" && !report.other_event_type.trim())) {
       return toast.error("Please complete all required report details.");
     }
-    const photoTotal = totalPhotoBytes(photos);
     if (photoTotal > MAX_REPORT_PHOTOS_BYTES) {
       return toast.error(photosOverLimitMessage(photoTotal));
     }
@@ -562,7 +562,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
       const path = savePath || `/zone-portal/${token}/crusades/${crusade.id}/report`;
       const payload = { crusade: numericReport, highlights, photo_links: photoLinks, video_links: videoLinks };
       const submitted = photos.length
-        ? await postForm(path, buildReportFormData(payload, photos))
+        ? await postForm(path, buildReportFormData(payload, photos), { timeoutMs: REPORT_UPLOAD_TIMEOUT_MS })
         : await postJSON(path, payload);
       toast.success("Crusade report submitted.");
       onSubmitted(submitted);
@@ -676,7 +676,9 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
         </div>
         <div className="grid shrink-0 grid-cols-2 gap-2 border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex sm:justify-end sm:px-5">
           <Button type="button" variant="outline" onClick={() => ref.current?.close()}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit report"}</Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? (photoTotal ? `Uploading ${formatBytes(photoTotal)}…` : "Submitting…") : "Submit report"}
+          </Button>
         </div>
       </form>
     </dialog>
