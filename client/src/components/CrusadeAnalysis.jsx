@@ -25,7 +25,7 @@ function analysisTypes(data) {
   const online = ["online", active.get("online") || "Online Crusades"];
   return [
     mega,
-    ["cellular", "Cellular Crusades (including RABAH)"],
+    ["cellular", "Cellular Crusades"],
     online,
     ...(data.active_types || []).filter(([key]) => !["mega", "online"].includes(key)),
   ];
@@ -48,7 +48,7 @@ function downloadAnalysisWord(data) {
     }))
     .filter((item) => item.crusades > 0));
   const cellularSection = (level, title) => ({
-    title: `Cellular Crusades (including RABAH) - ${title.toLowerCase()}`,
+    title: `Cellular Crusades - ${title.toLowerCase()}`,
     columns: [
       { header: title, key: "key", width: 5000 },
       { header: "Registered crusades", key: "planned", align: "right", width: 2350 },
@@ -65,7 +65,7 @@ function downloadAnalysisWord(data) {
     summary: [
       { label: "Total registered", value: nfull.format(data.summary.total) },
       { label: "Mega Crusades", value: nfull.format(data.summary.mega) },
-      { label: "Cellular Crusades (including RABAH)", value: nfull.format(data.summary.cellular) },
+      { label: "Cellular Crusades", value: nfull.format(data.summary.cellular) },
       { label: "Online Crusades", value: nfull.format(data.summary.online) },
     ],
     sections: [
@@ -169,14 +169,14 @@ export function CrusadeAnalysis() {
         <dl className="grid grid-cols-2 divide-x divide-y divide-slate-200 md:grid-cols-5 md:divide-y-0">
           <Summary value={data.summary.total} label="Total registered" />
           <Summary value={data.summary.mega} label="Mega" />
-          <Summary value={data.summary.cellular} label="Cellular + RABAH" />
+          <Summary value={data.summary.cellular} label="Cellular Crusades" />
           <Summary value={data.summary.online} label="Online" />
           <Summary value={data.summary.zones} label="Zones represented" className="col-span-2 md:col-span-1" />
         </dl>
       </section>
 
       <div className="flex w-full overflow-x-auto border-b border-slate-200" role="tablist" aria-label="Crusade analysis view">
-        {[["zones", "Zone breakdown"], ["cellular", "Cellular + RABAH"], ["cells", "Cell breakdown"]].map(([key, label]) => (
+        {[["zones", "Zone breakdown"], ["cellular", "Cellular Crusades"], ["cells", "Cell breakdown"]].map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setQuery(""); }}
             className={cn("shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium", tab === key ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900")}>{label}</button>
         ))}
@@ -191,8 +191,8 @@ export function CrusadeAnalysis() {
         <section aria-labelledby="cellular-breakdown-heading" className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h3 id="cellular-breakdown-heading" className="text-base font-semibold text-slate-950">Cellular Crusades (including RABAH)</h3>
-              <p className="mt-1 text-sm text-slate-500">Cell registrations and RABAH crusades merged by zone, group, or church.</p>
+              <h3 id="cellular-breakdown-heading" className="text-base font-semibold text-slate-950">Cellular Crusades</h3>
+              <p className="mt-1 text-sm text-slate-500">Cellular crusades grouped by zone, group, or church.</p>
             </div>
             <div className="flex rounded-lg bg-slate-200/70 p-1" role="tablist" aria-label="Cellular breakdown level">
               {LEVELS.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={level === key} onClick={() => { setLevel(key); setQuery(""); }}
@@ -230,12 +230,12 @@ function Figure({ value, filters, label, onSelect }) {
 
 function ZoneTable({ rows, types, onSelect }) {
   if (!rows.length) return <div className="border-y border-slate-200 py-14 text-center text-sm text-slate-500">No zones match this search.</div>;
-  return <div className="overflow-x-auto border-y border-slate-200 bg-white"><table className="min-w-full whitespace-nowrap text-sm"><thead><tr className="border-b bg-slate-50/80 text-left text-xs text-slate-500"><th className="sticky left-0 z-10 min-w-44 bg-slate-50 px-5 py-3 font-medium">Zone</th>{types.map(([key, label]) => <th key={key} className="px-4 py-3 text-right font-medium">{shortTypeLabel(label)}</th>)}<th className="px-4 py-3 text-right font-medium">Total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.zone} className="border-b last:border-0 hover:bg-slate-50/50"><td className="sticky left-0 z-10 bg-white px-5 py-2.5 font-medium text-slate-900">{row.zone}</td>{types.map(([key]) => <td key={key} className="px-2 py-1.5 text-right">{key === "cellular" ? <Figure value={row.cellular} filters={{ zone: row.zone, cellular: "1" }} label={`${row.zone} Cellular and RABAH Crusades`} onSelect={onSelect} /> : <Figure value={row.types[key] || 0} filters={{ zone: row.zone, event_type: key }} label={`${row.zone} ${typeLabel(key)}`} onSelect={onSelect} />}</td>)}<td className="px-2 py-1.5 text-right"><Figure value={row.total} filters={{ zone: row.zone }} label={`${row.zone} total`} onSelect={onSelect} /></td></tr>)}</tbody></table></div>;
+  return <div className="overflow-x-auto border-y border-slate-200 bg-white"><table className="min-w-full whitespace-nowrap text-sm"><thead><tr className="border-b bg-slate-50/80 text-left text-xs text-slate-500"><th className="sticky left-0 z-10 min-w-44 bg-slate-50 px-5 py-3 font-medium">Zone</th>{types.map(([key, label]) => <th key={key} className="px-4 py-3 text-right font-medium">{shortTypeLabel(label)}</th>)}<th className="px-4 py-3 text-right font-medium">Total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.zone} className="border-b last:border-0 hover:bg-slate-50/50"><td className="sticky left-0 z-10 bg-white px-5 py-2.5 font-medium text-slate-900">{row.zone}</td>{types.map(([key]) => <td key={key} className="px-2 py-1.5 text-right">{key === "cellular" ? <Figure value={row.cellular} filters={{ zone: row.zone, cellular: "1" }} label={`${row.zone} Cellular Crusades`} onSelect={onSelect} /> : <Figure value={row.types[key] || 0} filters={{ zone: row.zone, event_type: key }} label={`${row.zone} ${typeLabel(key)}`} onSelect={onSelect} />}</td>)}<td className="px-2 py-1.5 text-right"><Figure value={row.total} filters={{ zone: row.zone }} label={`${row.zone} total`} onSelect={onSelect} /></td></tr>)}</tbody></table></div>;
 }
 
 function CellularTable({ rows, level, onSelect }) {
   if (!rows.length) return <div className="border-y border-slate-200 py-14 text-center text-sm text-slate-500">No entries match this search.</div>;
-  return <div className="overflow-hidden border-y border-slate-200 bg-white"><table className="w-full text-sm"><thead><tr className="border-b bg-slate-50/80 text-left text-xs text-slate-500"><th className="px-5 py-3 font-medium">{level[1].replace("By ", "")}</th><th className="px-5 py-3 text-right font-medium">Registered crusades</th><th className="hidden px-5 py-3 text-right font-medium sm:table-cell">Registration entries</th></tr></thead><tbody>{rows.map((row) => <tr key={row.key} className="border-b last:border-0 hover:bg-slate-50/50"><td className="px-5 py-3 font-medium text-slate-900">{row.key}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ cellular: "1", [level[2]]: row.key }} label={`${row.key} Cellular and RABAH Crusades`} onSelect={onSelect} /></td><td className="hidden px-5 py-3 text-right tabular-nums text-slate-600 sm:table-cell">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>;
+  return <div className="overflow-hidden border-y border-slate-200 bg-white"><table className="w-full text-sm"><thead><tr className="border-b bg-slate-50/80 text-left text-xs text-slate-500"><th className="px-5 py-3 font-medium">{level[1].replace("By ", "")}</th><th className="px-5 py-3 text-right font-medium">Registered crusades</th><th className="hidden px-5 py-3 text-right font-medium sm:table-cell">Registration entries</th></tr></thead><tbody>{rows.map((row) => <tr key={row.key} className="border-b last:border-0 hover:bg-slate-50/50"><td className="px-5 py-3 font-medium text-slate-900">{row.key}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ cellular: "1", [level[2]]: row.key }} label={`${row.key} Cellular Crusades`} onSelect={onSelect} /></td><td className="hidden px-5 py-3 text-right tabular-nums text-slate-600 sm:table-cell">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>;
 }
 
 function CellBreakdown({ rows, onSelect }) {
@@ -262,7 +262,7 @@ function CellBreakdown({ rows, onSelect }) {
       <header className="flex flex-wrap items-baseline justify-between gap-2 bg-slate-950 px-5 py-4 text-white"><h4 className="text-base font-semibold">{zone}</h4><p className="text-xs text-slate-300">{nfull.format(zoneRows.length)} registered cells · {nfull.format(zoneCrusades)} crusades</p></header>
       {[...groups].map(([group, groupRows]) => <div key={group} className="border-t border-slate-200 first:border-0">
         <div className="flex items-baseline justify-between gap-3 bg-blue-50 px-5 py-3"><h5 className="text-sm font-semibold text-blue-950">{group}</h5><span className="text-xs text-blue-700">{nfull.format(groupRows.length)} cell{groupRows.length === 1 ? "" : "s"}</span></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[38rem] text-sm"><thead><tr className="border-b text-left text-xs text-slate-500"><th className="px-5 py-2.5 font-medium">Cell</th><th className="px-5 py-2.5 font-medium">Church</th><th className="px-5 py-2.5 text-right font-medium">Registered crusades</th><th className="px-5 py-2.5 text-right font-medium">Entries</th></tr></thead><tbody>{groupRows.map((row) => <tr key={`${row.church_name || ""}-${row.key}`} className="border-b last:border-0"><td className="px-5 py-3 font-medium text-slate-950">{row.key}</td><td className="px-5 py-3 text-slate-600">{row.church_name || "Not specified"}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ cellular: "1", zone: row.zone, group_name: row.group_name || "", cell_name: row.key }} label={`${row.key} Cellular and RABAH Crusades`} onSelect={onSelect} /></td><td className="px-5 py-3 text-right tabular-nums text-slate-600">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[38rem] text-sm"><thead><tr className="border-b text-left text-xs text-slate-500"><th className="px-5 py-2.5 font-medium">Cell</th><th className="px-5 py-2.5 font-medium">Church</th><th className="px-5 py-2.5 text-right font-medium">Registered crusades</th><th className="px-5 py-2.5 text-right font-medium">Entries</th></tr></thead><tbody>{groupRows.map((row) => <tr key={`${row.church_name || ""}-${row.key}`} className="border-b last:border-0"><td className="px-5 py-3 font-medium text-slate-950">{row.key}</td><td className="px-5 py-3 text-slate-600">{row.church_name || "Not specified"}</td><td className="px-3 py-2 text-right"><Figure value={row.planned} filters={{ cellular: "1", zone: row.zone, group_name: row.group_name || "", cell_name: row.key }} label={`${row.key} Cellular Crusades`} onSelect={onSelect} /></td><td className="px-5 py-3 text-right tabular-nums text-slate-600">{nfull.format(row.registrations || 0)}</td></tr>)}</tbody></table></div>
       </div>)}
     </section>;
       })}</div>

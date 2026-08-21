@@ -2,7 +2,7 @@
 // separate copy because the client file is browser-only; this powers CSV/XLSX exports.
 
 export const CRUSADE_TYPE_LABELS = {
-  mega: "Mega Crusades (4,000+ people)", tap2read: "TAP2read Crusades", rabah: "Cellular Crusades (RABAH Crusades)",
+  mega: "Mega Crusades (4,000+ people)", tap2read: "TAP2read Crusades", rabah: "Cellular Crusades",
   "youths-aglow": "Youths Aglow Crusades",
   teevolution: "Teevolution Crusades (Teens)", "say-yes-to-kids": "Say Yes To Kids Crusades",
   nolb: "No One Left Behind Crusades", "leading-ladies": "Leading Ladies Crusades", "mighty-men": "Mighty Men Crusades",
