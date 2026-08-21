@@ -30,7 +30,12 @@
 }
 
 @layer base {
+  :root { --keyboard-inset: 0px; }
   * { @apply border-border; }
+  html, body {
+    scroll-padding-top: 1rem;
+    scroll-padding-bottom: calc(6rem + var(--keyboard-inset));
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: "abcNormal", "Inter", system-ui, sans-serif;
@@ -55,7 +60,13 @@
 }
 
 body:has(.public-fixed-bottom-action) [data-page-translator] {
-  bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(5.5rem + var(--keyboard-inset) + env(safe-area-inset-bottom, 0px));
+}
+
+.public-fixed-bottom-action {
+  bottom: var(--keyboard-inset) !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transition: bottom 120ms ease-out;
 }
 
 @media (max-width: 1023px) {

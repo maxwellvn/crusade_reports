@@ -42,6 +42,7 @@ import { ManualOrganizations } from "@/components/ManualOrganizations";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { installKeyboardViewportManager } from "@/lib/keyboardViewport";
 
 const BRAND = "Rhapsody End-Time Teaching Crusades";
 const DEFAULT_DESCRIPTION = "Join A Night of a Thousand Crusades, register crusades, access approved resources, and take part in global mission initiatives.";
@@ -102,6 +103,11 @@ function TitleManager() {
     if (!canonical) { canonical = document.createElement("link"); canonical.rel = "canonical"; document.head.appendChild(canonical); }
     canonical.href = canonicalUrl;
   }, [pathname]);
+  return null;
+}
+
+function KeyboardViewportManager() {
+  useEffect(() => installKeyboardViewportManager(), []);
   return null;
 }
 
@@ -214,6 +220,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <TitleManager />
+      <KeyboardViewportManager />
       <PublicTranslator />
       <Routes>
         {/* Public campaign surface — self-contained pages, no app chrome */}
