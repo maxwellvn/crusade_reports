@@ -1,18 +1,22 @@
 # syntax=docker/dockerfile:1
 
-# Node 22.4.1 already bundles npm 10.8.1, avoiding a slow global npm replacement.
-# This image is build-only; the deployed runtime remains on Node 22.14.
-FROM node:22.4.1-bookworm AS build
+# Use the same supported Node release for building and runtime. pdfjs-dist needs
+# Node 22.13+, and the bundled npm avoids a separate global npm installation.
+FROM node:22.14.0-bookworm AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # Coolify may inject NODE_ENV=production at build time. Explicitly include dev
 # dependencies because Vite/Tailwind are build tools, then prune them below.
-# npm's cache is content-addressed and integrity-checked. The locked BuildKit
-# mount lets retries reuse completed package downloads without concurrent builds
-# corrupting the cache. Native dependencies may use their published prebuilt
-# binaries and fall back to the full Debian toolchain only when necessary.
+# Install the locked tree without opaque lifecycle scripts. The only relevant
+# Linux install scripts are esbuild and better-sqlite3; rebuild them explicitly
+# below so a native download cannot leave npm silent until Coolify times out.
 RUN --mount=type=cache,id=crusade-reports-npm,target=/root/.npm,sharing=locked \
-    npm ci --include=dev --no-audit --no-fund --prefer-offline --foreground-scripts
+    npm ci --include=dev --ignore-scripts --no-audit --no-fund --prefer-offline
+RUN npm rebuild esbuild --foreground-scripts
+# Compile SQLite against headers already present in the official Node image.
+# npm_config_nodedir prevents node-gyp from downloading headers from nodejs.org.
+RUN npm_config_nodedir=/usr/local \
+    npm rebuild better-sqlite3 --build-from-source --foreground-scripts
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
