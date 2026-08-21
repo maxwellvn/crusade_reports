@@ -62,8 +62,8 @@ export function BlueEliteDashboard() {
   const go = (key, value) => navigate(`/registrations/blue-elite?${key}=${encodeURIComponent(value)}`);
 
   const KPI_ROWS = data ? [
-    { id: "planned", label: "Crusades planned", value: data.totals.planned },
-    { id: "registrations", label: "Registrations", value: data.totals.registrations },
+    { id: "planned", label: "Crusades registered", value: data.totals.planned },
+    { id: "registrations", label: "Staff registrations", value: data.totals.registrations },
     { id: "zones", label: "Zones", value: data.totals.zones },
     { id: "groups", label: "Groups", value: data.totals.groups },
     { id: "churches", label: "Churches", value: data.totals.churches },
@@ -82,7 +82,7 @@ export function BlueEliteDashboard() {
       <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
           <h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Loveworld Blue Elite — live</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Crusade registrations logged by Blue Elite staff.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Blue Elite staff crusades for the fixed campaign date, August 28, 2026.</p>
         </div>
         {data && <p className="text-sm tabular-nums text-slate-500">Updates every 15s</p>}
       </div>
@@ -97,7 +97,7 @@ export function BlueEliteDashboard() {
           <section aria-labelledby="blue-elite-pulse-heading" className="overflow-hidden border-y border-blue-200 bg-white shadow-[0_18px_45px_-34px_rgba(37,99,235,0.35)] print:border-slate-300 print:shadow-none">
             <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50/70 px-5 py-3">
               <h3 id="blue-elite-pulse-heading" className="text-xs font-semibold text-blue-900">Blue Elite pulse</h3>
-              <p className="text-xs text-slate-500">Live planning totals</p>
+              <p className="text-xs text-slate-500">Live registration totals</p>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4">
               {KPI_ROWS.map(({ id, label, value }, index) => (
@@ -119,7 +119,7 @@ export function BlueEliteDashboard() {
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <Card className="rounded-none border-x-0 border-slate-200 shadow-none sm:col-span-2">
-                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By department</CardTitle><CardDescription className="text-xs">Crusades planned per Blue Elite department</CardDescription></CardHeader>
+                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By department</CardTitle><CardDescription className="text-xs">Registered crusades per Blue Elite department</CardDescription></CardHeader>
                 <CardContent className="px-4 py-5">
                   {!data.by_department.length ? <Empty text="No departments logged yet." /> :
                     <BarH rows={data.by_department.map((row) => ({ key: row.key, label: row.key, value: row.planned || 0, sub: `${row.registrations || 0} reg` }))}
@@ -127,28 +127,28 @@ export function BlueEliteDashboard() {
                 </CardContent>
               </Card>
               <Card className="rounded-none border-x-0 border-slate-200 shadow-none">
-                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By crusade type</CardTitle><CardDescription className="text-xs">Planned crusades by type</CardDescription></CardHeader>
+                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By crusade type</CardTitle><CardDescription className="text-xs">Registered crusades by type</CardDescription></CardHeader>
                 <CardContent className="px-4 py-5">
                   {!data.by_type.length ? <Empty text="No crusades yet." /> :
                     <BarH rows={bars(data.by_type, typeLabel)} onRowClick={(row) => go("event_type", row.key)} />}
                 </CardContent>
               </Card>
               <Card className="rounded-none border-x-0 border-slate-200 shadow-none">
-                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By zone</CardTitle><CardDescription className="text-xs">Planned crusades per zone</CardDescription></CardHeader>
+                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By zone</CardTitle><CardDescription className="text-xs">Registered crusades per zone</CardDescription></CardHeader>
                 <CardContent className="px-4 py-5">
                   {!data.by_zone.length ? <Empty text="No zones yet." /> :
                     <BarH rows={bars(data.by_zone)} onRowClick={(row) => go("zone", row.key)} />}
                 </CardContent>
               </Card>
               <Card className="rounded-none border-x-0 border-slate-200 shadow-none">
-                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By country</CardTitle><CardDescription className="text-xs">Planned crusades per country</CardDescription></CardHeader>
+                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By country</CardTitle><CardDescription className="text-xs">Registered crusades per country</CardDescription></CardHeader>
                 <CardContent className="px-4 py-5">
                   {!data.by_country.length ? <Empty text="No countries yet." /> :
                     <BarH rows={bars(data.by_country)} onRowClick={(row) => go("country", row.key)} />}
                 </CardContent>
               </Card>
               <Card className="rounded-none border-x-0 border-slate-200 shadow-none">
-                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By church</CardTitle><CardDescription className="text-xs">Planned crusades per church</CardDescription></CardHeader>
+                <CardHeader className="space-y-0 bg-slate-50/70 px-4 py-3"><CardTitle className="text-sm">By church</CardTitle><CardDescription className="text-xs">Registered crusades per church</CardDescription></CardHeader>
                 <CardContent className="px-4 py-5">
                   {!data.by_church.length ? <Empty text="No churches yet." /> :
                     <BarH rows={bars(data.by_church)} onRowClick={(row) => go("church_name", row.key)} />}
@@ -171,7 +171,7 @@ export function BlueEliteDashboard() {
                         <li key={row.id} onClick={() => go("q", row.org)} className="flex cursor-pointer items-baseline justify-between gap-3 py-2.5 hover:bg-accent/50">
                           <div className="min-w-0">
                             <p className="text-sm font-medium">{orgHierarchy(row)}</p>
-                            <p className="text-xs text-muted-foreground">{row.department ? `${row.department} · ` : ""}{row.country} · plan date {row.plan_date}</p>
+                            <p className="text-xs text-muted-foreground">{row.department ? `${row.department} · ` : ""}{row.country} · August 28, 2026</p>
                           </div>
                           <div className="shrink-0 text-right">
                             <p className="text-sm font-semibold tabular-nums">{nfull.format(row.planned)}</p>

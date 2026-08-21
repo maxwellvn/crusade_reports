@@ -172,6 +172,7 @@ async function sendXlsx(res, baseName, columns, rows) {
   }
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${baseName}.xlsx"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  res.setHeader("Content-Length", buffer.length);
+  res.end(buffer);
 }

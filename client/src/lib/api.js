@@ -71,6 +71,40 @@ export const putForm = (path, formData) => api(path, { method: "PUT", body: form
 export const patchJSON = (path, data) => api(path, { method: "PATCH", body: JSON.stringify(data) });
 export const deleteJSON = (path) => api(path, { method: "DELETE" });
 
+// Authenticated file download with the same user-facing API errors as JSON
+// requests. This avoids silent direct-link failures behind the production proxy.
+export async function downloadFile(path, fallbackName = "download") {
+  let response;
+  try {
+    response = await fetch(`/api${path}`);
+  } catch {
+    const error = new Error("Could not download the file. Check your connection and try again.");
+    error.code = "NETWORK";
+    throw error;
+  }
+
+  if (!response.ok) {
+    let body = null;
+    try { body = await response.json(); } catch { /* non-JSON proxy error */ }
+    const error = new Error(body?.error?.message || "Could not export the registrations. Please try again.");
+    error.code = body?.error?.code || "EXPORT_FAILED";
+    error.status = response.status;
+    throw error;
+  }
+
+  const disposition = response.headers.get("content-disposition") || "";
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  const fileName = encodedName ? decodeURIComponent(encodedName) : plainName || fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = Object.assign(document.createElement("a"), { href: url, download: fileName });
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // Debounce a promise-returning fn, cancelling stale calls (for typeaheads).
 export function debounce(fn, ms = 250) {
   let t;

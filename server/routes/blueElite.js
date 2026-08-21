@@ -12,6 +12,7 @@ import { resolveCountryName } from "./countries.js";
 export const blueElite = Router();
 
 const PROGRAM = "blue_elite";
+const BLUE_ELITE_CRUSADE_DATE = "2026-08-28";
 
 // Insert path for Blue Elite registrations. Mirrors the public registration
 // insert but pins program='blue_elite' on every row and stores the department
@@ -85,7 +86,13 @@ const insertBlueEliteRegistration = db.transaction((d) => {
 // Public submission — no auth gate, self-declared Blue Elite staff (matches the
 // existing /crusade-registration pattern).
 blueElite.post("/registrations", wrap((req, res) => {
-  const parsed = blueEliteRegistrationSchema.safeParse(req.body);
+  const payload = {
+    ...req.body,
+    items: Array.isArray(req.body?.items)
+      ? req.body.items.map((item) => ({ ...item, event_date: BLUE_ELITE_CRUSADE_DATE }))
+      : req.body?.items,
+  };
+  const parsed = blueEliteRegistrationSchema.safeParse(payload);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
   const id = insertBlueEliteRegistration(parsed.data);
   backfillCityCoords().catch(() => {});

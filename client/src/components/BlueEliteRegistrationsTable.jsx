@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { getJSON } from "@/lib/api";
+import { downloadFile, getJSON } from "@/lib/api";
 import { CRUSADE_TYPES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
 
@@ -41,8 +41,6 @@ const FILTERS = [
   ["city", "City", "text"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
   ["min_attendance", "Min expected attendance", "number"],
-  ["date_from", "Crusade date from", "date"],
-  ["date_to", "Crusade date to", "date"],
 ];
 const PAGE_SIZE = 50;
 
@@ -50,6 +48,7 @@ export function BlueEliteRegistrationsTable() {
   const [params, setParams] = useSearchParams();
   const [data, setData] = React.useState(null);
   const [selected, setSelected] = React.useState(null);
+  const [exporting, setExporting] = React.useState("");
   const [showFilters, setShowFilters] = React.useState(() => FILTERS.some(([key]) => params.has(key)));
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 
@@ -79,14 +78,19 @@ export function BlueEliteRegistrationsTable() {
   }
   const { Th } = useTableSort(params, setParams, "created_at");
 
-  function exportRows(format) {
+  async function exportRows(format) {
     const qs = new URLSearchParams(params);
     qs.set("format", format);
     qs.delete("page");
-    const link = Object.assign(document.createElement("a"), { href: `/api/blue-elite/registrations/export?${qs.toString()}` });
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    setExporting(format);
+    try {
+      await downloadFile(`/blue-elite/registrations/export?${qs.toString()}`, `blue-elite-registered-crusades.${format}`);
+      toast.success(`${format.toUpperCase()} export downloaded`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setExporting("");
+    }
   }
 
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
@@ -95,14 +99,14 @@ export function BlueEliteRegistrationsTable() {
     <div className="mx-auto max-w-7xl space-y-6">
       <Breadcrumbs items={[{ label: "Blue Elite dashboard", to: "/dashboard/blue-elite" }, { label: "Registered crusades" }]} />
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div><h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Blue Elite — registered crusades</h2><p className="mt-2 text-sm text-slate-600">Plans, readiness, reporting status and departmental ownership in one record.</p></div>
+        <div><h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Blue Elite — registered crusades</h2><p className="mt-2 text-sm text-slate-600">All Blue Elite crusades are scheduled for August 28, 2026.</p></div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           {data && <p className="mr-1 text-sm tabular-nums text-slate-500">{nfull.format(data.total)} matching</p>}
-          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total} title="Export matching rows as CSV">
-            <Download /> CSV
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total || !!exporting} title="Export matching rows as CSV">
+            <Download /> {exporting === "csv" ? "Exporting..." : "CSV"}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!data?.total} title="Export matching rows as Excel">
-            <FileSpreadsheet /> Excel
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!data?.total || !!exporting} title="Export matching rows as Excel">
+            <FileSpreadsheet /> {exporting === "xlsx" ? "Exporting..." : "Excel"}
           </Button>
         </div>
       </div>
@@ -156,7 +160,6 @@ export function BlueEliteRegistrationsTable() {
             <table className="w-full min-w-max text-sm">
               <thead>
                 <tr className="border-b border-blue-200 bg-blue-50/80 text-left text-xs text-slate-600">
-                  <Th col="event_date" label="Date" />
                   <Th col="event_name" label="Crusade" />
                   <Th col="event_type" label="Type" />
                   <Th col="country" label="Country" />
@@ -173,7 +176,6 @@ export function BlueEliteRegistrationsTable() {
               <tbody className="tabular-nums">
                 {data.rows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2 pr-3 whitespace-nowrap">{r.event_date || "—"}</td>
                     <td className="max-w-52 py-2 pr-3">
                       <div className="font-medium">{r.event_name || typeLabel(r.event_type)}</div>
                       {r.planned_count > 1 && <div className="text-xs text-muted-foreground">Legacy aggregate: {nfull.format(r.planned_count)}</div>}

@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { deleteJSON, getJSON } from "@/lib/api";
+import { deleteJSON, downloadFile, getJSON } from "@/lib/api";
 import { useAdmin } from "@/components/AdminGate";
 import { CRUSADE_TYPES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
@@ -56,6 +56,7 @@ export function RegistrationsTable() {
   const [editing, setEditing] = React.useState(null);
   const [reporting, setReporting] = React.useState(null);
   const [deleting, setDeleting] = React.useState(null);
+  const [exporting, setExporting] = React.useState("");
   const [showFilters, setShowFilters] = React.useState(() => FILTERS.some(([key]) => params.has(key)));
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
 
@@ -113,16 +114,21 @@ export function RegistrationsTable() {
   }
   const { Th } = useTableSort(params, setParams, "created_at");
 
-  // Download every row matching the current filters (not just this page). The
-  // session cookie authenticates the direct request; the server sets the filename.
-  function exportRows(format) {
+  // Download every row matching the current filters, with API errors surfaced
+  // in the page instead of opening a failed direct request in the browser.
+  async function exportRows(format) {
     const qs = new URLSearchParams(params);
     qs.set("format", format);
     qs.delete("page");
-    const link = Object.assign(document.createElement("a"), { href: `/api/registrations/export?${qs.toString()}` });
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    setExporting(format);
+    try {
+      await downloadFile(`/registrations/export?${qs.toString()}`, `registered-crusades.${format}`);
+      toast.success(`${format.toUpperCase()} export downloaded`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setExporting("");
+    }
   }
 
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
@@ -134,11 +140,11 @@ export function RegistrationsTable() {
         <div><h2 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">Registered crusades</h2><p className="mt-2 text-sm text-slate-600">Plans, readiness, reporting status and organizational ownership in one record.</p></div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           {data && <p className="mr-1 text-sm tabular-nums text-slate-500">{nfull.format(data.total)} matching</p>}
-          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total} title="Export matching rows as CSV">
-            <Download /> CSV
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("csv")} disabled={!data?.total || !!exporting} title="Export matching rows as CSV">
+            <Download /> {exporting === "csv" ? "Exporting..." : "CSV"}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!data?.total} title="Export matching rows as Excel">
-            <FileSpreadsheet /> Excel
+          <Button type="button" variant="outline" size="sm" onClick={() => exportRows("xlsx")} disabled={!data?.total || !!exporting} title="Export matching rows as Excel">
+            <FileSpreadsheet /> {exporting === "xlsx" ? "Exporting..." : "Excel"}
           </Button>
         </div>
       </div>

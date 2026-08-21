@@ -36,8 +36,10 @@ const STEP_FIELDS = [
   [],
 ];
 
-const EMPTY_CRUSADE = { event_type: "", event_name: "", event_date: "", venue: "", expected_attendance: "", minister_name: "", country: "", city: "", city_place_id: "" };
-const seedItems = (items) => (Array.isArray(items) && items.length > 0 ? items : [EMPTY_CRUSADE]);
+const BLUE_ELITE_CRUSADE_DATE = "2026-08-28";
+const EMPTY_CRUSADE = { event_type: "", event_name: "", event_date: BLUE_ELITE_CRUSADE_DATE, venue: "", expected_attendance: "", minister_name: "", country: "", city: "", city_place_id: "" };
+const seedItems = (items) => (Array.isArray(items) && items.length > 0 ? items : [EMPTY_CRUSADE])
+  .map((item) => ({ ...item, event_date: BLUE_ELITE_CRUSADE_DATE }));
 
 function MinisterTags({ value = "", onChange, invalid }) {
   const split = (names) => names.split(",").map((name) => name.trim()).filter(Boolean);
@@ -179,9 +181,13 @@ export function BlueEliteRegistrationForm() {
   async function onSubmit(data) {
     if (step !== STEPS.length - 1) return;
     try {
-      await postJSON("/blue-elite/registrations", data);
+      const payload = {
+        ...data,
+        items: data.items.map((crusade) => ({ ...crusade, event_date: BLUE_ELITE_CRUSADE_DATE })),
+      };
+      await postJSON("/blue-elite/registrations", payload);
       clearStoredDraft();
-      const crusadeCountry = data.items[0].country || "";
+      const crusadeCountry = payload.items[0].country || "";
       const code = countryCodeOf(crusadeCountry);
       navigate(`/blue-elite/avatar?new=1&country=${encodeURIComponent(code)}&name=${encodeURIComponent(crusadeCountry)}`);
     } catch (e) {
@@ -288,7 +294,7 @@ export function BlueEliteRegistrationForm() {
                 <CardHeader>
                   <CardTitle>Register your crusade</CardTitle>
                   <CardDescription>
-                    Blue Elite staff register one confirmed crusade with one country — your campaign avatar will show this country.
+                    Register one confirmed crusade for Friday, August 28, 2026. Your campaign avatar will show the selected country.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -310,9 +316,6 @@ export function BlueEliteRegistrationForm() {
                       </Field>
                       <Field label="Crusade name" required error={rowErr.event_name?.message}>
                         <Input placeholder="e.g. Bujumbura Community Crusade" {...register("items.0.event_name")} aria-invalid={!!rowErr.event_name} />
-                      </Field>
-                      <Field label="Crusade date" required error={rowErr.event_date?.message}>
-                        <Input type="date" {...register("items.0.event_date")} aria-invalid={!!rowErr.event_date} />
                       </Field>
                       <Field label="Expected attendance" required error={rowErr.expected_attendance?.message}>
                         <Input type="number" min="1" placeholder="e.g. 500" {...register("items.0.expected_attendance")} aria-invalid={!!rowErr.expected_attendance} />
