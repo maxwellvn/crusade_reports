@@ -89,22 +89,30 @@ export function ZonePortal() {
     params.set("view", activeTab);
     params.set("page", String(page));
     params.set("page_size", String(PAGE_SIZE));
-    getJSON(`/zone-portal/${token}?${params.toString()}`).then(setData).catch((e) => setError(e.message));
+    getJSON(`/zone-portal/${token}?${params.toString()}`)
+      .then((result) => { setData(result); setError(null); })
+      .catch((requestError) => {
+        setError(requestError);
+        toast.error(requestError.message || "Could not refresh the dashboard.");
+      });
   }, [token, debouncedQuery, typeFilter, readinessFilter, sourceFilter, activeTab, page]);
   React.useEffect(() => { loadPortal(); }, [loadPortal]);
 
   const changeFilter = (setter) => (value) => { setter(value); setPage(1); };
 
-  if (error)
+  if (error && !data) {
+    const invalidLink = error.status === 404;
     return (
       <div className="grid min-h-screen place-items-center bg-background px-6">
         <div className="max-w-md space-y-4 text-center">
           <img src="/logo.png" alt="" className="mx-auto h-10 w-auto" />
-          <h1 className="text-2xl tracking-tight">This link isn’t valid.</h1>
-          <p className="text-sm text-muted-foreground">{error}</p>
+          <h1 className="text-2xl tracking-tight">{invalidLink ? "This link isn’t valid." : "Dashboard temporarily unavailable"}</h1>
+          <p className="text-sm text-muted-foreground">{error.message}</p>
+          {!invalidLink && <Button type="button" onClick={loadPortal}>Try again</Button>}
         </div>
       </div>
     );
+  }
 
   const editingCrusade = data?.items.find((item) => item.id === openCrusade) || null;
   const filteredItems = data?.items || [];
@@ -347,6 +355,11 @@ export function ZonePortal() {
             )}
             {reportingCrusade && (
               <CrusadeReportDialog crusade={reportingCrusade} token={token} onClose={() => setReportingCrusade(null)}
+                onAlreadySubmitted={() => {
+                  setReportingCrusade(null);
+                  setPage(1);
+                  loadPortal();
+                }}
                 onSubmitted={(report) => {
                   setData((current) => ({
                     ...current,
@@ -530,7 +543,7 @@ function useCityFetcher(countryName) {
   }, [countryCode]);
 }
 
-export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmitted }) {
+export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmitted, onAlreadySubmitted }) {
   const ref = React.useRef(null);
   const draftKey = token ? portalReportDraftKey(token, crusade.id) : "";
   const draft = React.useMemo(() => readPortalReportDraft(draftKey), [draftKey]);
@@ -604,6 +617,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
 
   async function submit(event) {
     event.preventDefault();
+    if (saving) return;
     const required = [report.format, report.event_type, report.event_name, report.city, report.event_date, report.minister_name, report.venue];
     if (required.some((value) => !String(value || "").trim()) || (report.event_type === "other" && !report.other_event_type.trim())) {
       return toast.error("Please complete all required report details.");
@@ -627,6 +641,15 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
       toast.success("Crusade report submitted.");
       onSubmitted(submitted);
     } catch (error) {
+      if (error.code === "ALREADY_REPORTED") {
+        draftCleared.current = true;
+        if (draftKey) {
+          try { localStorage.removeItem(draftKey); } catch { /* storage unavailable */ }
+        }
+        toast.success("This report was already submitted successfully.");
+        onAlreadySubmitted?.();
+        return;
+      }
       toast.error(error.message || "Could not submit the crusade report. Please try again.");
     } finally {
       setSaving(false);

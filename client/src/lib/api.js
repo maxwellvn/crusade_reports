@@ -3,6 +3,43 @@
 // browser automatically and never exposed to client JavaScript.
 export const REPORT_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
+export function responseErrorDetails({ status, isFormData = false, body = null }) {
+  const applicationMessage = body?.error?.message;
+  const applicationCode = body?.error?.code;
+  if (applicationMessage) return { message: applicationMessage, code: applicationCode || "NETWORK" };
+
+  if (status === 413) {
+    return {
+      code: "PHOTOS_TOO_LARGE",
+      message: isFormData
+        ? "The server rejected these photos because the upload is too large. Select fewer or smaller photos (50MB total maximum), or add photo links instead."
+        : "The request was rejected because it is too large. Reduce its size and try again.",
+    };
+  }
+  if (status === 502) {
+    return {
+      code: isFormData ? "UPLOAD_STATUS_UNKNOWN" : "SERVER_UNAVAILABLE",
+      message: isFormData
+        ? "The server connection was interrupted while submitting. Your report may already have been saved. Refresh the dashboard and check for ‘Submitted’ before trying again."
+        : "The server is temporarily unavailable. Please try again shortly.",
+    };
+  }
+  if (status === 504) {
+    return {
+      code: isFormData ? "UPLOAD_STATUS_UNKNOWN" : "SERVER_TIMEOUT",
+      message: isFormData
+        ? "The server took too long to confirm the submission. Your report may already have been saved. Refresh the dashboard and check for ‘Submitted’ before trying again."
+        : "The server took too long to respond. Please try again shortly.",
+    };
+  }
+  return {
+    code: applicationCode || "NETWORK",
+    message: isFormData
+      ? "Could not upload photos with this report. Check your connection and keep photos within 50MB total, then try again."
+      : "Request failed. Please try again.",
+  };
+}
+
 export async function api(path, options = {}) {
   const isFormData = options.body instanceof FormData;
   const { timeoutMs = 0, signal: callerSignal, ...fetchOptions } = options;
@@ -44,19 +81,9 @@ export async function api(path, options = {}) {
     /* non-JSON (e.g. proxy HTML error page) */
   }
   if (!res.ok) {
-    let message = body?.error?.message;
-    let code = body?.error?.code || "NETWORK";
-    if (!message && (res.status === 413 || res.status === 502 || res.status === 504)) {
-      message = isFormData
-        ? "The photo upload was rejected as too large. Keep all photos within 50MB total, or use photo links for larger albums."
-        : "The request was rejected as too large. Please try again with a smaller upload.";
-      code = "PHOTOS_TOO_LARGE";
-    }
-    if (!message && isFormData) {
-      message = "Could not upload photos with this report. Keep photos within 50MB total and try again.";
-    }
-    const err = new Error(message || "Request failed. Please try again.");
-    err.code = code;
+    const details = responseErrorDetails({ status: res.status, isFormData, body });
+    const err = new Error(details.message);
+    err.code = details.code;
     err.status = res.status;
     throw err;
   }

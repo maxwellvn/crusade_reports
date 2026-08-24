@@ -69,8 +69,10 @@ Dockerfile-based. In Coolify:
 1. New resource → this git repo → build pack **Dockerfile** (port 4000).
 2. Env vars: `KINGSCHAT_CLIENT_ID` and `KINGSCHAT_REDIRECT_URI`; optionally `GOOGLE_TRANSLATE_API_KEY` for visitor-selected translations (see `.env.example`).
 3. **Persistent storage**: mount a volume at `/app/data` — the SQLite database, resource files, and report photos (`/app/data/report-photos`) live there; without it, data resets on every deploy.
-4. **Proxy upload limit**: set the Coolify/Traefik request body limit to at least **30MB** so crusade report photo uploads are not rejected with `413`.
+4. **Proxy upload limit**: set the Coolify/Traefik request body limit to at least **55MB** so the proxy can accept the application's 50MB combined report-photo allowance plus multipart overhead. A proxy `413` means this setting is lower than the application limit.
 5. Health check: `GET /api/health` (already declared in the Dockerfile).
+
+Registration-triggered database snapshots are coalesced to one verified backup every five minutes so peak registration traffic does not repeatedly copy and integrity-check the full database. Set `DB_REGISTRATION_BACKUP_MIN_INTERVAL_MINUTES` to a different positive interval if needed; scheduled hourly protection is unaffected.
 
 ### Database protection and recovery
 

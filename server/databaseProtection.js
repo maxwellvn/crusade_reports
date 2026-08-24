@@ -15,6 +15,17 @@ const positiveInt = (value, fallback) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+const registrationBackupIntervalMs = () => positiveInt(
+  process.env.DB_REGISTRATION_BACKUP_MIN_INTERVAL_MINUTES,
+  5,
+) * 60 * 1000;
+
+export function shouldThrottleBackup({ reason, lastSuccessAt, now = Date.now(), intervalMs = registrationBackupIntervalMs() }) {
+  if (reason !== "registration" || !lastSuccessAt) return false;
+  const elapsed = Number(now) - Date.parse(lastSuccessAt);
+  return Number.isFinite(elapsed) && elapsed >= 0 && elapsed < intervalMs;
+}
+
 export const backupDirectory = () => resolve(process.env.DB_BACKUP_DIR || join(dirname(db.name), "backups"));
 export const pendingRestorePath = () => join(dirname(db.name), ".restore-pending.sqlite");
 
@@ -100,6 +111,9 @@ export async function createVerifiedBackup({ database = db, backupDir = backupDi
 
 export function backupDatabase(reason = "automatic") {
   if (activeBackup) return activeBackup;
+  if (shouldThrottleBackup({ reason, lastSuccessAt: status.last_success_at })) {
+    return Promise.resolve({ skipped: true, reason, last_success_at: status.last_success_at });
+  }
   activeBackup = (async () => {
     try {
       const result = await createVerifiedBackup({
