@@ -15,6 +15,7 @@ import multer from "multer";
 import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalReportTemplate.js";
 import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
 import { portalItemOrder, PORTAL_UNREGISTERED_REPORT_ORDER } from "../reportOrdering.js";
+import { portalReportPreview } from "../portalReportImport.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -501,15 +502,7 @@ zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.sing
   };
   if (errors.length) return res.json({ ok: false, errors: errors.slice(0, 100), summary });
   if (req.query.commit !== "1") {
-    return res.json({ ok: true, errors: [], summary, rows: validated.map((entry) => ({
-      row_number: entry.row_number,
-      registration_item_id: entry.item.id,
-      event_name: entry.item.event_name,
-      event_date: entry.body.crusade.event_date,
-      attendance: entry.body.crusade.attendance + entry.body.crusade.online_participation,
-      photo_links: entry.body.photo_links,
-      video_links: entry.body.video_links,
-    })) });
+    return res.json(portalReportPreview(validated, summary));
   }
 
   const submitted = db.transaction(() => validated.map(({ item, body }) => ({
