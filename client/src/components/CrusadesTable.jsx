@@ -88,7 +88,7 @@ export function CrusadesTable() {
       setDeleting(null);
     }
   }
-  const { Th } = useTableSort(params, setParams, "event_date");
+  const { Th } = useTableSort(params, setParams, "submitted_at");
 
   // Download every row matching the current filters (cookie authenticates the request).
   function exportRows(format) {
@@ -184,7 +184,8 @@ export function CrusadesTable() {
             <table className="w-full min-w-max text-sm">
               <thead>
                 <tr className="border-b border-blue-200 bg-blue-50/80 text-left text-xs text-slate-600">
-                  <Th col="event_date" label="Date" />
+                  <Th col="submitted_at" label="Submitted" />
+                  <Th col="event_date" label="Date held" />
                   <Th col="event_name" label="Event name" />
                   <Th col="event_type" label="Type" />
                   <Th col="format" label="Format" />
@@ -204,6 +205,7 @@ export function CrusadesTable() {
               <tbody className="tabular-nums">
                 {data.rows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-200 last:border-0 even:bg-slate-50/45">
+                    <td className="py-2 pr-3 whitespace-nowrap">{r.submitted_at || "—"}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{r.event_date}</td>
                     <td className="max-w-40 truncate py-2 pr-3">{r.event_name}</td>
                     <td className="py-2 pr-3">{r.event_type === "other" ? r.other_event_type : typeLabel(r.event_type)}</td>

@@ -8,6 +8,7 @@ import {
   composeMediaLinks, deleteReportPhotos, listReportPhotos, parseReportPayload, removeUploadedFiles,
   saveReportPhotos, withReportPhotoUpload,
 } from "../reportMedia.js";
+import { ADMIN_REPORT_ORDER } from "../reportOrdering.js";
 
 export const crusades = Router();
 
@@ -78,12 +79,13 @@ const CRUSADE_FROM = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id"
 const CRUSADE_EXPORT_SELECT =
   `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
           c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
-          c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
+          c.created_at AS submitted_at, c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
           r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username`;
 
 // One column per field a report can carry, in a readable order — attribution,
 // the crusade, every outcome metric, then reporter contact.
 const CRUSADE_EXPORT_COLUMNS = [
+  { header: "Submitted at (UTC)", value: (row) => row.submitted_at },
   { header: "Date held", value: (row) => row.event_date },
   { header: "Crusade name", value: (row) => row.event_name },
   { header: "Type", value: (row) => typeLabel(row.event_type, row.other_event_type) },
@@ -110,7 +112,7 @@ const CRUSADE_EXPORT_COLUMNS = [
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
 crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
   const { clause, params } = crusadeFilters(req.query);
-  const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY c.event_date DESC, c.id DESC`).all(params);
+  const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`).all(params);
   await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "crusade-reports", CRUSADE_EXPORT_COLUMNS, rows);
 }));
 
@@ -122,10 +124,11 @@ crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req
 
   // Sorting: whitelisted column names only (never interpolate raw query input).
     const NUMERIC_SORT = new Set(["attendance", "crusade_expense", ...METRIC_FIELDS]);
-  const TEXT_SORT = new Set(["event_date", "event_name", "event_type", "format", "city", "country", "organization_type", "minister_name", "venue"]);
-  const sortCol = NUMERIC_SORT.has(req.query.sort) || TEXT_SORT.has(req.query.sort) ? req.query.sort : "event_date";
+  const TEXT_SORT = new Set(["submitted_at", "event_date", "event_name", "event_type", "format", "city", "country", "organization_type", "minister_name", "venue"]);
+  const sortCol = NUMERIC_SORT.has(req.query.sort) || TEXT_SORT.has(req.query.sort) ? req.query.sort : "submitted_at";
   const dir = req.query.dir === "asc" ? "ASC" : "DESC";
-  const orderBy = `c.${sortCol}${TEXT_SORT.has(sortCol) ? " COLLATE NOCASE" : ""} ${dir}, c.id DESC`;
+  const sortExpression = sortCol === "submitted_at" ? "c.created_at" : `c.${sortCol}`;
+  const orderBy = `${sortExpression}${TEXT_SORT.has(sortCol) ? " COLLATE NOCASE" : ""} ${dir}, c.id DESC`;
 
   // Full row, every uploaded field — this backs the "show everything received" table.
   const from = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id";
@@ -133,7 +136,7 @@ crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req
   const rows = db.prepare(
     `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
             c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
-            c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
+            c.created_at AS submitted_at, c.attendance, c.crusade_expense, ${METRIC_FIELDS.map((field) => `c.${field}`).join(", ")}, c.minister_name, c.venue,
             r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
      ${from} ${clause} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });

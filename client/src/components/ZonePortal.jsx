@@ -86,10 +86,11 @@ export function ZonePortal() {
     if (typeFilter) params.set("event_type", typeFilter);
     if (readinessFilter) params.set("readiness_status", readinessFilter);
     if (sourceFilter) params.set("source", sourceFilter);
+    params.set("view", activeTab);
     params.set("page", String(page));
     params.set("page_size", String(PAGE_SIZE));
     getJSON(`/zone-portal/${token}?${params.toString()}`).then(setData).catch((e) => setError(e.message));
-  }, [token, debouncedQuery, typeFilter, readinessFilter, sourceFilter, page]);
+  }, [token, debouncedQuery, typeFilter, readinessFilter, sourceFilter, activeTab, page]);
   React.useEffect(() => { loadPortal(); }, [loadPortal]);
 
   const changeFilter = (setter) => (value) => { setter(value); setPage(1); };
@@ -262,7 +263,8 @@ export function ZonePortal() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Date</th>
+                        <th className="py-2 pr-3 font-medium">Submitted</th>
+                        <th className="py-2 pr-3 font-medium">Date held</th>
                         <th className="py-2 pr-3 font-medium">Crusade</th>
                         <th className="py-2 pr-3 font-medium">Type</th>
                         <th className="py-2 pr-3 font-medium">Country</th>
@@ -278,6 +280,7 @@ export function ZonePortal() {
                     <tbody className="tabular-nums">
                       {filteredItems.map((item) => (
                         <tr key={item.id} className="border-b last:border-0">
+                          <td className="py-2 pr-3 whitespace-nowrap">{item.reported_at || "Not submitted"}</td>
                           <td className="py-2 pr-3 whitespace-nowrap">{item.event_date || "—"}</td>
                           <td className="max-w-52 py-2 pr-3 font-medium">{item.event_name || typeLabel(item.event_type)}</td>
                           <td className="py-2 pr-3">{typeLabel(item.event_type)}</td>
@@ -312,13 +315,14 @@ export function ZonePortal() {
                   </div>
                   <table className="w-full text-sm">
                     <thead><tr className="border-b text-left text-xs text-muted-foreground">
-                      <th className="py-2 pr-3 font-medium">Date</th><th className="py-2 pr-3 font-medium">Crusade</th>
+                      <th className="py-2 pr-3 font-medium">Submitted</th><th className="py-2 pr-3 font-medium">Date held</th><th className="py-2 pr-3 font-medium">Crusade</th>
                       <th className="py-2 pr-3 font-medium">Country</th><th className="py-2 pr-3 font-medium">Location</th>
                       <th className="py-2 pr-3 font-medium">Reporting type</th>
                       <th className="py-2 pr-3 text-right font-medium">Attendance</th><th className="py-2 text-right font-medium">Souls won</th>
                     </tr></thead>
                     <tbody className="tabular-nums">
                       {filteredUnregistered.map((crusade) => <tr key={crusade.id} className="border-b last:border-0">
+                        <td className="py-2 pr-3 whitespace-nowrap">{crusade.reported_at || "—"}</td>
                         <td className="py-2 pr-3 whitespace-nowrap">{crusade.event_date}</td>
                         <td className="py-2 pr-3 font-medium">{crusade.event_name || typeLabel(crusade.event_type)}</td>
                         <td className="py-2 pr-3">{crusade.country}</td>
@@ -352,8 +356,11 @@ export function ZonePortal() {
                       attendance: current.totals.attendance + (report.reported_attendance || 0) + (report.reported_online_participation || 0),
                       salvation: current.totals.salvation + (report.reported_salvation || 0),
                     },
-                    items: current.items.map((item) => item.id === reportingCrusade.id ? { ...item, ...report } : item),
+                    items: current.items
+                      .map((item) => item.id === reportingCrusade.id ? { ...item, ...report } : item)
+                      .sort((a, b) => Boolean(b.report_id) - Boolean(a.report_id) || String(b.reported_at || "").localeCompare(String(a.reported_at || ""))),
                   }));
+                  setPage(1);
                   setReportingCrusade(null);
                 }} />
             )}

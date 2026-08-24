@@ -14,6 +14,7 @@ import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LAB
 import multer from "multer";
 import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalReportTemplate.js";
 import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
+import { portalItemOrder, PORTAL_UNREGISTERED_REPORT_ORDER } from "../reportOrdering.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -183,6 +184,7 @@ const PORTAL_REGISTRATION_EXPORT_COLUMNS = [
 ];
 
 const PORTAL_REPORT_EXPORT_COLUMNS = [
+  { header: "Submitted at (UTC)", value: (row) => row.reported_at || row.created_at },
   { header: "Date held", value: (row) => row.event_date },
   { header: "Crusade name", value: (row) => row.event_name },
   { header: "Type", value: (row) => typeLabel(row.event_type, row.other_event_type) },
@@ -279,6 +281,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   const itemsTotal = db.prepare(`SELECT COUNT(*) n FROM registration_items WHERE ${scopeItemsSql}${filter.sql}`)
     .get(...listParams, ...filter.params).n;
 
+  const itemOrder = portalItemOrder(req.query.view);
   const items = db.prepare(`
     SELECT registration_items.id, registration_items.registration_id, registration_items.event_type,
            registration_items.planned_count, registration_items.event_name,
@@ -299,7 +302,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     LEFT JOIN registrations reg ON reg.id = registration_items.registration_id
     LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
     WHERE ${scopeItemsSql}${filter.sql}
-    ORDER BY COALESCE(registration_items.event_date, registration_items.plan_date), registration_items.id
+    ORDER BY ${itemOrder}
     LIMIT ? OFFSET ?
   `).all(...listParams, ...filter.params, pageSize, offset).map((r) => {
     const visitor = r[col] !== name;
@@ -322,10 +325,10 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     .get(...listParams, ...crusadeFilter.params).n;
 
   const crusades = db.prepare(`
-    SELECT id, registration_item_id, event_date, event_type, other_event_type, event_name, format, city, country,
+    SELECT id, registration_item_id, created_at AS reported_at, event_date, event_type, other_event_type, event_name, format, city, country,
            organization_type, zone, group_name, church_name, cell_name, network_name,
            attendance, online_participation, salvation, minister_name, venue
-    FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql} ORDER BY event_date DESC, id DESC LIMIT ? OFFSET ?
+    FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql} ORDER BY ${PORTAL_UNREGISTERED_REPORT_ORDER} LIMIT ? OFFSET ?
   `).all(...listParams, ...crusadeFilter.params, pageSize, offset).map((r) => {
     const visitor = r[col] !== name;
     return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
@@ -396,7 +399,7 @@ zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
     FROM crusades c
     LEFT JOIN reports r ON r.id = c.report_id
     WHERE ${listWhere("c.")}
-    ORDER BY c.event_date DESC, c.id DESC
+    ORDER BY c.created_at DESC, c.id DESC
   `).all(...listParams);
   await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-reports`, PORTAL_REPORT_EXPORT_COLUMNS, rows);
 }));
