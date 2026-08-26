@@ -19,3 +19,16 @@ test("zone personal dashboards retain strict zone ownership", () => {
   assert.equal(scope.listWhere("registration_items."), "registration_items.zone = ?");
   assert.deepEqual(scope.listParams, ["Lagos Zone 1"]);
 });
+
+test("enabled inheritance restores mapped event types and Youths Aglow BLW rows", () => {
+  const youths = personalDashboardScope({ name: "Youths Aglow", kind: "network", includeInherited: true });
+  assert.equal(youths.listWhere("i."), "(i.network_name = ? OR i.event_type = ? OR (i.zone IS NOT NULL AND (LOWER(i.zone) LIKE 'blw%')))");
+  assert.deepEqual(youths.listParams, ["Youths Aglow", "youths-aglow"]);
+  assert.equal(youths.totalsWhere, "(network_name = ? OR (zone IS NOT NULL AND (LOWER(zone) LIKE 'blw%')) OR event_type = 'youths-aglow')");
+  assert.equal(youths.registrationsWhere, "(r.network_name = ? OR (r.zone IS NOT NULL AND (LOWER(r.zone) LIKE 'blw%')))");
+
+  const teens = personalDashboardScope({ name: "TEEVOLUTION", kind: "network", includeInherited: true });
+  assert.equal(teens.listWhere("i."), "(i.network_name = ? OR i.event_type = ?)");
+  assert.deepEqual(teens.listParams, ["TEEVOLUTION", "teevolution"]);
+  assert.equal(teens.totalsWhere, "network_name = ?");
+});
