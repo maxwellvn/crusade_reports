@@ -6,15 +6,18 @@ import { AvatarFramer } from "@/components/AvatarFramer";
 import { Button } from "@/components/ui/button";
 import "../landing.css";
 
-const BLUE_ELITE_FRAME = "/blue-elite-avatar-template.webp";
-const BLUE_ELITE_HOLE = { cx: 768 / 1500, cy: 925 / 1500, r: 204 / 1500 };
+const BLUE_ELITE_FRAME = "/blue-elite-avatar-template-v2.webp";
+const BLUE_ELITE_HOLE = { cx: 768 / 1500, cy: 930 / 1500, r: 207 / 1500 };
 const COUNTRY_LABEL_BOX = {
-  x: 1085 / 1500,
-  y: 855 / 1500,
-  width: 415 / 1500,
-  height: 170 / 1500,
-  background: "#0117cd",
+  x: 1070 / 1500,
+  y: 840 / 1500,
+  width: 430 / 1500,
+  height: 180 / 1500,
+  background: "#0018cc",
   color: "#fff",
+  fontScale: 0.42,
+  multilineFontScale: 0.34,
+  fontStretch: 0.76,
 };
 
 export function BlueEliteAvatar() {
@@ -87,7 +90,7 @@ export function BlueEliteAvatar() {
             </div>
           </div>
           <div className="avatar-hero-media">
-            <img src="/blue-elite-staff-preview.jpg" alt="Blue Elite staff campaign avatar preview" />
+            <img src={BLUE_ELITE_FRAME} alt="Blue Elite campaign avatar frame" />
           </div>
         </section>
 

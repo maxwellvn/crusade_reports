@@ -36,7 +36,7 @@ function balancedLines(value) {
 }
 
 function drawOverlayLabel(context, canvas, value, box) {
-  if (!value || !box) return;
+  if (!box) return;
   const x = canvas.width * box.x;
   const y = canvas.height * box.y;
   const width = canvas.width * box.width;
@@ -47,16 +47,21 @@ function drawOverlayLabel(context, canvas, value, box) {
   context.fillRect(x, y, width, height);
 
   const label = String(value).trim().toUpperCase();
+  if (!label) {
+    context.restore();
+    return;
+  }
   let lines = [label];
-  let fontSize = height * 0.48;
+  let fontSize = height * (box.fontScale || 0.48);
+  const fontStretch = box.fontStretch || 1;
   const setFont = () => { context.font = `900 ${fontSize}px "Arial Black", Arial, sans-serif`; };
   setFont();
-  if (context.measureText(label).width > width * 0.92) {
+  if (context.measureText(label).width * fontStretch > width * 0.92) {
     lines = balancedLines(label);
-    fontSize = height * 0.34;
+    fontSize = height * (box.multilineFontScale || 0.34);
     setFont();
   }
-  while (Math.max(...lines.map((line) => context.measureText(line).width)) > width * 0.92 && fontSize > 22) {
+  while (Math.max(...lines.map((line) => context.measureText(line).width)) * fontStretch > width * 0.92 && fontSize > 22) {
     fontSize -= 1;
     setFont();
   }
@@ -65,9 +70,11 @@ function drawOverlayLabel(context, canvas, value, box) {
   context.textAlign = "center";
   context.textBaseline = "middle";
   const lineHeight = fontSize * 1.02;
+  context.translate(x + width / 2, 0);
+  context.scale(fontStretch, 1);
   lines.forEach((line, index) => {
     const lineY = y + height / 2 + (index - (lines.length - 1) / 2) * lineHeight;
-    context.fillText(line, x + width / 2, lineY, width * 0.92);
+    context.fillText(line, 0, lineY);
   });
   context.restore();
 }
