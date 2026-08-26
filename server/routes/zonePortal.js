@@ -100,14 +100,14 @@ function resolvePortalScope(tokenValue) {
   const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(tokenValue);
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
-  const { col, listWhere, listParams, totalsWhere, registrationsWhere } = personalDashboardScope({
+  const { col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams } = personalDashboardScope({
     name,
     kind,
     includeInherited: isNetworkDashboardInheritanceEnabled(name),
   });
 
   const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || kind;
-  return { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere, slug };
+  return { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams, slug };
 }
 
 const PORTAL_REGISTRATION_EXPORT_COLUMNS = [
@@ -210,7 +210,7 @@ function buildListFilter({ q, eventType, readiness, source, scopeSql, scopeParam
 // crusades stay fast; totals and breakdowns are always computed over the full
 // scoped set, never the page.
 zonePortal.get("/zone-portal/:token", wrap((req, res) => {
-  const { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere } = resolvePortalScope(req.params.token);
+  const { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams } = resolvePortalScope(req.params.token);
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(req.query.page_size, 10) || DEFAULT_PAGE_SIZE));
   const offset = (page - 1) * pageSize;
@@ -221,7 +221,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
     WHERE ${registrationsWhere} AND (r.program = 'public' OR r.program IS NULL)
     GROUP BY r.id ORDER BY r.created_at DESC LIMIT 500
-  `).all(name);
+  `).all(...registrationsParams);
 
   // Items: scoped + filtered + paginated. The search/filters come from the
   // dashboard's query params so the page reflects the applied filters.
@@ -317,10 +317,10 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   `).get(name).n;
 
   const totals = {
-    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(name).n,
-    held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
-    attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
-    salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(name).n,
+    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(...totalsParams).n,
+    held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
+    attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
+    salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
   };
 
   res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, source_breakdown, pendingCount, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });

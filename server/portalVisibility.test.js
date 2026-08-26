@@ -9,7 +9,9 @@ test("network personal dashboards show only rows explicitly registered by that n
     assert.equal(scope.listWhere("i."), "i.network_name = ?");
     assert.deepEqual(scope.listParams, [name]);
     assert.equal(scope.totalsWhere, "network_name = ?");
+    assert.deepEqual(scope.totalsParams, [name]);
     assert.equal(scope.registrationsWhere, "r.network_name = ?");
+    assert.deepEqual(scope.registrationsParams, [name]);
   }
 });
 
@@ -24,11 +26,16 @@ test("enabled inheritance restores mapped event types and Youths Aglow BLW rows"
   const youths = personalDashboardScope({ name: "Youths Aglow", kind: "network", includeInherited: true });
   assert.equal(youths.listWhere("i."), "(i.network_name = ? OR i.event_type = ? OR (i.zone IS NOT NULL AND (LOWER(i.zone) LIKE 'blw%')))");
   assert.deepEqual(youths.listParams, ["Youths Aglow", "youths-aglow"]);
-  assert.equal(youths.totalsWhere, "(network_name = ? OR (zone IS NOT NULL AND (LOWER(zone) LIKE 'blw%')) OR event_type = 'youths-aglow')");
-  assert.equal(youths.registrationsWhere, "(r.network_name = ? OR (r.zone IS NOT NULL AND (LOWER(r.zone) LIKE 'blw%')))");
+  assert.equal(youths.totalsWhere, "(network_name = ? OR event_type = ? OR (zone IS NOT NULL AND (LOWER(zone) LIKE 'blw%')))");
+  assert.deepEqual(youths.totalsParams, ["Youths Aglow", "youths-aglow"]);
+  assert.equal(youths.registrationsWhere, "(r.network_name = ? OR (r.zone IS NOT NULL AND (LOWER(r.zone) LIKE 'blw%')) OR EXISTS (SELECT 1 FROM registration_items scoped_i WHERE scoped_i.registration_id = r.id AND scoped_i.event_type = ?))");
+  assert.deepEqual(youths.registrationsParams, ["Youths Aglow", "youths-aglow"]);
 
   const teens = personalDashboardScope({ name: "TEEVOLUTION", kind: "network", includeInherited: true });
   assert.equal(teens.listWhere("i."), "(i.network_name = ? OR i.event_type = ?)");
   assert.deepEqual(teens.listParams, ["TEEVOLUTION", "teevolution"]);
-  assert.equal(teens.totalsWhere, "network_name = ?");
+  assert.equal(teens.totalsWhere, "(network_name = ? OR event_type = ?)");
+  assert.deepEqual(teens.totalsParams, ["TEEVOLUTION", "teevolution"]);
+  assert.equal(teens.registrationsWhere, "(r.network_name = ? OR EXISTS (SELECT 1 FROM registration_items scoped_i WHERE scoped_i.registration_id = r.id AND scoped_i.event_type = ?))");
+  assert.deepEqual(teens.registrationsParams, ["TEEVOLUTION", "teevolution"]);
 });

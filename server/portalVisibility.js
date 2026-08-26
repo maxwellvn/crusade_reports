@@ -15,18 +15,19 @@ export function personalDashboardScope({ name, kind, includeInherited = false })
   const mappedType = includeInherited && kind === "network" ? NETWORK_EVENT_TYPES[name] : null;
   if (mappedType) {
     const youthsAglow = name === YOUTHS_AGLOW;
+    const inheritedWhere = (prefix = "") => youthsAglow
+      ? `(${prefix}${col} = ? OR ${prefix}event_type = ? OR (${prefix}zone IS NOT NULL AND ${blwZoneMatch(prefix)}))`
+      : `(${prefix}${col} = ? OR ${prefix}event_type = ?)`;
     return {
       col,
-      listWhere: (prefix = "") => youthsAglow
-        ? `(${prefix}${col} = ? OR ${prefix}event_type = ? OR (${prefix}zone IS NOT NULL AND ${blwZoneMatch(prefix)}))`
-        : `(${prefix}${col} = ? OR ${prefix}event_type = ?)`,
+      listWhere: inheritedWhere,
       listParams: [name, mappedType],
-      totalsWhere: youthsAglow
-        ? `(${col} = ? OR (zone IS NOT NULL AND ${blwZoneMatch()}) OR event_type = 'youths-aglow')`
-        : `${col} = ?`,
+      totalsWhere: inheritedWhere(),
+      totalsParams: [name, mappedType],
       registrationsWhere: youthsAglow
-        ? `(r.${col} = ? OR (r.zone IS NOT NULL AND ${blwZoneMatch("r.")}))`
-        : `r.${col} = ?`,
+        ? `(r.${col} = ? OR (r.zone IS NOT NULL AND ${blwZoneMatch("r.")}) OR EXISTS (SELECT 1 FROM registration_items scoped_i WHERE scoped_i.registration_id = r.id AND scoped_i.event_type = ?))`
+        : `(r.${col} = ? OR EXISTS (SELECT 1 FROM registration_items scoped_i WHERE scoped_i.registration_id = r.id AND scoped_i.event_type = ?))`,
+      registrationsParams: [name, mappedType],
     };
   }
   return {
@@ -34,6 +35,8 @@ export function personalDashboardScope({ name, kind, includeInherited = false })
     listWhere: (prefix = "") => `${prefix}${col} = ?`,
     listParams: [name],
     totalsWhere: `${col} = ?`,
+    totalsParams: [name],
     registrationsWhere: `r.${col} = ?`,
+    registrationsParams: [name],
   };
 }
