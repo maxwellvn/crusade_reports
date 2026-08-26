@@ -16,6 +16,7 @@ import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalR
 import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
 import { portalItemOrder, PORTAL_UNREGISTERED_REPORT_ORDER } from "../reportOrdering.js";
 import { portalReportPreview } from "../portalReportImport.js";
+import { personalDashboardScope } from "../portalVisibility.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -95,59 +96,11 @@ zonePortal.post("/zone-links", requirePageAccess("dashboard/zone-links"), wrap((
 
 // ---- Zone portal: token-scoped data ------------------------------------------
 
-// These networks also see crusades of their event type submitted from any
-// zone/group/church/cell — visible on their dashboard (visitor rows) but never
-// counted in their totals; the numbers stay with the submitting org.
-const NETWORK_EVENT_TYPES = {
-  "Youths Aglow": "youths-aglow",
-  "TEEVOLUTION": "teevolution",
-  "Say Yes to Kids": "say-yes-to-kids",
-};
-
-// BLW campus/region zones are auto-detected by name: any zone whose name
-// starts with "BLW" (case-insensitive). All crusades (any type) from these
-// zones appear in the Youths Aglow network dashboard — both in listings AND
-// in totals — without affecting the zone's own dashboard numbers or the
-// global admin statistics. The zone keeps its own counts; Youths Aglow
-// simply absorbs the BLW rows into its view.
-const blwCampusZoneMatch = (prefix = "") =>
-  `(LOWER(${prefix}zone) LIKE 'blw%')`;
-const YOUTHS_AGLOW = "Youths Aglow";
-
 function resolvePortalScope(tokenValue) {
   const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(tokenValue);
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
-  const col = kind === "network" ? "network_name" : "zone"; // fixed string, never user input
-  const mappedType = kind === "network" ? NETWORK_EVENT_TYPES[name] : null;
-  // Youths Aglow absorbs BLW campus/region zone crusades into its listings
-  // AND totals. Other networks keep the existing visitor-rows-in-lists-only
-  // behaviour for their mapped event type.
-  const isYouthsAglow = kind === "network" && name === YOUTHS_AGLOW;
-
-  // Visitor rows (matched by event type, owned by another org) appear in lists
-  // only — totals below keep the strict ${col} scope. Youths Aglow also pulls
-  // in BLW campus/region zone rows (all types) into both lists and totals.
-  const listWhere = (prefix) => {
-    if (isYouthsAglow) {
-      return `(${prefix}${col} = ? OR ${prefix}event_type = ? OR (${prefix}zone IS NOT NULL AND ${blwCampusZoneMatch(prefix)}))`;
-    }
-    return mappedType
-      ? `(${prefix}${col} = ? OR ${prefix}event_type = ?)`
-      : `${prefix}${col} = ?`;
-  };
-  const listParams = mappedType ? [name, mappedType] : [name];
-
-  // Totals scope: Youths Aglow includes BLW campus/region zone rows AND any
-  // crusade with event_type='youths-aglow' from any zone; everyone else uses
-  // strict ${col} = ? (own rows only).
-  const totalsWhere = isYouthsAglow
-    ? `(${col} = ? OR (zone IS NOT NULL AND ${blwCampusZoneMatch()}) OR event_type = 'youths-aglow')`
-    : `${col} = ?`;
-
-  const registrationsWhere = isYouthsAglow
-    ? `(r.${col} = ? OR (r.zone IS NOT NULL AND ${blwCampusZoneMatch("r.")}))`
-    : `r.${col} = ?`;
+  const { col, listWhere, listParams, totalsWhere, registrationsWhere } = personalDashboardScope({ name, kind });
 
   const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || kind;
   return { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere, slug };
