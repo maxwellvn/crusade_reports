@@ -14,36 +14,10 @@ const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 // reports without a registration_item_id still belong in outcome totals, but
 // never in planned-vs-held progress. Scoped to program='public' (NULL allowed
 // for pre-migration rows) so Blue Elite registrations don't appear here.
-//
-// BLW campus/region zones (name starts with "BLW") are relabelled as
-// "Youths Aglow" in the network_name breakdown so their crusades count under
-// Youths Aglow in the admin dashboard widget.
 const REGISTRATION_DIMENSIONS = new Set(["event_type", "organization_type", "zone", "network_name", "country", "city"]);
-const YOUTHS_AGLOW = "Youths Aglow";
 export function registrationProgress(column) {
   if (!REGISTRATION_DIMENSIONS.has(column)) throw new Error(`Unsupported registration dimension: ${column}`);
   const qualified = `ri.${column}`;
-  // Preserve an explicitly assigned network. Only otherwise-unassigned BLW
-  // and youths-aglow rows are attributed to Youths Aglow.
-  if (column === "network_name") {
-    return db.prepare(
-      `SELECT CASE
-                WHEN (ri.network_name IS NULL OR TRIM(ri.network_name) = '')
-                  AND (LOWER(ri.zone) LIKE 'blw%' OR ri.event_type = 'youths-aglow') THEN ?
-                ELSE ri.network_name
-              END AS key,
-              COALESCE(SUM(ri.planned_count), 0) AS planned,
-              COUNT(ri.id) AS items,
-              COUNT(c.id) AS held,
-              COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance
-       FROM registration_items ri
-       LEFT JOIN crusades c ON c.registration_item_id = ri.id
-       WHERE (ri.program = 'public' OR ri.program IS NULL)
-         AND ((ri.network_name IS NOT NULL AND TRIM(ri.network_name) <> '') OR LOWER(ri.zone) LIKE 'blw%' OR ri.event_type = 'youths-aglow')
-       GROUP BY key
-       ORDER BY planned DESC, key COLLATE NOCASE`
-    ).all(YOUTHS_AGLOW);
-  }
   if (column === "event_type") {
     return db.prepare(
       `SELECT ri.event_type AS key,
@@ -115,20 +89,16 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
     by_church: by("church_name", "WHERE church_name IS NOT NULL"),
     by_cell: by("cell_name", "WHERE cell_name IS NOT NULL"),
     by_network: db.prepare(
-      `SELECT CASE
-                WHEN (i.network_name IS NULL OR TRIM(i.network_name) = '')
-                  AND (LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow') THEN ?
-                ELSE i.network_name
-              END AS key,
+      `SELECT i.network_name AS key,
               COALESCE(SUM(i.planned_count), 0) AS crusades,
               COALESCE(SUM(i.expected_attendance), 0) AS attendance,
               0 AS online_attendance,
               0 AS salvation
        FROM registration_items i
        WHERE (i.program = 'public' OR i.program IS NULL)
-         AND ((i.network_name IS NOT NULL AND TRIM(i.network_name) <> '') OR LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow')
+         AND i.network_name IS NOT NULL AND TRIM(i.network_name) <> ''
        GROUP BY key ORDER BY crusades DESC`
-    ).all(YOUTHS_AGLOW),
+    ).all(),
     by_country: byCountryNormalized,
     by_city: by("city"),
     // Real geocoded city points for the map — no coordinates, no row.

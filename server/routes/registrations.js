@@ -523,14 +523,10 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
     ).all(),
     by_network: db.prepare(
-      `SELECT CASE
-                WHEN (i.network_name IS NULL OR TRIM(i.network_name) = '')
-                  AND (LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow') THEN 'Youths Aglow'
-                ELSE i.network_name
-              END AS key,
+      `SELECT i.network_name AS key,
               SUM(i.planned_count) AS planned, COUNT(DISTINCT i.registration_id) AS registrations
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
-         AND ((i.network_name IS NOT NULL AND TRIM(i.network_name) <> '') OR LOWER(i.zone) LIKE 'blw%' OR i.event_type = 'youths-aglow')
+         AND i.network_name IS NOT NULL AND TRIM(i.network_name) <> ''
        GROUP BY key ORDER BY planned DESC`
     ).all(),
     by_group: db.prepare(

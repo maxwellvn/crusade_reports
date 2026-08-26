@@ -100,14 +100,15 @@ function resolvePortalScope(tokenValue) {
   const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(tokenValue);
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
+  const inheritedVisibilityEnabled = isNetworkDashboardInheritanceEnabled(name);
   const { col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams } = personalDashboardScope({
     name,
     kind,
-    includeInherited: isNetworkDashboardInheritanceEnabled(name),
+    includeInherited: inheritedVisibilityEnabled,
   });
 
   const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || kind;
-  return { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams, slug };
+  return { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams, inheritedVisibilityEnabled, slug };
 }
 
 const PORTAL_REGISTRATION_EXPORT_COLUMNS = [
@@ -210,7 +211,7 @@ function buildListFilter({ q, eventType, readiness, source, scopeSql, scopeParam
 // crusades stay fast; totals and breakdowns are always computed over the full
 // scoped set, never the page.
 zonePortal.get("/zone-portal/:token", wrap((req, res) => {
-  const { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams } = resolvePortalScope(req.params.token);
+  const { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams, inheritedVisibilityEnabled } = resolvePortalScope(req.params.token);
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(req.query.page_size, 10) || DEFAULT_PAGE_SIZE));
   const offset = (page - 1) * pageSize;
@@ -323,7 +324,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
   };
 
-  res.json({ zone: name, kind, reporting_open: isReportingOpen(), totals, source_breakdown, pendingCount, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
+  res.json({ zone: name, kind, inherited_visibility_enabled: inheritedVisibilityEnabled, reporting_open: isReportingOpen(), totals, source_breakdown, pendingCount, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
 }));
 
 // CSV/Excel export of registered crusades visible on this dashboard.
