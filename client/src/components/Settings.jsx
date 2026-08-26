@@ -19,6 +19,11 @@ const LANDING_PAGE_LABELS = {
   "/crusades": "Reports",
   "/dashboard/zone-links": "Zone links",
 };
+const NETWORK_INHERITANCE_OPTIONS = [
+  ["Youths Aglow", "Include Youths Aglow crusade types submitted by other organisations, plus crusades registered by BLW zones."],
+  ["TEEVOLUTION", "Include Teevolution crusade types submitted by other organisations."],
+  ["Say Yes to Kids", "Include Say Yes to Kids crusade types submitted by other organisations."],
+];
 
 // Page keys for the per-user access editor. Must match the server's
 // ASSIGNABLE_PAGES list.
@@ -70,6 +75,8 @@ export function Settings() {
   const [manualGroups, setManualGroups] = React.useState(null);
   const [manualCities, setManualCities] = React.useState(null);
   const [savingManualOrg, setSavingManualOrg] = React.useState(false);
+  const [networkInheritance, setNetworkInheritance] = React.useState(null);
+  const [savingNetworkInheritance, setSavingNetworkInheritance] = React.useState("");
   const [editingPermissions, setEditingPermissions] = React.useState(null);
   const [permissionDraft, setPermissionDraft] = React.useState([]);
   const [savingPermissions, setSavingPermissions] = React.useState(false);
@@ -118,6 +125,7 @@ export function Settings() {
         setManualZones(settings.manual_zones_enabled ?? false);
         setManualGroups(settings.manual_groups_enabled ?? false);
         setManualCities(settings.manual_cities_enabled ?? true);
+        setNetworkInheritance(settings.network_dashboard_inherited_crusades || {});
       })
       .catch((error) => toast.error(error.message));
   }, [admin]);
@@ -247,6 +255,22 @@ export function Settings() {
     }
   }
 
+  async function toggleNetworkInheritance(name) {
+    const next = !networkInheritance?.[name];
+    setSavingNetworkInheritance(name);
+    try {
+      const settings = await putJSON("/campaign-settings", { network_dashboard_inherited_crusades: { [name]: next } });
+      setNetworkInheritance(settings.network_dashboard_inherited_crusades);
+      toast.success(settings.network_dashboard_inherited_crusades[name]
+        ? `${name} now includes its related crusades.`
+        : `${name} now shows only its own registrations.`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingNetworkInheritance("");
+    }
+  }
+
   if (!admin?.is_super_admin) {
     return <div className="mx-auto max-w-3xl border-y border-slate-200 py-8 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard settings.</div>;
   }
@@ -280,6 +304,19 @@ export function Settings() {
         </div>
       </SettingsSection>
 
+      <SettingsSection title="Network dashboard visibility" description="Control whether selected network dashboards also see crusades submitted by other organisations under their related crusade type.">
+        <div className="space-y-6">
+          {NETWORK_INHERITANCE_OPTIONS.map(([name, enabledDescription]) => (
+            <SettingsToggle key={name}
+              label={name}
+              description={networkInheritance?.[name] ? `On: ${enabledDescription}` : `Off: ${name} shows only crusades explicitly registered under ${name}.`}
+              checked={Boolean(networkInheritance?.[name])}
+              disabled={networkInheritance === null || Boolean(savingNetworkInheritance)}
+              onChange={() => toggleNetworkInheritance(name)} />
+          ))}
+        </div>
+      </SettingsSection>
+
       <SettingsSection title="Default landing page" description="Choose where administrators arrive after KingsChat login, sign-out and the /admin shortcut.">
         <div className="max-w-xl space-y-3">
           <Field label="Landing page">
@@ -296,9 +333,9 @@ export function Settings() {
 
       <SettingsSection title="Manual organisation entry" description="Let registrants type a zone, group, or city name that isn't in the directory. Typed entries are flagged for admin review on the Manual organisations page.">
         <div className="space-y-6">
-          <ManualOrgToggle label="Manual zones" description="Allow registrants to type a zone name not in the directory. Off by default — zones should come from the churches API." checked={manualZones} disabled={manualZones === null || savingManualOrg} onChange={() => toggleManualOrg("zones")} />
-          <ManualOrgToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. Off by default — groups should come from the churches API." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
-          <ManualOrgToggle label="Manual cities" description="Allow registrants to type a city name not found in the search results. On by default — the create option only appears when no match is found." checked={manualCities} disabled={manualCities === null || savingManualOrg} onChange={() => toggleManualOrg("cities")} />
+          <SettingsToggle label="Manual zones" description="Allow registrants to type a zone name not in the directory. Off by default — zones should come from the churches API." checked={manualZones} disabled={manualZones === null || savingManualOrg} onChange={() => toggleManualOrg("zones")} />
+          <SettingsToggle label="Manual groups" description="Allow registrants to type a group name not in the directory. Off by default — groups should come from the churches API." checked={manualGroups} disabled={manualGroups === null || savingManualOrg} onChange={() => toggleManualOrg("groups")} />
+          <SettingsToggle label="Manual cities" description="Allow registrants to type a city name not found in the search results. On by default — the create option only appears when no match is found." checked={manualCities} disabled={manualCities === null || savingManualOrg} onChange={() => toggleManualOrg("cities")} />
         </div>
       </SettingsSection>
 
@@ -427,7 +464,7 @@ export function Settings() {
   );
 }
 
-function ManualOrgToggle({ label, description, checked, disabled, onChange }) {
+function SettingsToggle({ label, description, checked, disabled, onChange }) {
   return (
     <div className="flex items-center justify-between gap-6 border-b border-slate-200 pb-6 last:border-0 last:pb-0">
       <div className="min-w-0">

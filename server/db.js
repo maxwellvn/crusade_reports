@@ -246,6 +246,9 @@ db.exec(`
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('reporting_open', '1');
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('default_landing_page', '/registrations/live');
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mission_nation_selection_open', '1');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('network_dashboard_inherited:Youths Aglow', '0');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('network_dashboard_inherited:TEEVOLUTION', '0');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('network_dashboard_inherited:Say Yes to Kids', '0');
 
   CREATE TABLE IF NOT EXISTS mission_nation_selections (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,

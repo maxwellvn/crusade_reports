@@ -7,7 +7,7 @@ import { portalCrusadeReportSchema, registrationCrusadeEditSchema } from "../val
 import { updateRegistrationCrusade } from "./registrations.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { loadZones } from "./zones.js";
-import { ensureReportingOpen, isReportingOpen } from "../appSettings.js";
+import { ensureReportingOpen, isNetworkDashboardInheritanceEnabled, isReportingOpen } from "../appSettings.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 import { sendExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LABELS, yesNo, phone } from "../labels.js";
@@ -100,7 +100,11 @@ function resolvePortalScope(tokenValue) {
   const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(tokenValue);
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
-  const { col, listWhere, listParams, totalsWhere, registrationsWhere } = personalDashboardScope({ name, kind });
+  const { col, listWhere, listParams, totalsWhere, registrationsWhere } = personalDashboardScope({
+    name,
+    kind,
+    includeInherited: isNetworkDashboardInheritanceEnabled(name),
+  });
 
   const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || kind;
   return { name, kind, col, listWhere, listParams, totalsWhere, registrationsWhere, slug };

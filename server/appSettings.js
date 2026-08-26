@@ -1,5 +1,6 @@
 import { db } from "./db.js";
 import { ApiError } from "./logger.js";
+import { INHERITED_NETWORK_NAMES } from "./portalVisibility.js";
 
 export const isReportingOpen = () => db.prepare("SELECT value FROM app_settings WHERE key = 'reporting_open'").get()?.value === "1";
 export const setReportingOpen = (open) => db.prepare(
@@ -49,3 +50,21 @@ export const isManualCitiesEnabled = () => {
 export const setManualCitiesEnabled = (enabled) => db.prepare(
   "INSERT INTO app_settings (key, value) VALUES ('manual_cities_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
 ).run(enabled ? "1" : "0");
+
+// Off by default: private network dashboards normally expose only registrations
+// owned by that network. Super admins can temporarily restore the campaign's
+// mapped event-type/BLW cross-visibility from Settings.
+const networkInheritanceKey = (name) => `network_dashboard_inherited:${name}`;
+export const networkDashboardInheritanceSettings = () => Object.fromEntries(
+  INHERITED_NETWORK_NAMES.map((name) => [name, db.prepare("SELECT value FROM app_settings WHERE key = ?").get(networkInheritanceKey(name))?.value === "1"]),
+);
+export const isNetworkDashboardInheritanceEnabled = (name) => (
+  INHERITED_NETWORK_NAMES.includes(name)
+  && db.prepare("SELECT value FROM app_settings WHERE key = ?").get(networkInheritanceKey(name))?.value === "1"
+);
+export const setNetworkDashboardInheritanceEnabled = (name, enabled) => {
+  if (!INHERITED_NETWORK_NAMES.includes(name)) throw new ApiError(422, "VALIDATION", "Unsupported network dashboard visibility setting.");
+  return db.prepare(
+    "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(networkInheritanceKey(name), enabled ? "1" : "0");
+};

@@ -2,7 +2,8 @@ import { Router } from "express";
 import { requireSuperAdmin } from "../auth.js";
 import { isReportingOpen, setReportingOpen, getDefaultLandingPage, setDefaultLandingPage, landingPageOptions,
   isManualZonesEnabled, setManualZonesEnabled, isManualGroupsEnabled, setManualGroupsEnabled,
-  isManualCitiesEnabled, setManualCitiesEnabled } from "../appSettings.js";
+  isManualCitiesEnabled, setManualCitiesEnabled,
+  networkDashboardInheritanceSettings, setNetworkDashboardInheritanceEnabled } from "../appSettings.js";
 import { wrap } from "../logger.js";
 
 export const campaignSettings = Router();
@@ -14,6 +15,7 @@ export const getCampaignSettings = () => ({
   manual_zones_enabled: isManualZonesEnabled(),
   manual_groups_enabled: isManualGroupsEnabled(),
   manual_cities_enabled: isManualCitiesEnabled(),
+  network_dashboard_inherited_crusades: networkDashboardInheritanceSettings(),
 });
 
 export function updateCampaignSettings(body = {}) {
@@ -22,6 +24,11 @@ export function updateCampaignSettings(body = {}) {
   if (body.manual_zones_enabled != null) setManualZonesEnabled(body.manual_zones_enabled === true);
   if (body.manual_groups_enabled != null) setManualGroupsEnabled(body.manual_groups_enabled === true);
   if (body.manual_cities_enabled != null) setManualCitiesEnabled(body.manual_cities_enabled === true);
+  if (body.network_dashboard_inherited_crusades && typeof body.network_dashboard_inherited_crusades === "object") {
+    for (const [name, enabled] of Object.entries(body.network_dashboard_inherited_crusades)) {
+      setNetworkDashboardInheritanceEnabled(name, enabled === true);
+    }
+  }
   return getCampaignSettings();
 }
 
