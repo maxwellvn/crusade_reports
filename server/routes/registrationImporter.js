@@ -336,6 +336,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     // Fire-and-forget housekeeping, same as the manual POST /registrations.
     import("./places.js").then(({ backfillCityCoords }) => backfillCityCoords().catch(() => {}));
     import("./registrations.js").then(({ backupDatabaseRolling }) => backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed")));
+    import("../registrationDashboardSnapshot.js").then(({ scheduleRegistrationDashboardRefresh }) => scheduleRegistrationDashboardRefresh({ force: true }));
     logger.info({ ...summary, id }, "registration import committed");
     return res.status(201).json({ ok: true, committed: true, id, count: items.length, summary });
   }

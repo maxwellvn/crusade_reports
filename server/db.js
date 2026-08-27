@@ -242,6 +242,15 @@ let startupSchema = `
     media_coverage_plan       TEXT
   );
 
+  -- Derived dashboard payload. registration_items remains the source of truth;
+  -- this row can be dropped and rebuilt at any time without losing user data.
+  CREATE TABLE IF NOT EXISTS registration_dashboard_snapshots (
+    key             TEXT PRIMARY KEY,
+    payload         TEXT NOT NULL,
+    source_max_id   INTEGER NOT NULL DEFAULT 0,
+    refreshed_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- Capability links for per-zone dashboards: an unguessable token maps to one
   -- zone; the portal endpoint scopes every query to it. Admin-only generation.
   CREATE TABLE IF NOT EXISTS zone_tokens (
@@ -357,6 +366,7 @@ if (splitDatabaseEnabled) {
     .replace("registration_item_id INTEGER REFERENCES registration_items(id)", "registration_item_id INTEGER")
     .replace("CREATE TABLE IF NOT EXISTS registrations (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registrations (`)
     .replace("CREATE TABLE IF NOT EXISTS registration_items (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_items (`)
+    .replace("CREATE TABLE IF NOT EXISTS registration_dashboard_snapshots (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_dashboard_snapshots (`)
     .replaceAll("CREATE INDEX IF NOT EXISTS idx_reg_items_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_reg_items_`);
 }
 db.exec(startupSchema);

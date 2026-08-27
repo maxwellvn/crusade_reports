@@ -250,6 +250,10 @@ export async function startDatabaseProtection() {
   }
   verifyDatabaseFile(db.name);
   if (splitDatabaseEnabled) verifyDatabaseFile(REGISTRATION_DB_PATH);
+  if (process.env.DB_DISABLE_AUTOMATIC_BACKUPS === "1") {
+    logger.info("automatic database backups disabled by configuration");
+    return;
+  }
   await backupDatabase("startup");
   const minutes = positiveInt(process.env.DB_BACKUP_INTERVAL_MINUTES, 60);
   timer = setInterval(() => backupDatabase("scheduled").catch(() => {}), minutes * 60 * 1000);

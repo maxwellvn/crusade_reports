@@ -16,6 +16,7 @@ import { COUNTRIES, resolveCountryName } from "./countries.js";
 import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
 import { loadZones } from "./zones.js";
 import { cachedDashboardData } from "../dashboardCache.js";
+import { registrationDashboardData, scheduleRegistrationDashboardRefresh } from "../registrationDashboardSnapshot.js";
 
 export const registrations = Router();
 
@@ -179,6 +180,7 @@ registrations.post("/", wrap(async (req, res) => {
       trustedZone: Boolean(portalToken),
     });
   const id = insertRegistration(registration);
+  scheduleRegistrationDashboardRefresh({ force: true });
   backfillCityCoords().catch(() => {});
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed"));
   res.status(201).json({ id });
@@ -221,6 +223,7 @@ registrations.patch("/manual-organizations/:registrationId", requirePageAccess("
     db.prepare("UPDATE registration_items SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE registration_id = ?")
       .run(zone, group_name || null, regId);
   })();
+  scheduleRegistrationDashboardRefresh({ force: true });
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "org reconciliation backup failed"));
   res.json({ ok: true });
 }));
@@ -277,11 +280,14 @@ registrations.put("/:id", requirePageAccess("registrations"), wrap((req, res) =>
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid crusade details.");
   const updated = updateRegistrationCrusade(req.params.id, parsed.data);
   if (!updated) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
+  scheduleRegistrationDashboardRefresh({ force: true });
   res.json(updated);
 }));
 
 registrations.delete("/:id", requireSuperAdmin, wrap((req, res) => {
-  res.json(deleteRegistrationCrusade(req.params.id));
+  const deleted = deleteRegistrationCrusade(req.params.id);
+  scheduleRegistrationDashboardRefresh({ force: true });
+  res.json(deleted);
 }));
 
 registrations.post("/:id/report", requirePageAccess("registrations"), withReportPhotoUpload(wrap((req, res) => {
@@ -475,8 +481,7 @@ registrations.get("/crusade-analysis/export", requirePageAccess("dashboard/crusa
   });
 }));
 
-registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, res) => {
-  const data = cachedDashboardData("registrations-live", () => {
+export function buildRegistrationLiveData() {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
@@ -572,7 +577,10 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
        GROUP BY r.id ORDER BY r.created_at DESC, r.id DESC LIMIT 25`
     ).all(),
   };
-  });
+}
+
+registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, res) => {
+  const data = registrationDashboardData(buildRegistrationLiveData);
   res.setHeader("Cache-Control", "private, max-age=30");
   res.json(data);
 }));

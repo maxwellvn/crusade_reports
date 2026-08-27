@@ -32,6 +32,7 @@ import { pastoralChecklist } from "./routes/pastoralChecklist.js";
 import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
+import { scheduleRegistrationDashboardRefresh } from "./registrationDashboardSnapshot.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -97,6 +98,7 @@ app.use(errorHandler);
 
 await startDatabaseProtection();
 const server = app.listen(PORT, () => logger.info(`crusade_reports listening on http://localhost:${PORT}`));
+scheduleRegistrationDashboardRefresh();
 
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.once(signal, () => {
