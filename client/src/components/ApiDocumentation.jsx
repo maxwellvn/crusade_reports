@@ -16,7 +16,7 @@ export function ApiDocumentation() {
         </header>
 
         <section className="grid gap-4 border-b border-slate-200 py-8 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-white p-5"><KeyRound className="size-5 text-blue-700" /><h2 className="mt-4 font-semibold text-slate-950">One API key</h2><p className="mt-2 text-sm leading-6 text-slate-600">Only the super admin can generate, rotate, or revoke the key from Dashboard settings. Copy it when generated; it is not shown again.</p></div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5"><KeyRound className="size-5 text-blue-700" /><h2 className="mt-4 font-semibold text-slate-950">API key required</h2><p className="mt-2 text-sm leading-6 text-slate-600">Every request needs a valid API key in its request header. Keep your key private and do not include it in public code or links.</p></div>
           <div className="rounded-xl border border-slate-200 bg-white p-5"><ShieldCheck className="size-5 text-emerald-700" /><h2 className="mt-4 font-semibold text-slate-950">Safe by default</h2><p className="mt-2 text-sm leading-6 text-slate-600">The API is read-only, excludes reporter contact details, and rate-limits each active key to 120 requests per minute.</p></div>
         </section>
 
