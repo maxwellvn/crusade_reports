@@ -5,31 +5,68 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSyn
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
+export const REGISTRATION_DB_SCHEMA = "registration_store";
+export const REGISTRATION_DB_PATH = process.env.REGISTRATION_DB_PATH || null;
+export const splitDatabaseEnabled = Boolean(REGISTRATION_DB_PATH);
 
 // A restore upload is staged first and applied only during a clean process
 // restart, before any connection opens. Preserve the displaced database beside
 // normal backups as a final rollback point.
 const pendingRestore = join(dirname(DB_PATH), ".restore-pending.sqlite");
-if (existsSync(pendingRestore)) {
+const pendingRegistrationRestore = REGISTRATION_DB_PATH
+  ? join(dirname(REGISTRATION_DB_PATH), ".registrations-restore-pending.sqlite")
+  : null;
+if (existsSync(pendingRestore) || (pendingRegistrationRestore && existsSync(pendingRegistrationRestore))) {
+  if (splitDatabaseEnabled && (!existsSync(pendingRestore) || !existsSync(pendingRegistrationRestore))) {
+    throw new Error("Incomplete split-database restore: both reports and registration restore files are required.");
+  }
   const candidate = new Database(pendingRestore, { readonly: true, fileMustExist: true });
   const integrity = candidate.pragma("quick_check", { simple: true });
   candidate.close();
   if (integrity !== "ok") throw new Error(`Pending database restore failed integrity verification: ${integrity}`);
+  if (splitDatabaseEnabled) {
+    const registrationCandidate = new Database(pendingRegistrationRestore, { readonly: true, fileMustExist: true });
+    const registrationIntegrity = registrationCandidate.pragma("quick_check", { simple: true });
+    registrationCandidate.close();
+    if (registrationIntegrity !== "ok") throw new Error(`Pending registration restore failed integrity verification: ${registrationIntegrity}`);
+  }
   const backupDir = process.env.DB_BACKUP_DIR || join(dirname(DB_PATH), "backups");
   mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   if (existsSync(DB_PATH)) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     renameSync(DB_PATH, join(backupDir, `pre-restore-${stamp}.sqlite`));
   }
   for (const sidecar of [`${DB_PATH}-wal`, `${DB_PATH}-shm`]) {
     if (existsSync(sidecar)) unlinkSync(sidecar);
   }
   renameSync(pendingRestore, DB_PATH);
+  if (splitDatabaseEnabled) {
+    if (existsSync(REGISTRATION_DB_PATH)) {
+      renameSync(REGISTRATION_DB_PATH, join(backupDir, `pre-restore-registrations-${stamp}.sqlite`));
+    }
+    for (const sidecar of [`${REGISTRATION_DB_PATH}-wal`, `${REGISTRATION_DB_PATH}-shm`]) {
+      if (existsSync(sidecar)) unlinkSync(sidecar);
+    }
+    renameSync(pendingRegistrationRestore, REGISTRATION_DB_PATH);
+  }
 }
 
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL"); // crash-safe; survives power loss mid-write
 db.pragma("foreign_keys = ON");
+if (splitDatabaseEnabled) {
+  const embeddedRegistrationTable = db.prepare(`
+    SELECT name FROM main.sqlite_master
+    WHERE type = 'table' AND name IN ('registrations', 'registration_items') LIMIT 1
+  `).get();
+  if (embeddedRegistrationTable) {
+    db.close();
+    throw new Error("Split database mode requires a reports database with registration tables removed. Run both extraction scripts from the same snapshot.");
+  }
+  mkdirSync(dirname(REGISTRATION_DB_PATH), { recursive: true });
+  db.prepare(`ATTACH DATABASE ? AS ${REGISTRATION_DB_SCHEMA}`).run(REGISTRATION_DB_PATH);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.journal_mode = WAL`);
+}
 
 export const METRIC_FIELDS = [
   "salvation", "holy_spirit_filled", "water_baptisms", "ror_distributed", "bibles_distributed",
@@ -43,7 +80,7 @@ export const METRIC_FIELDS = [
 // all dashboards aggregate from here (GROUP BY category / city / zone / month) — no
 // derived columns to drift, no JSON to parse. Attribution (zone/group/church/network)
 // is denormalized onto each crusade so any hierarchy level rolls up with a plain SUM.
-db.exec(`
+let startupSchema = `
   CREATE TABLE IF NOT EXISTS reports (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -313,7 +350,28 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reg_items_network ON registration_items(network_name);
   CREATE INDEX IF NOT EXISTS idx_reg_items_country ON registration_items(country);
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
-`);
+`;
+
+if (splitDatabaseEnabled) {
+  startupSchema = startupSchema
+    .replace("registration_item_id INTEGER REFERENCES registration_items(id)", "registration_item_id INTEGER")
+    .replace("CREATE TABLE IF NOT EXISTS registrations (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registrations (`)
+    .replace("CREATE TABLE IF NOT EXISTS registration_items (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_items (`)
+    .replaceAll("CREATE INDEX IF NOT EXISTS idx_reg_items_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_reg_items_`);
+}
+db.exec(startupSchema);
+if (splitDatabaseEnabled) {
+  const missingRegistrationLinks = db.prepare(`
+    SELECT COUNT(*) AS value
+    FROM main.crusades c
+    LEFT JOIN ${REGISTRATION_DB_SCHEMA}.registration_items i ON i.id = c.registration_item_id
+    WHERE c.registration_item_id IS NOT NULL AND i.id IS NULL
+  `).get().value;
+  if (missingRegistrationLinks) {
+    db.close();
+    throw new Error(`Split databases do not match: ${missingRegistrationLinks} reported crusades have no registration item.`);
+  }
+}
 
 const dashboardAccountCols = new Set(db.prepare("PRAGMA table_info(dashboard_accounts)").all().map((column) => column.name));
 if (!dashboardAccountCols.has("permissions_configured")) {
@@ -703,7 +761,9 @@ if (!crusadeCols.includes("city_lat")) {
 // Reports submitted from a private zone/network dashboard belong to exactly
 // one registered crusade. Public reports leave this nullable.
 if (!crusadeCols.includes("registration_item_id")) {
-  db.exec("ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
+  db.exec(splitDatabaseEnabled
+    ? "ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER"
+    : "ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
 }
 
 // RABAH crusade metrics — added for the RABAH crusade type.

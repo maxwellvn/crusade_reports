@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { copyFile, mkdir, readdir, rename, stat, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { db } from "./db.js";
+import { db, REGISTRATION_DB_PATH, REGISTRATION_DB_SCHEMA, splitDatabaseEnabled } from "./db.js";
 import { logger } from "./logger.js";
 
 const DEFAULT_RETENTION = { hourly: 2, daily: 0, weekly: 0 };
@@ -28,6 +28,9 @@ export function shouldThrottleBackup({ reason, lastSuccessAt, now = Date.now(), 
 
 export const backupDirectory = () => resolve(process.env.DB_BACKUP_DIR || join(dirname(db.name), "backups"));
 export const pendingRestorePath = () => join(dirname(db.name), ".restore-pending.sqlite");
+export const pendingRegistrationRestorePath = () => REGISTRATION_DB_PATH
+  ? join(dirname(REGISTRATION_DB_PATH), ".registrations-restore-pending.sqlite")
+  : null;
 
 export function assertPersistentDatabasePath(databasePath, persistentRoot) {
   if (!databasePath || !persistentRoot) throw new Error("Database persistent path configuration is incomplete.");
@@ -52,6 +55,34 @@ export function verifyDatabaseFile(path) {
     throw new Error(`SQLite backup integrity verification failed: ${error.message}`, { cause: error });
   } finally {
     snapshot?.close();
+  }
+}
+
+export function verifySplitDatabasePair(reportsPath, registrationsPath) {
+  verifyDatabaseFile(reportsPath);
+  verifyDatabaseFile(registrationsPath);
+  let reports;
+  try {
+    reports = new Database(reportsPath, { readonly: true, fileMustExist: true });
+    reports.prepare("ATTACH DATABASE ? AS restore_registration_store").run(registrationsPath);
+    const reportTables = new Set(reports.prepare("SELECT name FROM main.sqlite_master WHERE type = 'table'").all().map((row) => row.name));
+    const registrationTables = new Set(reports.prepare("SELECT name FROM restore_registration_store.sqlite_master WHERE type = 'table'").all().map((row) => row.name));
+    if (!reportTables.has("reports") || !reportTables.has("crusades")) throw new Error("Reports backup is missing reports or crusades.");
+    if (!registrationTables.has("registrations") || !registrationTables.has("registration_items")) {
+      throw new Error("Registration backup is missing registrations or registration_items.");
+    }
+    const missing = reports.prepare(`
+      SELECT COUNT(*) AS value
+      FROM main.crusades c
+      LEFT JOIN restore_registration_store.registration_items i ON i.id = c.registration_item_id
+      WHERE c.registration_item_id IS NOT NULL AND i.id IS NULL
+    `).get().value;
+    if (missing) throw new Error(`Backup pair has ${missing} report links without matching registrations.`);
+    return { ok: true, linked_crusades: reports.prepare("SELECT COUNT(*) AS value FROM main.crusades WHERE registration_item_id IS NOT NULL").get().value };
+  } catch (error) {
+    throw new Error(`Split database pair verification failed: ${error.message}`, { cause: error });
+  } finally {
+    reports?.close();
   }
 }
 
@@ -80,7 +111,10 @@ export async function pruneBackups(dir, options = {}) {
       kept.add(item.name);
     }
   }
-  for (const item of ordered) if (!kept.has(item.name)) await unlink(join(dir, item.name));
+  for (const item of ordered) if (!kept.has(item.name)) {
+    await unlink(join(dir, item.name));
+    await unlink(join(dir, item.name.replace(/^reports-/, "registrations-"))).catch(() => {});
+  }
   return { kept: [...kept], removed: ordered.map((item) => item.name).filter((name) => !kept.has(name)) };
 }
 
@@ -90,21 +124,42 @@ export async function createVerifiedBackup({ database = db, backupDir = backupDi
   const name = `reports-${stamp}-${randomBytes(3).toString("hex")}.sqlite`;
   const finalPath = join(backupDir, name);
   const temporaryPath = `${finalPath}.tmp`;
+  const registrationName = name.replace(/^reports-/, "registrations-");
+  const registrationPath = join(backupDir, registrationName);
+  const registrationTemporaryPath = `${registrationPath}.tmp`;
   try {
     await database.backup(temporaryPath);
     verifyDatabaseFile(temporaryPath);
+    if (splitDatabaseEnabled) {
+      await database.backup(registrationTemporaryPath, { attached: REGISTRATION_DB_SCHEMA });
+      verifyDatabaseFile(registrationTemporaryPath);
+    }
+    if (splitDatabaseEnabled) await rename(registrationTemporaryPath, registrationPath);
     await rename(temporaryPath, finalPath);
     const details = await stat(finalPath);
+    const registrationDetails = splitDatabaseEnabled ? await stat(registrationPath) : null;
     if (mirrorDir) {
       await mkdir(mirrorDir, { recursive: true });
       const mirrorTemp = join(mirrorDir, `${name}.tmp`);
       await copyFile(finalPath, mirrorTemp);
       verifyDatabaseFile(mirrorTemp);
       await rename(mirrorTemp, join(mirrorDir, name));
+      if (splitDatabaseEnabled) {
+        const registrationMirrorTemp = join(mirrorDir, `${registrationName}.tmp`);
+        await copyFile(registrationPath, registrationMirrorTemp);
+        verifyDatabaseFile(registrationMirrorTemp);
+        await rename(registrationMirrorTemp, join(mirrorDir, registrationName));
+      }
     }
-    return { path: finalPath, name, bytes: details.size, reason };
+    return {
+      path: finalPath, name, bytes: details.size, reason,
+      registration_path: splitDatabaseEnabled ? registrationPath : null,
+      registration_name: splitDatabaseEnabled ? registrationName : null,
+      registration_bytes: registrationDetails?.size || 0,
+    };
   } catch (error) {
     await unlink(temporaryPath).catch(() => {});
+    await unlink(registrationTemporaryPath).catch(() => {});
     throw error;
   }
 }
@@ -132,8 +187,12 @@ export function backupDatabase(reason = "automatic") {
           weekly: positiveInt(process.env.DB_BACKUP_KEEP_WEEKLY, DEFAULT_RETENTION.weekly),
         });
       }
-      status = { state: "protected", last_success_at: new Date().toISOString(), last_error: null, latest_file: result.name, latest_bytes: result.bytes };
-      logger.info({ backup: result.name, bytes: result.bytes, reason }, "verified database backup created");
+      status = {
+        state: "protected", last_success_at: new Date().toISOString(), last_error: null,
+        latest_file: result.name, latest_bytes: result.bytes,
+        latest_registration_file: result.registration_name, latest_registration_bytes: result.registration_bytes,
+      };
+      logger.info({ backup: result.name, bytes: result.bytes, registrationBackup: result.registration_name, registrationBytes: result.registration_bytes, reason }, "verified database backup created");
       return result;
     } catch (error) {
       status = { ...status, state: "error", last_error: error.message };
@@ -147,25 +206,50 @@ export function backupDatabase(reason = "automatic") {
 }
 
 export function databaseProtectionStatus() {
-  return { ...status, retention: DEFAULT_RETENTION, mirror_configured: Boolean(process.env.DB_BACKUP_MIRROR_DIR) };
+  return { ...status, split_database: splitDatabaseEnabled, retention: DEFAULT_RETENTION, mirror_configured: Boolean(process.env.DB_BACKUP_MIRROR_DIR) };
 }
 
-export async function stageDatabaseRestore(uploadedPath) {
+export async function stageDatabaseRestore(uploadedPath, uploadedRegistrationPath = null) {
   verifyDatabaseFile(uploadedPath);
+  if (splitDatabaseEnabled && !uploadedRegistrationPath) {
+    throw new Error("Split-database restore requires the matching registration database backup.");
+  }
+  if (uploadedRegistrationPath) verifyDatabaseFile(uploadedRegistrationPath);
+  if (splitDatabaseEnabled) verifySplitDatabasePair(uploadedPath, uploadedRegistrationPath);
   await backupDatabase("pre-restore-safety");
   const pending = pendingRestorePath();
   const temporary = `${pending}.tmp`;
-  await copyFile(uploadedPath, temporary);
-  verifyDatabaseFile(temporary);
-  await rename(temporary, pending);
-  return { pending };
+  let registrationPending = null;
+  let registrationTemporary = null;
+  try {
+    if (splitDatabaseEnabled) {
+      registrationPending = pendingRegistrationRestorePath();
+      registrationTemporary = `${registrationPending}.tmp`;
+      await copyFile(uploadedRegistrationPath, registrationTemporary);
+      verifyDatabaseFile(registrationTemporary);
+      await rename(registrationTemporary, registrationPending);
+    }
+    // Publish the reports file last. Its presence is the commit marker that tells
+    // startup a complete restore pair is ready to apply.
+    await copyFile(uploadedPath, temporary);
+    verifyDatabaseFile(temporary);
+    await rename(temporary, pending);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    if (registrationTemporary) await unlink(registrationTemporary).catch(() => {});
+    if (registrationPending) await unlink(registrationPending).catch(() => {});
+    throw error;
+  }
+  return { pending, registrationPending };
 }
 
 export async function startDatabaseProtection() {
   if (process.env.DB_REQUIRE_PERSISTENT_STORAGE === "1") {
     assertPersistentDatabasePath(db.name, process.env.DB_PERSISTENT_ROOT || "/app/data");
+    if (splitDatabaseEnabled) assertPersistentDatabasePath(REGISTRATION_DB_PATH, process.env.DB_PERSISTENT_ROOT || "/app/data");
   }
   verifyDatabaseFile(db.name);
+  if (splitDatabaseEnabled) verifyDatabaseFile(REGISTRATION_DB_PATH);
   await backupDatabase("startup");
   const minutes = positiveInt(process.env.DB_BACKUP_INTERVAL_MINUTES, 60);
   timer = setInterval(() => backupDatabase("scheduled").catch(() => {}), minutes * 60 * 1000);

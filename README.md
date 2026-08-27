@@ -2,7 +2,7 @@
 
 Single Node app (Express) serving a React + shadcn form that captures crusade reports.
 
-- **DB:** SQLite (`better-sqlite3`) — file at `data/reports.sqlite`, WAL mode, with automatic verified snapshots and guarded restores.
+- **DB:** SQLite (`better-sqlite3`) — WAL mode, with automatic verified snapshots and guarded restores. Large installations can place registrations in a second database file.
 - **Data model:** `reports` (submitter/context) + `crusades` **fact table** (one row per crusade, the single source of truth). Every metric is stored once, per crusade; all dashboards aggregate from `crusades` with `GROUP BY` — no derived columns to drift. Attribution (zone/group/church/network) is denormalized onto each crusade so any hierarchy level rolls up with a plain `SUM` (reported once → rolls up).
 - **Form:** a 3-step stepper (Reporting → Crusades → Review). Countries and 34,000+ cities are served locally; one row = one crusade (no bulk multiplier); soft plausibility warnings.
 - **Import:** app-generated `.xlsx` template (category dropdown and instructions) → upload → preview + row errors → load the validated rows into the report form for review and normal submission. Template and validator share `client/src/lib/constants.js` so they never drift.
@@ -81,3 +81,23 @@ Registration-triggered database snapshots are coalesced to one verified backup e
 - Super admins can create, download, upload, and restore backups at `/dashboard/database-protection`.
 - Restore uploads are checked with SQLite `PRAGMA quick_check`. Before replacement, the current live database is backed up; the verified restore is then applied during a clean application restart.
 - Configure `DB_BACKUP_MIRROR_DIR` to a second mounted disk or remote filesystem. Backups stored only under `/app/data` protect against bad changes, but not loss of the server or its persistent volume. Also enable Coolify volume backups to external object storage.
+
+### Split registration database
+
+For large registration volumes, set `CRUSADE_DB_PATH=/app/data/reports.sqlite` and
+`REGISTRATION_DB_PATH=/app/data/registrations.sqlite`. When the second variable is
+unset, the original single-database behavior remains available as a rollback.
+
+Prepare both files offline from the same verified snapshot while the live app
+continues using its current database:
+
+```bash
+node scripts/extract-registration-database.js snapshot.sqlite registrations.sqlite
+node scripts/extract-reports-database.js snapshot.sqlite reports.sqlite
+```
+
+Both commands refuse to overwrite an existing output, validate row counts and
+SQLite integrity, and leave the source snapshot unchanged. Copy the two completed
+files into persistent storage, set both environment variables, and redeploy. Split
+mode creates, retains, and restores matching `reports-*` and `registrations-*`
+backup pairs. Always select a matching pair when restoring.
