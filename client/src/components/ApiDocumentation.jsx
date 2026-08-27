@@ -52,7 +52,7 @@ GET /api/registrations?limit=200&cursor=512095`}</Code>
 
         <section className="space-y-4 py-8">
           <h2 className="text-2xl font-semibold tracking-[-0.025em] text-slate-950">Filters</h2>
-          <p className="text-sm leading-6 text-slate-600">Registration requests support the same safe filters used by the administration table, including <InlineCode>country</InlineCode>, <InlineCode>city</InlineCode>, <InlineCode>network_name</InlineCode>, <InlineCode>event_type</InlineCode>, <InlineCode>date_from</InlineCode>, <InlineCode>date_to</InlineCode>, and <InlineCode>report_status</InlineCode> (<InlineCode>reported</InlineCode> or <InlineCode>unreported</InlineCode>).</p>
+          <p className="text-sm leading-6 text-slate-600">Registration requests support the same safe filters used by the administration table, including <InlineCode>country</InlineCode>, <InlineCode>city</InlineCode>, <InlineCode>network_name</InlineCode>, <InlineCode>event_type</InlineCode>, <InlineCode>exclude_event_type</InlineCode> (comma-separated), <InlineCode>date_from</InlineCode>, <InlineCode>date_to</InlineCode>, and <InlineCode>report_status</InlineCode> (<InlineCode>reported</InlineCode> or <InlineCode>unreported</InlineCode>).</p>
           <Code>{`GET /api/registrations?country=Nigeria&event_type=street&limit=100`}</Code>
           <p className="text-sm leading-6 text-slate-600">API fields use the stored database names. Adding fields may occur without notice; integrations should ignore fields they do not use.</p>
         </section>

@@ -652,6 +652,16 @@ export function registrationFilters(query) {
   if (query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
   if (query.cellular === "1") where.push(CELLULAR_ITEM_FILTER);
   if (query.event_type) { where.push("i.event_type = @event_type"); params.event_type = String(query.event_type); }
+  const excludedTypes = [...new Set(String(query.exclude_event_type || "").split(",")
+    .map((value) => value.trim()).filter((value) => value && value.length <= 100))].slice(0, 30);
+  if (excludedTypes.length) {
+    const placeholders = excludedTypes.map((value, index) => {
+      const key = `exclude_event_type_${index}`;
+      params[key] = value;
+      return `@${key}`;
+    });
+    where.push(`i.event_type NOT IN (${placeholders.join(", ")})`);
+  }
   if (query.date_from) { where.push("i.event_date >= @date_from"); params.date_from = String(query.date_from); }
   if (query.date_to) { where.push("i.event_date <= @date_to"); params.date_to = String(query.date_to); }
   const minAttendance = parseInt(query.min_attendance, 10);

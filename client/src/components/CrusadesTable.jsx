@@ -31,6 +31,7 @@ const FILTERS = [
   ["country", "Country", "dynamic-select"],
   ["city", "City", "dynamic-select"],
   ["event_type", "Crusade type", "select", CRUSADE_TYPES],
+  ["exclude_event_type", "Exclude crusade types", "exclude-types"],
   ["format", "Format", "select", FORMATS],
   ["min_attendance", "Min attendance", "number"],
   ["date_from", "From date", "date"],
@@ -74,6 +75,11 @@ export function CrusadesTable() {
     const next = new URLSearchParams(params);
     next.set("page", p);
     setParams(next);
+  }
+  function toggleExcludedType(type) {
+    const current = new Set((params.get("exclude_event_type") || "").split(",").filter(Boolean));
+    if (current.has(type)) current.delete(type); else current.add(type);
+    setFilter("exclude_event_type", [...current].join(","));
   }
   async function deleteReport(row) {
     if (!window.confirm(`Permanently delete the report for “${row.event_name || typeLabel(row.event_type)}”?`)) return;
@@ -145,7 +151,7 @@ export function CrusadesTable() {
         </div>
         {showFilters && <div id="report-filters" className="grid gap-x-5 gap-y-4 border-t border-slate-200 bg-slate-50/60 p-4 sm:grid-cols-3 lg:grid-cols-4">
           {FILTERS.map(([key, label, kind, options]) => (
-            <Field key={key} label={label}>
+            <Field key={key} label={label} className={kind === "exclude-types" ? "sm:col-span-3 lg:col-span-4" : undefined}>
               {kind === "select" || kind === "dynamic-select" ? (
                 <Select value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}>
                   <option value="">Any {label.toLowerCase()}</option>
@@ -153,10 +159,13 @@ export function CrusadesTable() {
                     ? options.map(([v, l]) => <option key={v} value={v}>{l}</option>)
                     : (data?.filter_options?.[key] || []).map((value) => <option key={value} value={value}>{value}</option>)}
                 </Select>
-              ) : (
+              ) : kind === "exclude-types" ? null : (
                 <Input type={kind} min={kind === "number" ? "0" : undefined} value={params.get(key) || ""} onChange={(e) => setFilter(key, e.target.value)}
                   placeholder={kind === "text" ? `Any ${label.toLowerCase()}` : kind === "number" ? "e.g. 1000" : undefined} />
               )}
+              {kind === "exclude-types" && <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-slate-200 bg-white p-3">
+                {CRUSADE_TYPES.map(([value, typeLabel]) => <label key={value} className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={(params.get("exclude_event_type") || "").split(",").includes(value)} onChange={() => toggleExcludedType(value)} className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />{typeLabel}</label>)}
+              </div>}
             </Field>
           ))}
         </div>}
@@ -166,7 +175,7 @@ export function CrusadesTable() {
             {activeFilters.map(([key, label]) => (
               <button key={key} type="button" onClick={() => setFilter(key, "")}
                 className="flex items-center gap-1 rounded-full border bg-muted px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent">
-                {label}: {params.get(key)} <X className="size-3" />
+                {label}: {key === "exclude_event_type" ? `${params.get(key).split(",").filter(Boolean).length} selected` : params.get(key)} <X className="size-3" />
               </button>
             ))}
             <button type="button" onClick={() => setParams({})} className="text-xs font-medium text-muted-foreground hover:text-foreground">

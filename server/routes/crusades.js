@@ -55,6 +55,16 @@ function crusadeFilters(query) {
     const v = query[col];
     if (v) { where.push(`c.${col} = @${col}`); params[col] = String(v); }
   }
+  const excludedTypes = [...new Set(String(query.exclude_event_type || "").split(",")
+    .map((value) => value.trim()).filter((value) => value && value.length <= 100))].slice(0, 30);
+  if (excludedTypes.length) {
+    const placeholders = excludedTypes.map((value, index) => {
+      const key = `exclude_event_type_${index}`;
+      params[key] = value;
+      return `@${key}`;
+    });
+    where.push(`c.event_type NOT IN (${placeholders.join(", ")})`);
+  }
   if (query.q) {
     const match = String(query.q).trim().split(/\s+/).slice(0, 8)
       .map((t) => `"${t.replace(/"/g, "")}"*`).join(" ");
