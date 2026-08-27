@@ -310,6 +310,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reg_items_reg     ON registration_items(registration_id);
   CREATE INDEX IF NOT EXISTS idx_reg_items_type    ON registration_items(event_type);
   CREATE INDEX IF NOT EXISTS idx_reg_items_zone    ON registration_items(zone);
+  CREATE INDEX IF NOT EXISTS idx_reg_items_network ON registration_items(network_name);
   CREATE INDEX IF NOT EXISTS idx_reg_items_country ON registration_items(country);
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
 `);

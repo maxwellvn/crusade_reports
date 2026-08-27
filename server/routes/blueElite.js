@@ -4,10 +4,11 @@ import { blueEliteRegistrationSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
 import { requirePageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
-import { sendExport } from "./exporter.js";
+import { sendStreamingExport } from "./exporter.js";
 import { backupDatabaseRolling } from "./registrations.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 import { resolveCountryName } from "./countries.js";
+import { cachedDashboardData } from "../dashboardCache.js";
 
 export const blueElite = Router();
 
@@ -242,8 +243,8 @@ const EXPORT_COLUMNS = [
 
 blueElite.get("/registrations/export", requirePageAccess("registrations/blue-elite"), wrap(async (req, res) => {
   const { clause, params } = blueEliteFilters(req.query);
-  const rows = db.prepare(`${EXPORT_SELECT} ${clause} ORDER BY r.created_at DESC, i.id DESC`).all(params);
-  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "blue-elite-registered-crusades", EXPORT_COLUMNS, rows);
+  const rows = db.prepare(`${EXPORT_SELECT} ${clause} ORDER BY i.id DESC`).iterate(params);
+  await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "blue-elite-registered-crusades", EXPORT_COLUMNS, rows);
 }));
 
 // GET /api/blue-elite/registrations — paginated, filtered, sorted table.
@@ -253,14 +254,17 @@ blueElite.get("/registrations", requirePageAccess("registrations/blue-elite"), w
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
   const SORT = {
-    created_at: "r.created_at", event_date: "i.event_date", event_name: "i.event_name COLLATE NOCASE",
+    created_at: "i.id", event_date: "i.event_date", event_name: "i.event_name COLLATE NOCASE",
     event_type: "i.event_type COLLATE NOCASE", expected_attendance: "i.expected_attendance",
     zone: "r.zone COLLATE NOCASE", country: "r.country COLLATE NOCASE", org: "org COLLATE NOCASE",
   };
-  const sortCol = SORT[req.query.sort] || "r.created_at";
+  const sortCol = req.query.sort ? (SORT[req.query.sort] || "i.id") : "i.id";
   const dir = req.query.dir === "asc" ? "ASC" : "DESC";
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM registration_items i JOIN registrations r ON r.id = i.registration_id ${clause}`).get(params).n;
+  const countKey = `blue-elite-registrations-count:${JSON.stringify(params)}:${clause}`;
+  const total = cachedDashboardData(countKey,
+    () => db.prepare(`SELECT COUNT(*) AS n FROM registration_items i JOIN registrations r ON r.id = i.registration_id ${clause}`).get(params).n,
+    60_000);
   const rows = db.prepare(
     `SELECT i.id, i.registration_id, i.event_type, i.planned_count, i.event_name, i.event_date, i.venue,
             i.expected_attendance, i.minister_name, i.city, i.city_place_id, i.readiness_status, i.readiness_notes, i.readiness_updated_at,

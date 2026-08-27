@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAnyPageAccess, requirePageAccess, requireSuperAdmin } from "../auth.js";
-import { sendExport } from "./exporter.js";
+import { sendStreamingExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
 import {
   composeMediaLinks, deleteReportPhotos, listReportPhotos, parseReportPayload, removeUploadedFiles,
@@ -113,8 +113,8 @@ const CRUSADE_EXPORT_COLUMNS = [
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
 crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
   const { clause, params } = crusadeFilters(req.query);
-  const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`).all(params);
-  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "crusade-reports", CRUSADE_EXPORT_COLUMNS, rows);
+  const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`).iterate(params);
+  await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "crusade-reports", CRUSADE_EXPORT_COLUMNS, rows);
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
@@ -128,12 +128,13 @@ crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req
   const TEXT_SORT = new Set(["submitted_at", "event_date", "event_name", "event_type", "format", "city", "country", "organization_type", "minister_name", "venue"]);
   const sortCol = NUMERIC_SORT.has(req.query.sort) || TEXT_SORT.has(req.query.sort) ? req.query.sort : "submitted_at";
   const dir = req.query.dir === "asc" ? "ASC" : "DESC";
-  const sortExpression = sortCol === "submitted_at" ? "c.created_at" : `c.${sortCol}`;
-  const orderBy = `${sortExpression}${TEXT_SORT.has(sortCol) ? " COLLATE NOCASE" : ""} ${dir}, c.id DESC`;
+  const sortExpression = sortCol === "submitted_at" ? "c.id" : `c.${sortCol}`;
+  const orderBy = `${sortExpression}${TEXT_SORT.has(sortCol) && sortCol !== "submitted_at" ? " COLLATE NOCASE" : ""} ${dir}, c.id DESC`;
 
   // Full row, every uploaded field — this backs the "show everything received" table.
   const from = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id";
-  const total = db.prepare(`SELECT COUNT(*) AS n ${from} ${clause}`).get(params).n;
+  const countKey = `crusades-count:${JSON.stringify(params)}:${clause}`;
+  const total = cachedDashboardData(countKey, () => db.prepare(`SELECT COUNT(*) AS n ${from} ${clause}`).get(params).n, 60_000);
   const rows = db.prepare(
     `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
             c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,

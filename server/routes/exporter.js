@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { once } from "node:events";
 
 // Shared CSV / XLSX / PDF writer for table exports. `columns` is an array of
 // { header, value(row) } — value() lets each column format its own cell (labels,
@@ -14,6 +15,14 @@ export async function sendExport(res, format, baseName, columns, rows, options =
   if (format === "xlsx") return sendXlsx(res, baseName, columns, rows);
   if (format === "pdf") return sendPdf(res, baseName, columns, rows, options);
   return sendCsv(res, baseName, columns, rows);
+}
+
+// Stream database iterators directly to the response. This keeps exports safe
+// when a filtered result contains millions of rows: neither SQLite results nor
+// the generated file are accumulated in the Node process.
+export async function sendStreamingExport(res, format, baseName, columns, rows) {
+  if (format === "xlsx") return sendStreamingXlsx(res, baseName, columns, rows);
+  return sendStreamingCsv(res, baseName, columns, rows);
 }
 
 const exportTitle = (baseName) => String(baseName || "report")
@@ -153,6 +162,58 @@ function sendCsv(res, baseName, columns, rows) {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${baseName}.csv"`);
   res.send("﻿" + lines.join("\r\n"));
+}
+
+
+const csvEscape = (value) => {
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+async function writeResponse(res, chunk) {
+  if (!res.write(chunk)) await once(res, "drain");
+}
+
+async function sendStreamingCsv(res, baseName, columns, rows) {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${baseName}.csv"`);
+  await writeResponse(res, `\uFEFF${columns.map((column) => csvEscape(column.header)).join(",")}\r\n`);
+  for (const row of rows) {
+    await writeResponse(res, `${columns.map((column) => csvEscape(cellOf(column, row))).join(",")}\r\n`);
+  }
+  res.end();
+}
+
+async function sendStreamingXlsx(res, baseName, columns, rows) {
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${baseName}.xlsx"`);
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
+  let sheetNumber = 0;
+  let rowsInSheet = 0;
+  let sheet;
+  const addSheet = () => {
+    sheetNumber += 1;
+    rowsInSheet = 0;
+    sheet = workbook.addWorksheet(sheetNumber === 1 ? "Export" : `Export ${sheetNumber}`, { views: [{ state: "frozen", ySplit: 1 }] });
+    sheet.columns = columns.map((column) => ({ header: column.header, key: column.header, width: Math.min(Math.max(column.header.length + 2, 12), 42) }));
+    const header = sheet.getRow(1);
+    header.font = { bold: true };
+    header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3FF" } };
+    header.commit();
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
+  };
+  addSheet();
+  for (const row of rows) {
+    // Excel supports 1,048,576 rows per worksheet; reserve row 1 for headers.
+    if (rowsInSheet >= 1_048_575) {
+      sheet.commit();
+      addSheet();
+    }
+    sheet.addRow(Object.fromEntries(columns.map((column) => [column.header, cellOf(column, row)]))).commit();
+    rowsInSheet += 1;
+  }
+  sheet.commit();
+  await workbook.commit();
 }
 
 async function sendXlsx(res, baseName, columns, rows) {

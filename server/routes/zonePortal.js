@@ -9,7 +9,7 @@ import { submitRegisteredCrusadeReport } from "./reports.js";
 import { loadZones } from "./zones.js";
 import { ensureReportingOpen, isNetworkDashboardInheritanceEnabled, isReportingOpen } from "../appSettings.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
-import { sendExport } from "./exporter.js";
+import { sendStreamingExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LABELS, yesNo, phone } from "../labels.js";
 import multer from "multer";
 import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalReportTemplate.js";
@@ -17,6 +17,7 @@ import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
 import { portalItemOrder, PORTAL_UNREGISTERED_REPORT_ORDER } from "../reportOrdering.js";
 import { portalReportPreview } from "../portalReportImport.js";
 import { personalDashboardScope } from "../portalVisibility.js";
+import { cachedDashboardData } from "../dashboardCache.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -237,8 +238,10 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     prefix: "registration_items.",
   });
   const scopeItemsSql = `(${listWhere("registration_items.")}) AND (registration_items.program = 'public' OR registration_items.program IS NULL)`;
-  const itemsTotal = db.prepare(`SELECT COUNT(*) n FROM registration_items WHERE ${scopeItemsSql}${filter.sql}`)
-    .get(...listParams, ...filter.params).n;
+  const listCountKey = `portal-items-count:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}:${JSON.stringify(filter.params)}:${filter.sql}`;
+  const itemsTotal = cachedDashboardData(listCountKey,
+    () => db.prepare(`SELECT COUNT(*) n FROM registration_items WHERE ${scopeItemsSql}${filter.sql}`).get(...listParams, ...filter.params).n,
+    30_000);
 
   const itemOrder = portalItemOrder(req.query.view);
   const items = db.prepare(`
@@ -280,8 +283,10 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     prefix: "",
   });
   const scopeCrusadesSql = `(${listWhere("")}) AND registration_item_id IS NULL`;
-  const crusadesTotal = db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql}`)
-    .get(...listParams, ...crusadeFilter.params).n;
+  const reportCountKey = `portal-reports-count:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}:${JSON.stringify(crusadeFilter.params)}:${crusadeFilter.sql}`;
+  const crusadesTotal = cachedDashboardData(reportCountKey,
+    () => db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql}`).get(...listParams, ...crusadeFilter.params).n,
+    30_000);
 
   const crusades = db.prepare(`
     SELECT id, registration_item_id, created_at AS reported_at, event_date, event_type, other_event_type, event_name, format, city, country,
@@ -295,36 +300,41 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
 
   // Source breakdown over the FULL scoped set (not the page) so the network
   // dashboard's aggregate card stays correct regardless of pagination.
-  let source_breakdown = db.prepare(`
-    SELECT CASE WHEN ${col} = ? THEN '${kind}'
-                ELSE COALESCE(NULLIF(organization_type, ''), 'other') END AS source,
-           COALESCE(SUM(planned_count), 0) AS planned
-    FROM registration_items
-    WHERE ${scopeItemsSql}
-    GROUP BY source
-  `).all(name, ...listParams);
-  const sourceOrder = ["network", "zone", "group", "church", "cell", "other"];
-  const sourceByKey = new Map(source_breakdown.map((entry) => [entry.source, entry.planned]));
-  source_breakdown = sourceOrder
-    .filter((source) => sourceByKey.has(source))
-    .map((source) => ({ source, planned: sourceByKey.get(source) }));
+  const aggregateKey = `portal-aggregates:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}`;
+  const aggregates = cachedDashboardData(aggregateKey, () => {
+    let source_breakdown = db.prepare(`
+      SELECT CASE WHEN ${col} = ? THEN '${kind}'
+                  ELSE COALESCE(NULLIF(organization_type, ''), 'other') END AS source,
+             COALESCE(SUM(planned_count), 0) AS planned
+      FROM registration_items
+      WHERE ${scopeItemsSql}
+      GROUP BY source
+    `).all(name, ...listParams);
+    const sourceOrder = ["network", "zone", "group", "church", "cell", "other"];
+    const sourceByKey = new Map(source_breakdown.map((entry) => [entry.source, entry.planned]));
+    source_breakdown = sourceOrder
+      .filter((source) => sourceByKey.has(source))
+      .map((source) => ({ source, planned: sourceByKey.get(source) }));
 
   // Count of this portal's own registered crusades still awaiting a report.
-  const pendingCount = db.prepare(`
-    SELECT COUNT(*) n FROM registration_items
-    LEFT JOIN crusades c ON c.registration_item_id = registration_items.id
-    WHERE registration_items.${col} = ? AND c.report_id IS NULL
-      AND (registration_items.program = 'public' OR registration_items.program IS NULL)
-  `).get(name).n;
+    const pendingCount = db.prepare(`
+      SELECT COUNT(*) n FROM registration_items
+      LEFT JOIN crusades c ON c.registration_item_id = registration_items.id
+      WHERE registration_items.${col} = ? AND c.report_id IS NULL
+        AND (registration_items.program = 'public' OR registration_items.program IS NULL)
+    `).get(name).n;
 
-  const totals = {
-    planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(...totalsParams).n,
-    held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
-    attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
-    salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
-  };
+    const totals = {
+      planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(...totalsParams).n,
+      held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
+      attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
+      salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
+    };
+    return { source_breakdown, pendingCount, totals };
+  }, 60_000);
 
-  res.json({ zone: name, kind, inherited_visibility_enabled: inheritedVisibilityEnabled, reporting_open: isReportingOpen(), totals, source_breakdown, pendingCount, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
+  res.setHeader("Cache-Control", "private, max-age=15");
+  res.json({ zone: name, kind, inherited_visibility_enabled: inheritedVisibilityEnabled, reporting_open: isReportingOpen(), ...aggregates, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
 }));
 
 // CSV/Excel export of registered crusades visible on this dashboard.
@@ -342,8 +352,8 @@ zonePortal.get("/zone-portal/:token/export/registrations", wrap(async (req, res)
     JOIN registrations r ON r.id = i.registration_id
     WHERE ${listWhere("i.")} AND (i.program = 'public' OR i.program IS NULL)
     ORDER BY COALESCE(i.event_date, i.plan_date), i.id
-  `).all(...listParams);
-  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-registrations`, PORTAL_REGISTRATION_EXPORT_COLUMNS, rows);
+  `).iterate(...listParams);
+  await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-registrations`, PORTAL_REGISTRATION_EXPORT_COLUMNS, rows);
 }));
 
 // CSV/Excel export of submitted crusade reports visible on this dashboard.
@@ -359,8 +369,8 @@ zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
     LEFT JOIN reports r ON r.id = c.report_id
     WHERE ${listWhere("c.")}
     ORDER BY c.created_at DESC, c.id DESC
-  `).all(...listParams);
-  await sendExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-reports`, PORTAL_REPORT_EXPORT_COLUMNS, rows);
+  `).iterate(...listParams);
+  await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-reports`, PORTAL_REPORT_EXPORT_COLUMNS, rows);
 }));
 
 // Download a protected Excel workbook containing this dashboard's own
