@@ -5,6 +5,7 @@ data/*.sqlite-*
 data/backups/
 data/zones_cache.json
 data/report-photos/
+data/production-snapshots/
 data/resource-files/
 .env
 *.log
