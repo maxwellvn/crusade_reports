@@ -3,6 +3,7 @@ import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
 import { requirePageAccess } from "../auth.js";
 import { resolveCountryName } from "./countries.js";
+import { cachedDashboardData } from "../dashboardCache.js";
 
 export const stats = Router();
 
@@ -15,7 +16,7 @@ const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 // never in planned-vs-held progress. Scoped to program='public' (NULL allowed
 // for pre-migration rows) so Blue Elite registrations don't appear here.
 const REGISTRATION_DIMENSIONS = new Set(["event_type", "organization_type", "zone", "network_name", "country", "city"]);
-export function registrationProgress(column) {
+export function registrationProgress(column, limit = 500) {
   if (!REGISTRATION_DIMENSIONS.has(column)) throw new Error(`Unsupported registration dimension: ${column}`);
   const qualified = `ri.${column}`;
   if (column === "event_type") {
@@ -54,21 +55,22 @@ export function registrationProgress(column) {
      WHERE (ri.program = 'public' OR ri.program IS NULL)
        AND ${qualified} IS NOT NULL AND TRIM(${qualified}) <> ''
      GROUP BY ${qualified}
-     ORDER BY planned DESC, key COLLATE NOCASE`
-  ).all();
+     ORDER BY planned DESC, key COLLATE NOCASE LIMIT ?`
+  ).all(limit);
 }
 
 // GET /api/stats  -> overall totals + breakdowns by category / zone / network / country / month.
 stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
+  const data = cachedDashboardData("stats", () => {
   const totals = db.prepare(`SELECT COUNT(*) AS crusades, SUM(attendance) AS attendance, ${SUMS} FROM crusades`).get();
 
   // attendance = onsite; online_attendance = online_participation. Bars rank by combined reach.
-  const by = (col, where = "") =>
+  const by = (col, where = "", limit = 500) =>
     db.prepare(
       `SELECT ${col} AS key, COUNT(*) AS crusades, SUM(attendance) AS attendance,
               SUM(online_participation) AS online_attendance, SUM(salvation) AS salvation
-       FROM crusades ${where} GROUP BY ${col} ORDER BY (SUM(attendance) + SUM(online_participation)) DESC`
-    ).all();
+       FROM crusades ${where} GROUP BY ${col} ORDER BY (SUM(attendance) + SUM(online_participation)) DESC LIMIT ?`
+    ).all(limit);
 
   const byCountry = by("country");
   const byCountryNormalized = [...byCountry]
@@ -78,16 +80,16 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
     byCountry.map((row) => resolveCountryName(row.key)).filter(Boolean)
   ).size;
 
-  res.json({
+  return {
     totals: { ...totals, countries: canonicalCountryCount },
     by_format: by("format"),
     reports: db.prepare("SELECT COUNT(*) AS n FROM reports").get().n,
     by_category: by("event_type"),
     by_org_type: by("organization_type"),
     by_zone: by("zone", "WHERE zone IS NOT NULL"),
-    by_group: by("group_name", "WHERE group_name IS NOT NULL"),
-    by_church: by("church_name", "WHERE church_name IS NOT NULL"),
-    by_cell: by("cell_name", "WHERE cell_name IS NOT NULL"),
+    by_group: by("group_name", "WHERE group_name IS NOT NULL", 100),
+    by_church: by("church_name", "WHERE church_name IS NOT NULL", 100),
+    by_cell: by("cell_name", "WHERE cell_name IS NOT NULL", 500),
     by_network: db.prepare(
       `SELECT i.network_name AS key,
               COALESCE(SUM(i.planned_count), 0) AS crusades,
@@ -100,7 +102,7 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
        GROUP BY key ORDER BY crusades DESC`
     ).all(),
     by_country: byCountryNormalized,
-    by_city: by("city"),
+    by_city: by("city", "", 1_000),
     // Real geocoded city points for the map — no coordinates, no row.
     geo: db.prepare(
       `SELECT city AS key, country, MAX(city_lat) AS lat, MAX(city_lng) AS lng,
@@ -141,5 +143,8 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
        FROM reports r LEFT JOIN crusades c ON c.report_id = r.id
        GROUP BY r.id ORDER BY r.created_at DESC LIMIT 10`
     ).all(),
+  };
   });
+  res.setHeader("Cache-Control", "private, max-age=30");
+  res.json(data);
 }));

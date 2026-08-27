@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "./db.js";
 import { logger } from "./logger.js";
 
-const DEFAULT_RETENTION = { hourly: 48, daily: 30, weekly: 12 };
+const DEFAULT_RETENTION = { hourly: 2, daily: 0, weekly: 0 };
 let activeBackup = null;
 let timer = null;
 let status = { state: "starting", last_success_at: null, last_error: null, latest_file: null, latest_bytes: 0 };
@@ -17,7 +17,7 @@ const positiveInt = (value, fallback) => {
 
 const registrationBackupIntervalMs = () => positiveInt(
   process.env.DB_REGISTRATION_BACKUP_MIN_INTERVAL_MINUTES,
-  5,
+  60,
 ) * 60 * 1000;
 
 export function shouldThrottleBackup({ reason, lastSuccessAt, now = Date.now(), intervalMs = registrationBackupIntervalMs() }) {

@@ -9,6 +9,7 @@ import {
   saveReportPhotos, withReportPhotoUpload,
 } from "../reportMedia.js";
 import { ADMIN_REPORT_ORDER } from "../reportOrdering.js";
+import { cachedDashboardData } from "../dashboardCache.js";
 
 export const crusades = Router();
 
@@ -34,15 +35,15 @@ const CRUSADE_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "cell_n
 // Values for the PM/admin report-table dropdowns come from the complete report
 // dataset, so newly submitted attribution values appear automatically.
 export function crusadeFilterOptions() {
-  return Object.fromEntries(CRUSADE_FILTER_OPTION_COLS.map((column) => [
+  return cachedDashboardData("crusade-filter-options", () => Object.fromEntries(CRUSADE_FILTER_OPTION_COLS.map((column) => [
     column,
     db.prepare(
       `SELECT DISTINCT TRIM(${column}) AS value
        FROM crusades
        WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''
-       ORDER BY value COLLATE NOCASE`
+       ORDER BY value COLLATE NOCASE LIMIT 500`
     ).all().map((row) => row.value),
-  ]));
+  ])), 300_000);
 }
 
 // Build the shared WHERE clause for the table and its export, so both apply the

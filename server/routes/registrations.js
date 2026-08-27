@@ -15,6 +15,7 @@ import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../l
 import { COUNTRIES, resolveCountryName } from "./countries.js";
 import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
 import { loadZones } from "./zones.js";
+import { cachedDashboardData } from "../dashboardCache.js";
 
 export const registrations = Router();
 
@@ -312,15 +313,15 @@ const REGISTRATION_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "c
 // Values for the admin table dropdowns come from all public registration
 // records, rather than only the currently filtered page.
 export function registrationFilterOptions() {
-  return Object.fromEntries(REGISTRATION_FILTER_OPTION_COLS.map((column) => [
+  return cachedDashboardData("registration-filter-options", () => Object.fromEntries(REGISTRATION_FILTER_OPTION_COLS.map((column) => [
     column,
     db.prepare(
       `SELECT DISTINCT TRIM(${column}) AS value
        FROM registration_items i
        WHERE ${PUBLIC_PROGRAM_FILTER} AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
-       ORDER BY value COLLATE NOCASE`
+       ORDER BY value COLLATE NOCASE LIMIT 500`
     ).all().map((row) => row.value),
-  ]));
+  ])), 300_000);
 }
 
 const CELLULAR_DIMENSIONS = new Set(["zone", "group_name", "church_name"]);
@@ -428,7 +429,8 @@ async function crusadeAnalysisData() {
 }
 
 registrations.get("/crusade-analysis", requirePageAccess("dashboard/crusade-analysis"), wrap(async (_req, res) => {
-  res.json(await crusadeAnalysisData());
+  res.setHeader("Cache-Control", "private, max-age=30");
+  res.json(await cachedDashboardData("crusade-analysis", crusadeAnalysisData));
 }));
 
 registrations.get("/crusade-analysis/export", requirePageAccess("dashboard/crusade-analysis"), wrap(async (req, res) => {
@@ -474,6 +476,7 @@ registrations.get("/crusade-analysis/export", requirePageAccess("dashboard/crusa
 }));
 
 registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, res) => {
+  const data = cachedDashboardData("registrations-live", () => {
   const totals = db.prepare(`
     SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
@@ -509,7 +512,7 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
     byCountryRaw.map((row) => resolveCountryName(row.key)).filter(Boolean)
   ).size;
 
-  res.json({
+  return {
     totals: {
       ...totals,
       // Unresolved legacy upload values remain visible for cleanup, but they
@@ -521,29 +524,29 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
     by_zone: db.prepare(
       `SELECT zone AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
-    ).all(),
+    ).all().slice(0, 100),
     by_network: db.prepare(
       `SELECT i.network_name AS key,
               SUM(i.planned_count) AS planned, COUNT(DISTINCT i.registration_id) AS registrations
        FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
          AND i.network_name IS NOT NULL AND TRIM(i.network_name) <> ''
-       GROUP BY key ORDER BY planned DESC`
+       GROUP BY key ORDER BY planned DESC LIMIT 100`
     ).all(),
     by_group: db.prepare(
       `SELECT group_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC LIMIT 100`
     ).all(),
     by_church: db.prepare(
       `SELECT church_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC LIMIT 100`
     ).all(),
     by_cell: db.prepare(
       `SELECT cell_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC LIMIT 500`
     ).all(),
     by_city: db.prepare(
       `SELECT city AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city IS NOT NULL GROUP BY city ORDER BY planned DESC`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city IS NOT NULL GROUP BY city ORDER BY planned DESC LIMIT 1000`
     ).all(),
     by_org_type: db.prepare(
       `SELECT organization_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
@@ -556,7 +559,8 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
     // Real city points (geocoded) for the coverage map.
     geo: db.prepare(
       `SELECT city AS key, country, MAX(city_lat) AS lat, MAX(city_lng) AS lng, SUM(planned_count) AS planned
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city_lat IS NOT NULL GROUP BY city, country`
+       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city_lat IS NOT NULL
+       GROUP BY city, country ORDER BY planned DESC LIMIT 1000`
     ).all(),
     // The live feed: latest registrations with their own totals.
     recent: db.prepare(
@@ -567,7 +571,10 @@ registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, 
        WHERE (r.program = 'public' OR r.program IS NULL)
        GROUP BY r.id ORDER BY r.created_at DESC, r.id DESC LIMIT 25`
     ).all(),
+  };
   });
+  res.setHeader("Cache-Control", "private, max-age=30");
+  res.json(data);
 }));
 
 // Returns all countries without any registrations.

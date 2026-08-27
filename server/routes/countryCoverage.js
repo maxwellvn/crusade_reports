@@ -4,6 +4,7 @@ import { requirePageAccess } from "../auth.js";
 import { wrap } from "../logger.js";
 import { COUNTRIES, resolveCountryName } from "./countries.js";
 import { coverageData } from "./coverage.js";
+import { cachedDashboardData } from "../dashboardCache.js";
 
 export const countryCoverage = Router();
 
@@ -190,7 +191,8 @@ function getNetworkCountryBreakdown() {
 }
 
 countryCoverage.get("/", requirePageAccess("dashboard/country-coverage"), wrap((_req, res) => {
-  res.json(countryCoverageData());
+  res.setHeader("Cache-Control", "private, max-age=30");
+  res.json(cachedDashboardData("country-coverage", countryCoverageData));
 }));
 
 // Compact, complete source for the locally generated NOTC e-cards. This avoids
