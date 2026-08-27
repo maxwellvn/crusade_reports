@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { deleteJSON, getJSON } from "@/lib/api";
+import { deleteJSON, downloadFile, getJSON } from "@/lib/api";
 import { useAdmin } from "@/components/AdminGate";
 import { CRUSADE_TYPES, FORMATS, CORE_OUTCOMES, EXTENDED_OUTCOMES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy, WIDGETS, DRILL_MAP } from "@/lib/dashboardWidgets";
@@ -91,14 +91,16 @@ export function CrusadesTable() {
   const { Th } = useTableSort(params, setParams, "submitted_at");
 
   // Download every row matching the current filters (cookie authenticates the request).
-  function exportRows(format) {
+  async function exportRows(format) {
     const qs = new URLSearchParams(params);
     qs.set("format", format);
     qs.delete("page");
-    const link = Object.assign(document.createElement("a"), { href: `/api/crusades/export?${qs.toString()}` });
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    try {
+      await downloadFile(`/crusades/export?${qs.toString()}`, `crusade-reports.${format}`);
+      toast.success(`${format.toUpperCase()} export downloaded`);
+    } catch (error) {
+      toast.error(error.message);
+    }
   }
 
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;

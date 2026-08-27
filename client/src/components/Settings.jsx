@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowUpRight, LogOut, Trash2, UserPlus, Lock } from "lucide-react";
+import { ArrowUpRight, Copy, KeyRound, LogOut, RefreshCw, Trash2, UserPlus, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,9 @@ export function Settings() {
   const [consolidation, setConsolidation] = React.useState(null);
   const [loadingConsolidation, setLoadingConsolidation] = React.useState(false);
   const [applyingConsolidation, setApplyingConsolidation] = React.useState(false);
+  const [externalApiKey, setExternalApiKey] = React.useState(null);
+  const [newExternalApiKey, setNewExternalApiKey] = React.useState("");
+  const [savingExternalApiKey, setSavingExternalApiKey] = React.useState(false);
 
   React.useEffect(() => {
     if (!admin?.is_super_admin) return;
@@ -91,6 +94,13 @@ export function Settings() {
       .then(setConsolidation)
       .catch((error) => toast.error(error.message))
       .finally(() => setLoadingConsolidation(false));
+  }, [admin]);
+
+  React.useEffect(() => {
+    if (!admin?.is_super_admin) return;
+    getJSON("/auth/external-api-key")
+      .then((result) => setExternalApiKey(result.active_key))
+      .catch((error) => toast.error(error.message));
   }, [admin]);
 
   async function applyConsolidation() {
@@ -271,6 +281,46 @@ export function Settings() {
     }
   }
 
+  async function createExternalApiKey() {
+    const action = externalApiKey ? "Rotating this key will immediately stop integrations using the current key. Continue?" : "Generate an API key for read-only data access?";
+    if (!confirm(action)) return;
+    setSavingExternalApiKey(true);
+    try {
+      const result = await postJSON("/auth/external-api-key", {});
+      setExternalApiKey(result.active_key);
+      setNewExternalApiKey(result.key);
+      toast.success("API key generated. Copy it now; it will not be shown again.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingExternalApiKey(false);
+    }
+  }
+
+  async function copyExternalApiKey() {
+    try {
+      await navigator.clipboard.writeText(newExternalApiKey);
+      toast.success("API key copied.");
+    } catch {
+      toast.error("Could not copy the key. Select and copy it manually.");
+    }
+  }
+
+  async function revokeExternalApiKey() {
+    if (!confirm("Revoke the external API key? Any integration using it will stop immediately.")) return;
+    setSavingExternalApiKey(true);
+    try {
+      await deleteJSON("/auth/external-api-key");
+      setExternalApiKey(null);
+      setNewExternalApiKey("");
+      toast.success("API key revoked.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingExternalApiKey(false);
+    }
+  }
+
   if (!admin?.is_super_admin) {
     return <div className="mx-auto max-w-3xl border-y border-slate-200 py-8 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard settings.</div>;
   }
@@ -314,6 +364,31 @@ export function Settings() {
               disabled={networkInheritance === null || Boolean(savingNetworkInheritance)}
               onChange={() => toggleNetworkInheritance(name)} />
           ))}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="External data API" description="Create one read-only key for trusted server-to-server integrations. Only the super admin can manage this key.">
+        <div className="max-w-2xl space-y-4">
+          <p className="text-sm leading-6 text-slate-600">Use <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">GET /api/reports</code> or <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">GET /api/registrations</code> with an <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">X-API-Key</code> header. Results are read-only, exclude personal contact details, and use cursor pagination with <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">limit</code> (maximum 500) and <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">cursor</code>.</p>
+          {newExternalApiKey && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-950">Copy this key now — it will not be displayed again.</p>
+              <div className="mt-3 flex gap-2">
+                <Input readOnly value={newExternalApiKey} aria-label="New external API key" className="font-mono text-xs" />
+                <Button type="button" variant="outline" onClick={copyExternalApiKey} className="shrink-0"><Copy /> Copy</Button>
+              </div>
+            </div>
+          )}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+            {externalApiKey ? <>
+              <p className="font-semibold text-slate-950">Active key: <span className="font-mono">{externalApiKey.key_prefix}</span></p>
+              <p className="mt-1 text-slate-600">Created {externalApiKey.created_at?.slice(0, 16)?.replace("T", " ")} by @{externalApiKey.created_by}. {externalApiKey.last_used_at ? `Last used ${externalApiKey.last_used_at.slice(0, 16).replace("T", " ")}.` : "Not used yet."}</p>
+            </> : <p className="text-slate-600">No external API key is active.</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" disabled={savingExternalApiKey} onClick={createExternalApiKey} className="rounded-full"><KeyRound /> {externalApiKey ? "Rotate API key" : "Generate API key"}</Button>
+            {externalApiKey && <Button type="button" variant="outline" disabled={savingExternalApiKey} onClick={revokeExternalApiKey} className="rounded-full"><RefreshCw /> Revoke key</Button>}
+          </div>
         </div>
       </SettingsSection>
 

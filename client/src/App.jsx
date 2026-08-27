@@ -39,6 +39,7 @@ import { CountryCoverage } from "@/components/CountryCoverage";
 import { PastoralChecklist } from "@/components/PastoralChecklist";
 import { DatabaseProtection } from "@/components/DatabaseProtection";
 import { ManualOrganizations } from "@/components/ManualOrganizations";
+import { ApiDocumentation } from "@/components/ApiDocumentation";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,7 @@ const PAGE_META = [
   [/^\/avatar$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", true, "/avatar", "/notc-avatar-frame.jpg"],
   [/^\/privacy$/, "Privacy Policy", "How the Night of a Thousand Crusades platform collects, uses, stores, and protects your personal information.", true, "/privacy"],
   [/^\/terms$/, "Terms of Service", "The terms governing your use of the Night of a Thousand Crusades platform.", true, "/terms"],
+  [/^\/docs$/, "NOTC Data API Documentation", "Read-only API documentation for registered crusades and submitted reports.", true, "/docs"],
   [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
@@ -249,6 +251,7 @@ export default function App() {
         <Route path="/avatar" element={<AvatarFrame />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/docs" element={<ApiDocumentation />} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />

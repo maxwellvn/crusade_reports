@@ -174,17 +174,34 @@ async function writeResponse(res, chunk) {
   if (!res.write(chunk)) await once(res, "drain");
 }
 
+// SQLite iterators evaluate lazily. Advance one row before sending headers so
+// a malformed query or unavailable table reaches the normal JSON error handler
+// instead of becoming a downloaded, header-only CSV/XLSX file.
+function preflightRows(rows) {
+  const iterator = rows?.[Symbol.iterator]?.();
+  if (!iterator) throw new TypeError("Export rows must be iterable.");
+  const first = iterator.next();
+  return {
+    *[Symbol.iterator]() {
+      if (!first.done) yield first.value;
+      yield* iterator;
+    },
+  };
+}
+
 async function sendStreamingCsv(res, baseName, columns, rows) {
+  const checkedRows = preflightRows(rows);
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${baseName}.csv"`);
   await writeResponse(res, `\uFEFF${columns.map((column) => csvEscape(column.header)).join(",")}\r\n`);
-  for (const row of rows) {
+  for (const row of checkedRows) {
     await writeResponse(res, `${columns.map((column) => csvEscape(cellOf(column, row))).join(",")}\r\n`);
   }
   res.end();
 }
 
 async function sendStreamingXlsx(res, baseName, columns, rows) {
+  const checkedRows = preflightRows(rows);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${baseName}.xlsx"`);
   const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
@@ -203,7 +220,7 @@ async function sendStreamingXlsx(res, baseName, columns, rows) {
     sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
   };
   addSheet();
-  for (const row of rows) {
+  for (const row of checkedRows) {
     // Excel supports 1,048,576 rows per worksheet; reserve row 1 for headers.
     if (rowsInSheet >= 1_048_575) {
       sheet.commit();

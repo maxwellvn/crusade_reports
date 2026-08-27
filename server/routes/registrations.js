@@ -3,7 +3,7 @@ import { db } from "../db.js";
 import { backupDatabase } from "../databaseProtection.js";
 import { registrationCrusadeEditSchema, registrationSchema, manualOrgUpdateSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
-import { requirePageAccess, requireSuperAdmin } from "../auth.js";
+import { requirePageAccess, requireSuperAdmin, requireExternalOrPageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen, isManualGroupsEnabled, isManualZonesEnabled } from "../appSettings.js";
@@ -720,8 +720,27 @@ registrations.get("/export", requirePageAccess("registrations"), wrap(async (req
 }));
 
 // GET /api/registrations — paginated, filtered, sorted table for the admin view.
-registrations.get("/", requirePageAccess("registrations"), wrap((req, res) => {
+registrations.get("/", requireExternalOrPageAccess(["registrations"]), wrap((req, res) => {
   const { clause, params } = registrationFilters(req.query);
+  if (req.externalApi) {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const cursor = Math.max(parseInt(req.query.cursor, 10) || 0, 0);
+    const rows = db.prepare(
+      `SELECT i.id, i.registration_id, i.created_at, i.program, i.organization_type, i.zone, i.group_name,
+              i.church_name, i.cell_name, i.network_name, i.country, i.plan_date, i.event_type, i.other_event_type,
+              i.planned_count, i.event_name, i.event_date, i.venue, i.expected_attendance, i.minister_name,
+              i.city, i.city_place_id, i.readiness_status, i.readiness_notes, i.readiness_updated_at,
+              i.crusade_collaborators, i.zone_contribution, i.estimated_budget, i.rhapsody_copies_confirmed,
+              i.permits_obtained, i.media_coverage_plan,
+              EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+       FROM registration_items i JOIN registrations r ON r.id = i.registration_id
+       ${clause}${clause ? " AND" : " WHERE"} (@cursor = 0 OR i.id < @cursor)
+       ORDER BY i.id DESC LIMIT @limit_plus_one`
+    ).all({ ...params, cursor, limit_plus_one: limit + 1 });
+    const hasMore = rows.length > limit;
+    const data = rows.slice(0, limit);
+    return res.json({ data, meta: { limit, has_more: hasMore, next_cursor: hasMore ? data.at(-1)?.id || null : null } });
+  }
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 

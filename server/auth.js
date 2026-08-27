@@ -10,6 +10,10 @@ const SESSION_COOKIE = "dashboard_session";
 export const DASHBOARD_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const profileCache = new Map();
 export const SUPER_ADMIN_USERNAME = "maxwellvn";
+const EXTERNAL_API_KEY_PREFIX = "notc_live_";
+const externalApiUsage = new Map();
+const EXTERNAL_API_WINDOW_MS = 60_000;
+const EXTERNAL_API_LIMIT = 120;
 
 // Pages that can be individually assigned to non-super-admin accounts. Super
 // admins always have full access. New accounts (including /pm self-service)
@@ -77,6 +81,64 @@ function accessToken(req) {
 }
 
 const sessionTokenHash = (token) => createHash("sha256").update(token).digest("hex");
+const externalApiKeyHash = (token) => createHash("sha256").update(token).digest("hex");
+
+function suppliedExternalApiKey(req) {
+  const header = String(req.get("x-api-key") || "").trim();
+  if (header) return header;
+  const bearer = String(req.get("authorization") || "");
+  const token = bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : "";
+  return token.startsWith(EXTERNAL_API_KEY_PREFIX) ? token : "";
+}
+
+export function hasSuppliedExternalApiKey(req) {
+  return Boolean(suppliedExternalApiKey(req));
+}
+
+function consumeExternalApiLimit(keyHash) {
+  const now = Date.now();
+  const current = externalApiUsage.get(keyHash);
+  const state = !current || current.resetAt <= now ? { count: 0, resetAt: now + EXTERNAL_API_WINDOW_MS } : current;
+  state.count += 1;
+  externalApiUsage.set(keyHash, state);
+  if (externalApiUsage.size > 2_000) {
+    for (const [hash, entry] of externalApiUsage) if (entry.resetAt <= now) externalApiUsage.delete(hash);
+  }
+  return state;
+}
+
+export async function requireExternalApiKey(req, res, next) {
+  try {
+    const rawKey = suppliedExternalApiKey(req);
+    if (!rawKey || !rawKey.startsWith(EXTERNAL_API_KEY_PREFIX) || rawKey.length < 40) {
+      throw new ApiError(401, "EXTERNAL_API_UNAUTHORIZED", "A valid API key is required.");
+    }
+    const keyHash = externalApiKeyHash(rawKey);
+    const key = db.prepare(`SELECT id, key_prefix FROM external_api_keys
+      WHERE key_hash = ? AND revoked_at IS NULL`).get(keyHash);
+    if (!key) throw new ApiError(401, "EXTERNAL_API_UNAUTHORIZED", "A valid API key is required.");
+    const usage = consumeExternalApiLimit(keyHash);
+    res.setHeader("X-RateLimit-Limit", String(EXTERNAL_API_LIMIT));
+    res.setHeader("X-RateLimit-Remaining", String(Math.max(EXTERNAL_API_LIMIT - usage.count, 0)));
+    res.setHeader("X-RateLimit-Reset", String(Math.ceil(usage.resetAt / 1000)));
+    if (usage.count > EXTERNAL_API_LIMIT) {
+      res.setHeader("Retry-After", String(Math.ceil((usage.resetAt - Date.now()) / 1000)));
+      throw new ApiError(429, "EXTERNAL_API_RATE_LIMIT", "API rate limit reached. Try again shortly.");
+    }
+    req.externalApi = { id: key.id, prefix: key.key_prefix };
+    db.prepare("UPDATE external_api_keys SET last_used_at = datetime('now') WHERE id = ?").run(key.id);
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+export function requireExternalOrPageAccess(pageKeys) {
+  return (req, res, next) => {
+    if (hasSuppliedExternalApiKey(req)) return requireExternalApiKey(req, res, next);
+    return requireAnyPageAccess(pageKeys)(req, res, next);
+  };
+}
 
 export function createDashboardSession(user, now = Date.now()) {
   const token = randomBytes(32).toString("base64url");
@@ -255,6 +317,32 @@ export async function requireSuperAdmin(req, _res, next) {
     next(error);
   }
 }
+
+function activeExternalApiKey() {
+  return db.prepare(`SELECT key_prefix, created_by, created_at, last_used_at
+    FROM external_api_keys WHERE revoked_at IS NULL ORDER BY id DESC LIMIT 1`).get() || null;
+}
+
+auth.get("/external-api-key", requireSuperAdmin, (_req, res) => {
+  // Never return the raw key after the one-time generation response.
+  res.json({ active_key: activeExternalApiKey() });
+});
+
+auth.post("/external-api-key", requireSuperAdmin, wrap((req, res) => {
+  const rawKey = `${EXTERNAL_API_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+  const prefix = `${rawKey.slice(0, EXTERNAL_API_KEY_PREFIX.length + 8)}…`;
+  db.transaction(() => {
+    db.prepare("UPDATE external_api_keys SET revoked_at = datetime('now') WHERE revoked_at IS NULL").run();
+    db.prepare(`INSERT INTO external_api_keys (key_hash, key_prefix, created_by)
+      VALUES (?, ?, ?)`).run(externalApiKeyHash(rawKey), prefix, req.admin.username);
+  })();
+  res.status(201).json({ key: rawKey, active_key: activeExternalApiKey() });
+}));
+
+auth.delete("/external-api-key", requireSuperAdmin, (_req, res) => {
+  db.prepare("UPDATE external_api_keys SET revoked_at = datetime('now') WHERE revoked_at IS NULL").run();
+  res.json({ ok: true, active_key: null });
+});
 
 auth.get("/kingschat/login", (req, res) => {
   const clientId = process.env.KINGSCHAT_CLIENT_ID || "com.kingschat";

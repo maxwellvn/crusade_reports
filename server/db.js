@@ -285,6 +285,20 @@ let startupSchema = `
   );
   CREATE INDEX IF NOT EXISTS idx_dashboard_sessions_expiry ON dashboard_sessions(expires_at);
 
+  -- External data consumers authenticate with an opaque key. The raw key is
+  -- never persisted; only its SHA-256 hash and a non-sensitive display prefix
+  -- are kept in the reports database.
+  CREATE TABLE IF NOT EXISTS external_api_keys (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash     TEXT NOT NULL UNIQUE,
+    key_prefix   TEXT NOT NULL,
+    created_by   TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT,
+    revoked_at   TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_external_api_keys_active ON external_api_keys(revoked_at, created_at DESC);
+
   CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL

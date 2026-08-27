@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { portalCrusadeReportSchema, reportSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
-import { requireAnyPageAccess } from "../auth.js";
+import { requireAnyPageAccess, requireExternalOrPageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { ensureReportingOpen } from "../appSettings.js";
 import { applyPortalScope } from "../portalScope.js";
@@ -177,7 +177,29 @@ reports.post("/", withReportPhotoUpload(wrap((req, res) => {
   res.status(201).json({ id, photos: listReportPhotos(id) });
 })));
 
-reports.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((_req, res) => {
+reports.get("/", requireExternalOrPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
+  if (req.externalApi) {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const cursor = Math.max(parseInt(req.query.cursor, 10) || 0, 0);
+    const rows = db.prepare(`SELECT id, created_at, organization_type, zone, group_name, church_name, cell_name,
+      network_name, network_type, country, highlights, media_links, photo_links, video_links
+      FROM reports WHERE (@cursor = 0 OR id < @cursor) ORDER BY id DESC LIMIT @limit_plus_one`)
+      .all({ cursor, limit_plus_one: limit + 1 });
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const ids = pageRows.map((row) => row.id);
+    const crusadesByReport = new Map(ids.map((id) => [id, []]));
+    if (ids.length) {
+      const placeholders = ids.map(() => "?").join(", ");
+      for (const crusade of db.prepare(`SELECT * FROM crusades WHERE report_id IN (${placeholders}) ORDER BY id DESC`).all(...ids)) {
+        crusadesByReport.get(crusade.report_id).push(crusade);
+      }
+    }
+    return res.json({
+      data: pageRows.map((row) => ({ ...row, crusades: crusadesByReport.get(row.id) || [] })),
+      meta: { limit, has_more: hasMore, next_cursor: hasMore ? pageRows.at(-1)?.id || null : null },
+    });
+  }
   const rows = db.prepare("SELECT * FROM reports ORDER BY created_at DESC LIMIT 500").all();
   const crus = db.prepare("SELECT * FROM crusades WHERE report_id = ?");
   res.json(rows.map((r) => ({ ...r, crusades: crus.all(r.id), photos: listReportPhotos(r.id) })));

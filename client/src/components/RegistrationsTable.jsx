@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { deleteJSON, downloadFile, getJSON } from "@/lib/api";
+import { deleteJSON, getJSON } from "@/lib/api";
 import { useAdmin } from "@/components/AdminGate";
 import { CRUSADE_TYPES } from "@/lib/constants";
 import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
@@ -114,21 +114,16 @@ export function RegistrationsTable() {
   }
   const { Th } = useTableSort(params, setParams, "created_at");
 
-  // Download every row matching the current filters, with API errors surfaced
-  // in the page instead of opening a failed direct request in the browser.
-  async function exportRows(format) {
+  // Registration exports can contain millions of rows. Hand the authenticated
+  // stream directly to the browser instead of buffering the whole file in JS.
+  function exportRows(format) {
     const qs = new URLSearchParams(params);
     qs.set("format", format);
     qs.delete("page");
     setExporting(format);
-    try {
-      await downloadFile(`/registrations/export?${qs.toString()}`, `registered-crusades.${format}`);
-      toast.success(`${format.toUpperCase()} export downloaded`);
-    } catch (error) {
-      toast.error(error.message);
-    } finally {
-      setExporting("");
-    }
+    window.location.assign(`/api/registrations/export?${qs.toString()}`);
+    toast.success(`${format.toUpperCase()} export started.`);
+    window.setTimeout(() => setExporting(""), 1500);
   }
 
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;

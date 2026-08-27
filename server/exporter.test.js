@@ -37,3 +37,17 @@ test("streaming XLSX writes a valid workbook response", async () => {
   assert.equal(headers["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   assert.equal(body.subarray(0, 2).toString(), "PK");
 });
+
+test("streaming exports fail before setting download headers when the iterator fails", async () => {
+  const response = responseStream();
+  const brokenRows = {
+    [Symbol.iterator]() {
+      return { next() { throw new Error("database unavailable"); } };
+    },
+  };
+  await assert.rejects(
+    () => sendStreamingExport(response, "csv", "test-export", [{ header: "Name", value: (row) => row.name }], brokenRows),
+    /database unavailable/
+  );
+  assert.deepEqual(response.headers, {});
+});
