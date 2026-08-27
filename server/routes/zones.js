@@ -13,6 +13,9 @@ const CACHE_FILE = join(__dirname, "..", "..", "data", "zones_cache.json");
 // Coverage and selectors at a stale hierarchy even while the API itself is current.
 const CHURCHES_DIRECTORY_URL = "https://churches-api.rorportal.org/api/v1/hierarchy";
 let lastGoodData = null;
+let lastLoadedAt = 0;
+let loadPromise = null;
+const CACHE_TTL_MS = Math.max(60_000, Number(process.env.ZONES_CACHE_MINUTES || 15) * 60_000);
 
 // Upstream shape: { "Region N": { "Zone Name": { name, groups } } } where groups
 // is EITHER an array of {name,id} OR an object keyed by number. Normalize to a
@@ -48,7 +51,15 @@ export function normalizeZones(raw) {
   return out.sort((a, b) => a.zone.localeCompare(b.zone));
 }
 
-async function load() {
+async function loadCacheFile() {
+  const data = JSON.parse(await readFile(CACHE_FILE, "utf8"));
+  if (!Array.isArray(data) || !data.length) throw new Error("empty zones cache");
+  lastGoodData = data;
+  lastLoadedAt = Date.now();
+  return data;
+}
+
+async function refresh() {
   const upstream = new URL(CHURCHES_DIRECTORY_URL);
   upstream.searchParams.set("_fresh", String(Date.now()));
   try {
@@ -61,18 +72,37 @@ async function load() {
     const data = normalizeZones(await resp.json());
     if (!data.length) throw new Error("empty after normalize");
     lastGoodData = data;
+    lastLoadedAt = Date.now();
     writeFile(CACHE_FILE, JSON.stringify(data)).catch(() => {}); // best-effort fallback snapshot
     return data;
   } catch (err) {
     logger.warn({ err }, "zones fetch failed — trying cache file");
-    if (lastGoodData) return lastGoodData;
-    try {
-      lastGoodData = JSON.parse(await readFile(CACHE_FILE, "utf8"));
+    if (lastGoodData) {
+      lastLoadedAt = Date.now();
       return lastGoodData;
+    }
+    try {
+      return await loadCacheFile();
     } catch {
       throw new ApiError(503, "ZONES_UNAVAILABLE", "Zones list is temporarily unavailable");
     }
   }
+}
+
+
+async function load() {
+  if (lastGoodData) {
+    if (Date.now() - lastLoadedAt >= CACHE_TTL_MS && !loadPromise) {
+      loadPromise = refresh().finally(() => { loadPromise = null; });
+    }
+    return lastGoodData;
+  }
+  if (!loadPromise) {
+    // A persisted snapshot makes restarts instant even when the upstream API is
+    // slow. If no snapshot exists, fall back to the live fetch.
+    loadPromise = loadCacheFile().catch(() => refresh()).finally(() => { loadPromise = null; });
+  }
+  return loadPromise;
 }
 
 // Exposed so the importer can validate/canonicalize zone & group names on upload.
@@ -80,7 +110,7 @@ export const loadZones = load;
 
 zones.get("/", wrap(async (_req, res) => {
   const data = await load();
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Cache-Control", "private, max-age=300");
   // zones only (groups fetched via the zone-scoped endpoint to keep payloads small)
   res.json(data.map(({ region, zone }) => ({ region, zone })));
 }));
@@ -90,6 +120,6 @@ zones.get("/groups", wrap(async (req, res) => {
   if (!zoneName) throw new ApiError(400, "BAD_REQUEST", "zone query param is required");
   const data = await load();
   const match = data.find((z) => z.zone === zoneName);
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Cache-Control", "private, max-age=300");
   res.json(match ? match.groups : []);
 }));

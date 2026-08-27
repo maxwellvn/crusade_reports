@@ -6,6 +6,9 @@ import { logger, wrap } from "../logger.js";
 import { COUNTRIES } from "./countries.js";
 
 export const places = Router();
+const BACKFILL_INTERVAL_MS = Math.max(60_000, Number(process.env.CITY_BACKFILL_INTERVAL_MINUTES || 15) * 60_000);
+let backfillPromise = null;
+let lastBackfillStartedAt = 0;
 
 // [GeoNames id, name, ASCII name, ISO country, latitude, longitude, population]
 // This ships with the app, so autocomplete and coordinates incur no API calls.
@@ -42,7 +45,7 @@ places.get("/autocomplete", wrap(async (req, res) => {
 }));
 
 // Only new local IDs are updated. Existing Google IDs and coordinates remain untouched.
-export async function backfillCityCoords() {
+async function runCityCoordsBackfill() {
   for (const table of ["crusades", "registration_items"]) {
     const pending = db.prepare(
       `SELECT DISTINCT city_place_id FROM ${table} WHERE city_place_id LIKE 'geonames:%' AND city_lat IS NULL`
@@ -56,4 +59,17 @@ export async function backfillCityCoords() {
     }
     if (done) logger.info({ table, done }, "local city coordinates backfilled");
   }
+}
+
+// Registration traffic can be extremely bursty. Coalesce all callers into one
+// job and avoid rescanning multi-million-row tables after every inserted row.
+export function backfillCityCoords({ force = false } = {}) {
+  if (backfillPromise) return backfillPromise;
+  const now = Date.now();
+  if (!force && now - lastBackfillStartedAt < BACKFILL_INTERVAL_MS) return Promise.resolve(false);
+  lastBackfillStartedAt = now;
+  backfillPromise = runCityCoordsBackfill()
+    .then(() => true)
+    .finally(() => { backfillPromise = null; });
+  return backfillPromise;
 }
