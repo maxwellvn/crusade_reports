@@ -99,7 +99,7 @@ export function CrusadesTable() {
   // Download every row matching the current filters (cookie authenticates the request).
   async function exportRows(format) {
     const qs = new URLSearchParams(params);
-    qs.set("format", format);
+    qs.set("export_format", format);
     qs.delete("page");
     try {
       await downloadFile(`/crusades/export?${qs.toString()}`, `crusade-reports.${format}`);
@@ -194,7 +194,7 @@ export function CrusadesTable() {
           ) : (
             <table className="w-full min-w-max text-sm">
               <thead>
-                <tr className="border-b border-blue-200 bg-blue-50/80 text-left text-xs text-slate-600">
+                <tr className="border-b border-blue-200 bg-blue-50/80 text-left text-xs text-blue-950">
                   <Th col="submitted_at" label="Submitted" />
                   <Th col="event_date" label="Date held" />
                   <Th col="event_name" label="Event name" />

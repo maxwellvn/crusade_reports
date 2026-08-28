@@ -86,6 +86,19 @@ function crusadeFilters(query) {
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
 }
 
+// Keep the requested file type separate from the crusade's physical/online
+// format filter. Older clients sent `format=csv|xlsx`; treat those values only
+// as the file type so they cannot become an impossible `c.format = 'csv'`
+// predicate and silently produce a header-only export.
+export function crusadeExportRequest(query = {}) {
+  const legacyFileFormat = query.format === "xlsx" || query.format === "csv" ? query.format : null;
+  const fileFormat = query.export_format === "xlsx" || query.export_format === "csv"
+    ? query.export_format
+    : legacyFileFormat || "csv";
+  const filterQuery = legacyFileFormat ? { ...query, format: "" } : query;
+  return { fileFormat, ...crusadeFilters(filterQuery) };
+}
+
 const CRUSADE_FROM = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id";
 const CRUSADE_EXPORT_SELECT =
   `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
@@ -122,9 +135,8 @@ const CRUSADE_EXPORT_COLUMNS = [
 
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
 crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
-  const { clause, params } = crusadeFilters(req.query);
+  const { clause, params, fileFormat } = crusadeExportRequest(req.query);
   const statement = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`);
-  const format = req.query.format === "xlsx" ? "xlsx" : "csv";
 
   // Exports are authenticated, point at live data, and must never reuse a browser
   // cache entry (including a previously interrupted header-only file).
@@ -134,7 +146,7 @@ crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wra
   // prematurely completed a chunked response after its headers. Build the report
   // file completely before responding so every displayed report is delivered.
   // Registration exports remain streamed because they can contain millions of rows.
-  await sendExport(res, format, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.all(params));
+  await sendExport(res, fileFormat, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.all(params));
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
