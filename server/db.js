@@ -2,11 +2,12 @@ import Database from "better-sqlite3";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
+import { resolveRegistrationDatabasePath } from "./databasePaths.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
 export const REGISTRATION_DB_SCHEMA = "registration_store";
-export const REGISTRATION_DB_PATH = process.env.REGISTRATION_DB_PATH || null;
+export const REGISTRATION_DB_PATH = resolveRegistrationDatabasePath(DB_PATH);
 export const splitDatabaseEnabled = Boolean(REGISTRATION_DB_PATH);
 
 // A restore upload is staged first and applied only during a clean process
