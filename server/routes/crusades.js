@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAnyPageAccess, requirePageAccess, requireSuperAdmin } from "../auth.js";
-import { sendStreamingExport } from "./exporter.js";
+import { sendExport, sendStreamingExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
 import {
   composeMediaLinks, deleteReportPhotos, listReportPhotos, parseReportPayload, removeUploadedFiles,
@@ -123,8 +123,19 @@ const CRUSADE_EXPORT_COLUMNS = [
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
 crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
   const { clause, params } = crusadeFilters(req.query);
-  const rows = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`).iterate(params);
-  await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "crusade-reports", CRUSADE_EXPORT_COLUMNS, rows);
+  const statement = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`);
+  const format = req.query.format === "xlsx" ? "xlsx" : "csv";
+
+  // The report table is comparatively small, but some browser/proxy combinations
+  // prematurely completed the chunked CSV response after its headers. Build CSV
+  // reports completely before responding so every displayed report is delivered.
+  // Registration exports remain streamed because they can contain millions of rows.
+  if (format === "csv") {
+    await sendExport(res, format, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.all(params));
+    return;
+  }
+
+  await sendStreamingExport(res, format, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.iterate(params));
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
