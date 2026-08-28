@@ -131,6 +131,7 @@ export function ZonePortal() {
           </div>
           {data && <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:flex-wrap">
             <Button asChild variant="outline" size="sm"><Link to={`/crusade-registration/register?portal=${encodeURIComponent(token)}`}>Register crusades</Link></Button>
+            <Button asChild variant="outline" size="sm"><Link to={`/crusade-registration/bulk-upload?portal=${encodeURIComponent(token)}`}>Bulk register</Link></Button>
           </div>}
         </div>
       </header>

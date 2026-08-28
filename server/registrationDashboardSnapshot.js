@@ -1,10 +1,12 @@
 import { Worker, isMainThread } from "node:worker_threads";
 import { db } from "./db.js";
 import { logger } from "./logger.js";
+import { clearDashboardCache } from "./dashboardCache.js";
 
 const SNAPSHOT_KEY = "live-registrations-v1";
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 let refreshWorker = null;
+let refreshQueued = false;
 
 const snapshotStatement = () => db.prepare(`
   SELECT payload, source_max_id, refreshed_at
@@ -36,7 +38,12 @@ export function saveRegistrationDashboardSnapshot(data) {
 }
 
 export function scheduleRegistrationDashboardRefresh({ force = false } = {}) {
-  if (!isMainThread || refreshWorker) return false;
+  if (force) clearDashboardCache();
+  if (!isMainThread) return false;
+  if (refreshWorker) {
+    if (force) refreshQueued = true;
+    return false;
+  }
   const snapshot = readRegistrationDashboardSnapshot();
   const refreshedAt = snapshot ? Date.parse(`${snapshot.refreshedAt.replace(" ", "T")}Z`) : 0;
   if (!force && snapshot && Date.now() - refreshedAt < REFRESH_INTERVAL_MS) return false;
@@ -49,14 +56,21 @@ export function scheduleRegistrationDashboardRefresh({ force = false } = {}) {
     else logger.error({ error: message?.error }, "registration dashboard snapshot refresh failed");
   });
   refreshWorker.on("error", (error) => logger.error({ err: error }, "registration dashboard worker failed"));
-  refreshWorker.on("exit", () => { refreshWorker = null; });
+  refreshWorker.on("exit", () => {
+    refreshWorker = null;
+    if (refreshQueued) {
+      refreshQueued = false;
+      scheduleRegistrationDashboardRefresh({ force: true });
+    }
+  });
   return true;
 }
 
 export function registrationDashboardData(build) {
   const snapshot = readRegistrationDashboardSnapshot();
   if (snapshot) {
-    scheduleRegistrationDashboardRefresh();
+    const currentMaxId = db.prepare("SELECT COALESCE(MAX(id), 0) AS value FROM registration_items").get().value;
+    scheduleRegistrationDashboardRefresh({ force: currentMaxId > snapshot.sourceMaxId });
     return snapshot.data;
   }
   const data = build();

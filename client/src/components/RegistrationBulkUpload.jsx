@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -51,6 +51,8 @@ function WarningList({ warnings }) {
 
 export function RegistrationBulkUpload() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const portalToken = searchParams.get("portal") || "";
   const form = useForm({
     resolver: zodResolver(registrationSchema),
     defaultValues: { ...registrationDefaults, items: [{ event_type: "street", event_name: " ", event_date: "2099-01-01", venue: " ", expected_attendance: 1, minister_name: " ", country: "Nigeria", city: "Lagos" }] },
@@ -63,6 +65,8 @@ export function RegistrationBulkUpload() {
   const [file, setFile] = React.useState(null);
   const [preview, setPreview] = React.useState(null); // { ok, errors, warnings, summary, organization, items }
   const [busy, setBusy] = React.useState(false);
+  const [portalScope, setPortalScope] = React.useState(null);
+  const [portalError, setPortalError] = React.useState("");
   const inputRef = React.useRef(null);
 
   const orgType = watch("organization_type");
@@ -73,6 +77,18 @@ export function RegistrationBulkUpload() {
   const needsCell = orgType === "cell";
 
   const { fetchZones, fetchGroups, fetchNetworks, clearGroupCache } = useOrgData(zone);
+
+  React.useEffect(() => {
+    if (!portalToken) return;
+    getJSON(`/zone-portal/${encodeURIComponent(portalToken)}`)
+      .then((scope) => {
+        setPortalScope(scope);
+        setValue("organization_type", scope.kind === "network" ? "network" : "zone", { shouldValidate: true });
+        setValue("zone", scope.kind === "zone" ? scope.zone : "", { shouldValidate: true });
+        setValue("network_name", scope.kind === "network" ? scope.zone : "", { shouldValidate: true });
+      })
+      .catch((error) => setPortalError(error.message));
+  }, [portalToken, setValue]);
 
   React.useEffect(() => {
     // Mirror the public form: organization entry fails closed if settings are
@@ -101,6 +117,7 @@ export function RegistrationBulkUpload() {
       const fd = new FormData();
       fd.append("file", f);
       if (commit) fd.append("commit", "1");
+      if (portalToken) fd.append("portal_token", portalToken);
       for (const k of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name",
         "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username"]) {
         fd.append(k, v[k] ?? "");
@@ -112,7 +129,7 @@ export function RegistrationBulkUpload() {
         toast.success(`${body.count} crusades registered successfully.`);
         setFile(null);
         setPreview(null);
-        navigate("/crusade-registration");
+        navigate(portalToken ? `/zone/${encodeURIComponent(portalToken)}` : "/crusade-registration");
         return;
       }
       setPreview(body);
@@ -173,7 +190,7 @@ export function RegistrationBulkUpload() {
       return;
     }
     toast.success(`Loaded ${preview.items.length} crusades into the form — review and submit.`);
-    navigate("/crusade-registration/register");
+    navigate(`/crusade-registration/register${portalToken ? `?portal=${encodeURIComponent(portalToken)}` : ""}`);
   }
 
   return (
@@ -206,6 +223,14 @@ export function RegistrationBulkUpload() {
           </div>
 
           {/* Step 1: who is registering (same fields as the regular form) */}
+          {portalScope && (
+            <div className="border-l-4 border-blue-600 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+              These registrations will be added to <strong>{portalScope.zone}</strong>.
+            </div>
+          )}
+          {portalError && (
+            <div className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-900">{portalError}</div>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Who is registering?</CardTitle>
@@ -214,6 +239,7 @@ export function RegistrationBulkUpload() {
             <CardContent className="space-y-4">
               <Field label="Registering as" required error={errors.organization_type?.message}>
                 <Select {...register("organization_type")} aria-invalid={!!errors.organization_type}
+                  disabled={!!portalScope}
                   onChange={(e) => setValue("organization_type", e.target.value, { shouldValidate: true })}>
                   <option value="">Select…</option>
                   <option value="zone">Zone</option>
@@ -228,7 +254,7 @@ export function RegistrationBulkUpload() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Zone" required error={errors.zone?.message}>
                     <Controller control={control} name="zone" render={({ field }) => (
-                      <Combobox value={field.value} invalid={!!errors.zone} caps allowCreate={manualZones} createDescription="Submit this zone for admin review" placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
+                      <Combobox value={field.value} invalid={!!errors.zone} caps disabled={!!portalScope} allowCreate={manualZones} createDescription="Submit this zone for admin review" placeholder="Select zone" searchPlaceholder="Search zones…" emptyText="No zones"
                         fetcher={fetchZones} onSelect={(o) => { field.onChange(o.value); setValue("zone_manual", !!o.created); setValue("group_name", ""); setValue("group_manual", false); clearGroupCache(); }} />
                     )} />
                   </Field>
@@ -257,7 +283,7 @@ export function RegistrationBulkUpload() {
               {orgType === "network" && (
                 <Field label="Network" required error={errors.network_name?.message}>
                   <Controller control={control} name="network_name" render={({ field }) => (
-                    <Combobox value={field.value} invalid={!!errors.network_name} caps
+                    <Combobox value={field.value} invalid={!!errors.network_name} caps disabled={!!portalScope}
                       placeholder="Select network" searchPlaceholder="Search networks…"
                       emptyText="No networks found" fetcher={fetchNetworks}
                       onSelect={(o) => field.onChange(o.value)} />

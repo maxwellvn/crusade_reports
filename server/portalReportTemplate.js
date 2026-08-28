@@ -164,7 +164,6 @@ export async function parsePortalReportWorkbook(buffer) {
   const reports = [];
   const errors = [];
   const seen = new Set();
-  if (sheet.rowCount > 1001) errors.push("The workbook contains more than 1,000 report rows. Use a fresh dashboard template.");
   for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber++) {
     const row = sheet.getRow(rowNumber);
     const text = (key) => columnByKey[key] ? cellText(row.getCell(columnByKey[key])) : "";

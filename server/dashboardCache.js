@@ -7,3 +7,7 @@ export function cachedDashboardData(key, compute, ttlMs = 60_000) {
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
   return value;
 }
+
+export function clearDashboardCache() {
+  cache.clear();
+}

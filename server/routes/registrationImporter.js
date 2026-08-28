@@ -10,12 +10,13 @@ import { isManualZonesEnabled, isManualGroupsEnabled } from "../appSettings.js";
 import { loadWorkbook } from "../xlsxSanitize.js";
 import { resolveCity } from "../cityResolve.js";
 import { resolveCountryName } from "./countries.js";
+import { applyPortalScope } from "../portalScope.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
 // options and the validator can never drift apart. constants.js is pure data.
 import { CRUSADE_TYPES, ZONE_CONTRIBUTIONS, PERMIT_OPTIONS } from "../../client/src/lib/constants.js";
 
 export const registrationImporter = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
 // The registration identity (who is registering) is chosen ONCE in the web form
 // with searchable pickers — NOT in the spreadsheet. The sheet only carries the
@@ -148,7 +149,8 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   }
 
   // Registration identity comes from the app (multipart text fields), not the sheet.
-  const reg = {
+  const portalToken = String(req.body.portal_token || "");
+  const reg = applyPortalScope({
     organization_type: String(req.body.organization_type || "").trim().toLowerCase(),
     zone: String(req.body.zone || "").trim(),
     group_name: String(req.body.group_name || "").trim(),
@@ -160,7 +162,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     phone_country_code: String(req.body.phone_country_code || "").trim(),
     phone_number: String(req.body.phone_number || "").trim(),
     kingschat_username: String(req.body.kingschat_username || "").trim(),
-  };
+  }, portalToken);
 
   // Bulk upload is open to every organization type.
 
@@ -252,13 +254,13 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   // The server, not the spreadsheet, decides whether a zone/group is canonical.
   // Reuse the same validator the public POST /registrations uses so the rules
   // can never drift. Manual-zone/group flags are honored from campaign settings.
-  const directory = reg.organization_type === "network" ? [] : await loadZones().catch(() => []);
+  const directory = reg.organization_type === "network" || portalToken ? [] : await loadZones().catch(() => []);
   let canonical;
   try {
     canonical = validateRegistrationOrganization(reg, directory, {
       manualZonesEnabled: isManualZonesEnabled(),
       manualGroupsEnabled: isManualGroupsEnabled(),
-      trustedZone: false,
+      trustedZone: Boolean(portalToken),
     });
   } catch (e) {
     if (e instanceof ApiError) rowErrors.push(e.message);
@@ -267,7 +269,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   // Network name is not handled by validateRegistrationOrganization (it returns
   // early for networks); canonicalize it against the networks table like the
   // report importer does.
-  if (reg.organization_type === "network" && reg.network_name) {
+  if (!portalToken && reg.organization_type === "network" && reg.network_name) {
     const net = db.prepare("SELECT name FROM networks WHERE name = ? COLLATE NOCASE").get(reg.network_name);
     if (!net) rowErrors.push(`Network "${reg.network_name}" is not recognized — reselect it in the form.`);
     else reg.network_name = net.name;
@@ -285,16 +287,18 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     return res.status(200).json({ ok: false, errors: rowErrors.slice(0, 100), summary });
   }
 
-  // Data is clean → relate each city to Google Places (canonical name + place_id);
-  // if Places doesn't find it (or is down), keep the typed city and warn the reporter.
-  // Country is per-crusade, so each city is geocoded against its own country.
+  // Keep large uploads independent of Google Places response time. The existing
+  // background backfill resolves their cities after commit. Small previews still
+  // provide immediate city normalization and useful warnings.
   const cityCache = new Map();
   const warnings = [];
-  for (const c of items) {
-    if (!c.city) continue;
-    const resolved = await resolveCity(c.city, c.country, cityCache, warnings, "registration import");
-    c.city = resolved.name;
-    c.city_place_id = resolved.place_id;
+  if (!directCommit && items.length <= DIRECT_COMMIT_THRESHOLD) {
+    for (const c of items) {
+      if (!c.city) continue;
+      const resolved = await resolveCity(c.city, c.country, cityCache, warnings, "registration import");
+      c.city = resolved.name;
+      c.city_place_id = resolved.place_id;
+    }
   }
 
   // Final schema gate (catches anything the field checks didn't, e.g. missing
