@@ -103,7 +103,7 @@ export const deleteJSON = (path) => api(path, { method: "DELETE" });
 export async function downloadFile(path, fallbackName = "download") {
   let response;
   try {
-    response = await fetch(`/api${path}`);
+    response = await fetch(`/api${path}`, { cache: "no-store" });
   } catch {
     const error = new Error("Could not download the file. Check your connection and try again.");
     error.code = "NETWORK";

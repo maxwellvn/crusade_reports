@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAnyPageAccess, requirePageAccess, requireSuperAdmin } from "../auth.js";
-import { sendExport, sendStreamingExport } from "./exporter.js";
+import { sendExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
 import {
   composeMediaLinks, deleteReportPhotos, listReportPhotos, parseReportPayload, removeUploadedFiles,
@@ -126,16 +126,15 @@ crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wra
   const statement = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`);
   const format = req.query.format === "xlsx" ? "xlsx" : "csv";
 
-  // The report table is comparatively small, but some browser/proxy combinations
-  // prematurely completed the chunked CSV response after its headers. Build CSV
-  // reports completely before responding so every displayed report is delivered.
-  // Registration exports remain streamed because they can contain millions of rows.
-  if (format === "csv") {
-    await sendExport(res, format, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.all(params));
-    return;
-  }
+  // Exports are authenticated, point at live data, and must never reuse a browser
+  // cache entry (including a previously interrupted header-only file).
+  res.setHeader("Cache-Control", "no-store, private");
 
-  await sendStreamingExport(res, format, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.iterate(params));
+  // The report table is comparatively small, but some browser/proxy combinations
+  // prematurely completed a chunked response after its headers. Build the report
+  // file completely before responding so every displayed report is delivered.
+  // Registration exports remain streamed because they can contain millions of rows.
+  await sendExport(res, format, "crusade-reports", CRUSADE_EXPORT_COLUMNS, statement.all(params));
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
