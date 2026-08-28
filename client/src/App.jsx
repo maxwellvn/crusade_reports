@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ReportForm } from "@/components/ReportForm";
+import { FindCrusadeReport } from "@/components/FindCrusadeReport";
 import { Dashboard } from "@/components/Dashboard";
 import { WidgetDetail } from "@/components/WidgetDetail";
 import { CrusadesTable } from "@/components/CrusadesTable";
@@ -27,6 +28,7 @@ import { MissionNationSelection } from "@/components/MissionNationSelection";
 import { MissionNationAdmin } from "@/components/MissionNationAdmin";
 import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistration";
 import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
+import { MediaReports } from "@/components/MediaReports";
 import { MissionTripRegistration } from "@/components/MissionTripRegistration";
 import { MissionTripAdmin } from "@/components/MissionTripAdmin";
 import { UpcomingCrusades } from "@/components/UpcomingCrusades";
@@ -58,6 +60,7 @@ const PAGE_META = [
   [/^\/blue-elite\/register/, "Blue Elite Crusade Registration", "Register your one confirmed crusade for the Loveworld Blue Elite staff.", true, "/blue-elite/register"],
   [/^\/blue-elite/, "Loveworld Blue Elite", "Loveworld Blue Elite staff can register and review confirmed crusades for NOTC.", true, "/blue-elite"],
   [/^\/report/, "Report a Crusade", "Submit the verified outcome of a completed A Night of a Thousand Crusades event.", true, "/report"],
+  [/^\/find-my-crusade/, "Find Your Crusade", "Find a registered crusade and submit its completed crusade report.", true, "/find-my-crusade"],
   [/^\/resources$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) Approved Resources Hub", "Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.", true, "/resources"],
   [/^\/select-nation$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Ministers can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", true, "/select-nation", "/national-missions-leadership.png"],
   [/^\/media-training$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", true, "/media-training", "/media-training-mobilisation.png"],
@@ -243,6 +246,7 @@ export default function App() {
 
         {/* Reporting surface — standalone campaign-style page, same as registration */}
         <Route path="/report" element={<ReportForm />} />
+        <Route path="/find-my-crusade" element={<FindCrusadeReport />} />
         <Route path="/resources" element={<ResourcesLibrary />} />
         <Route path="/select-nation" element={<MissionNationSelection />} />
         <Route path="/media-training" element={<MediaTrainingRegistration />} />
@@ -262,10 +266,11 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-checklist", "Zone checklist"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/crusades", "Reports"], ["/dashboard/media-reports", "Media reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-checklist", "Zone checklist"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
           <Route path="/crusades" element={<PageGuard pageKey="crusades" alternatePageKeys={["crusades/edit"]}><CrusadesTable /></PageGuard>} />
+          <Route path="/dashboard/media-reports" element={<PageGuard pageKey="dashboard/media-reports"><MediaReports /></PageGuard>} />
           <Route path="/crusades/:id/edit" element={<PageGuard pageKey="crusades/edit"><EditCrusadePage /></PageGuard>} />
           <Route path="/registrations" element={<PageGuard pageKey="registrations"><RegistrationsTable /></PageGuard>} />
           <Route path="/registrations/live" element={<PageGuard pageKey="registrations/live"><RegistrationsLive /></PageGuard>} />

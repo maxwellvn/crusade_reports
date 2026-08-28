@@ -374,6 +374,8 @@ let startupSchema = `
   CREATE INDEX IF NOT EXISTS idx_reg_items_network ON registration_items(network_name);
   CREATE INDEX IF NOT EXISTS idx_reg_items_country ON registration_items(country);
   CREATE INDEX IF NOT EXISTS idx_reg_items_place   ON registration_items(city_place_id);
+  CREATE INDEX IF NOT EXISTS idx_registrations_lookup_email ON registrations(LOWER(TRIM(contact_email)));
+  CREATE INDEX IF NOT EXISTS idx_registrations_lookup_kingschat ON registrations(LOWER(TRIM(REPLACE(kingschat_username, '@', ''))));
 `;
 
 if (splitDatabaseEnabled) {
@@ -382,7 +384,8 @@ if (splitDatabaseEnabled) {
     .replace("CREATE TABLE IF NOT EXISTS registrations (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registrations (`)
     .replace("CREATE TABLE IF NOT EXISTS registration_items (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_items (`)
     .replace("CREATE TABLE IF NOT EXISTS registration_dashboard_snapshots (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_dashboard_snapshots (`)
-    .replaceAll("CREATE INDEX IF NOT EXISTS idx_reg_items_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_reg_items_`);
+    .replaceAll("CREATE INDEX IF NOT EXISTS idx_reg_items_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_reg_items_`)
+    .replaceAll("CREATE INDEX IF NOT EXISTS idx_registrations_lookup_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_registrations_lookup_`);
 }
 db.exec(startupSchema);
 if (splitDatabaseEnabled) {
@@ -817,6 +820,14 @@ db.exec(`
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_report_photos_report ON report_photos(report_id);
+
+  CREATE TABLE IF NOT EXISTS report_media_reviews (
+    report_id   INTEGER PRIMARY KEY REFERENCES reports(id) ON DELETE CASCADE,
+    status      TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'reviewed', 'follow_up')),
+    reviewed_at TEXT,
+    reviewed_by TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_report_media_reviews_status ON report_media_reviews(status);
 
   CREATE TABLE IF NOT EXISTS translation_cache (
     target_language TEXT NOT NULL,

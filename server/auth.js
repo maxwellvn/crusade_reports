@@ -22,6 +22,7 @@ const EXTERNAL_API_LIMIT = 120;
 export const ASSIGNABLE_PAGES = [
   { key: "dashboard", label: "Reports dashboard", path: "/dashboard" },
   { key: "crusades", label: "Reports", path: "/crusades" },
+  { key: "dashboard/media-reports", label: "Media reports", path: "/dashboard/media-reports" },
   { key: "registrations", label: "Registered crusades", path: "/registrations" },
   { key: "registrations/live", label: "Live registrations", path: "/registrations/live" },
   { key: "dashboard/crusade-analysis", label: "Crusade analysis", path: "/dashboard/crusade-analysis" },

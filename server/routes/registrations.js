@@ -24,6 +24,66 @@ export const backupDatabaseRolling = () => backupDatabase("registration");
 
 const sameName = (left, right) => String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
 
+const PUBLIC_LOOKUP_WINDOW_MS = 15 * 60 * 1000;
+const PUBLIC_LOOKUP_LIMIT = 60;
+const publicLookupAttempts = new Map();
+
+function enforcePublicLookupLimit(req) {
+  const key = String(req.ip || req.socket?.remoteAddress || "unknown");
+  const now = Date.now();
+  const current = publicLookupAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    publicLookupAttempts.set(key, { count: 1, resetAt: now + PUBLIC_LOOKUP_WINDOW_MS });
+    return;
+  }
+  current.count += 1;
+  if (current.count > PUBLIC_LOOKUP_LIMIT) {
+    throw new ApiError(429, "TOO_MANY_REQUESTS", "Too many searches were made from this device. Please wait a few minutes and try again.");
+  }
+}
+
+export function normalizeCrusadeLookup(value) {
+  return String(value || "").trim().replace(/^@/, "").toLowerCase();
+}
+
+function requireCrusadeLookup(value) {
+  const lookup = normalizeCrusadeLookup(value);
+  if (lookup.length < 2 || lookup.length > 254) {
+    throw new ApiError(422, "VALIDATION", "Enter a valid email address or KingsChat username.");
+  }
+  return lookup;
+}
+
+const LOOKUP_MATCH_SQL = `(
+  LOWER(TRIM(COALESCE(r.contact_email, ''))) = @lookup
+  OR LOWER(TRIM(REPLACE(COALESCE(r.kingschat_username, ''), '@', ''))) = @lookup
+)`;
+
+export function findCrusadesForLookup(value) {
+  const lookup = requireCrusadeLookup(value);
+  return db.prepare(`
+    SELECT i.id, i.event_type, i.other_event_type, i.event_name, i.event_date,
+           i.country, i.city, i.venue, i.readiness_status,
+           c.id AS report_crusade_id, c.report_id, c.created_at AS reported_at
+    FROM registration_items i
+    JOIN registrations r ON r.id = i.registration_id
+    LEFT JOIN crusades c ON c.registration_item_id = i.id
+    WHERE ${LOOKUP_MATCH_SQL}
+    ORDER BY i.event_date DESC, i.id DESC
+    LIMIT 250
+  `).all({ lookup });
+}
+
+function registrationForLookup(itemId, value) {
+  const lookup = requireCrusadeLookup(value);
+  return db.prepare(`
+    SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
+    FROM registration_items i
+    JOIN registrations r ON r.id = i.registration_id
+    WHERE i.id = @item_id AND ${LOOKUP_MATCH_SQL}
+  `).get({ item_id: itemId, lookup });
+}
+
 // The server, not the client-supplied *_manual flags, decides whether an
 // organization is canonical. This prevents forged requests and restored drafts
 // from bypassing the campaign settings.
@@ -274,6 +334,33 @@ export function updateRegistrationCrusade(id, d) {
     crusade_collaborators, zone_contribution, estimated_budget, rhapsody_copies_confirmed, permits_obtained, media_coverage_plan,
     readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ?`).get(crusade.id);
 }
+
+// Public self-service reporting. The lookup value is used only to find matching
+// registrations and is never returned to the browser with the crusade records.
+registrations.post("/find", wrap((req, res) => {
+  enforcePublicLookupLimit(req);
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ rows: findCrusadesForLookup(req.body?.lookup) });
+}));
+
+registrations.post("/find/:id/report", withReportPhotoUpload(wrap((req, res) => {
+  ensureReportingOpen();
+  enforcePublicLookupLimit(req);
+  const files = req.files || [];
+  let body;
+  try {
+    body = parseReportPayload(req);
+  } catch (error) {
+    removeUploadedFiles(files);
+    throw error;
+  }
+  const item = registrationForLookup(req.params.id, body.lookup);
+  if (!item) {
+    removeUploadedFiles(files);
+    throw new ApiError(404, "NOT_FOUND", "This crusade could not be found for the supplied email address or KingsChat username.");
+  }
+  res.status(201).json(submitRegisteredCrusadeReport(item, body, files));
+})));
 
 registrations.put("/:id", requirePageAccess("registrations"), wrap((req, res) => {
   const parsed = registrationCrusadeEditSchema.safeParse(req.body);

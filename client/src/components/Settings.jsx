@@ -30,6 +30,7 @@ const NETWORK_INHERITANCE_OPTIONS = [
 const ASSIGNABLE_PAGES = [
   { key: "dashboard", label: "Reports dashboard" },
   { key: "crusades", label: "Reports" },
+  { key: "dashboard/media-reports", label: "Media reports" },
   { key: "registrations", label: "Registered crusades" },
   { key: "registrations/live", label: "Live registrations" },
   { key: "dashboard/crusade-analysis", label: "Crusade analysis" },

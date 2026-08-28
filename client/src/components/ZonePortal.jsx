@@ -548,7 +548,7 @@ function useCityFetcher(countryName) {
   }, [countryCode]);
 }
 
-export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmitted, onAlreadySubmitted }) {
+export function CrusadeReportDialog({ crusade, token, savePath, submissionContext, onClose, onSubmitted, onAlreadySubmitted }) {
   const ref = React.useRef(null);
   const draftKey = token ? portalReportDraftKey(token, crusade.id) : "";
   const draft = React.useMemo(() => readPortalReportDraft(draftKey), [draftKey]);
@@ -635,7 +635,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, onClose, onSubmi
       const numericReport = { ...report, attendance: Number(report.attendance) || 0, crusade_expense: Number(report.crusade_expense) || 0 };
       METRIC_KEYS.forEach((key) => { numericReport[key] = Number(report[key]) || 0; });
       const path = savePath || `/zone-portal/${token}/crusades/${crusade.id}/report`;
-      const payload = { crusade: numericReport, highlights, photo_links: photoLinks, video_links: videoLinks };
+      const payload = { ...submissionContext, crusade: numericReport, highlights, photo_links: photoLinks, video_links: videoLinks };
       const submitted = photos.length
         ? await postForm(path, buildReportFormData(payload, photos), { timeoutMs: REPORT_UPLOAD_TIMEOUT_MS })
         : await postJSON(path, payload);
