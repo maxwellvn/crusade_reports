@@ -4,6 +4,7 @@ import { wrap } from "../logger.js";
 import { requirePageAccess } from "../auth.js";
 import { resolveCountryName } from "./countries.js";
 import { cachedDashboardData } from "../dashboardCache.js";
+import { applyMyStreamSpaceAdjustment, getManualMyStreamSpaceAdjustment } from "../mystreamspaceStats.js";
 
 export const stats = Router();
 
@@ -80,7 +81,7 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
     byCountry.map((row) => resolveCountryName(row.key)).filter(Boolean)
   ).size;
 
-  return {
+  return applyMyStreamSpaceAdjustment({
     totals: { ...totals, countries: canonicalCountryCount },
     by_format: by("format"),
     reports: db.prepare("SELECT COUNT(*) AS n FROM reports").get().n,
@@ -143,7 +144,7 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
        FROM reports r LEFT JOIN crusades c ON c.report_id = r.id
        GROUP BY r.id ORDER BY r.created_at DESC LIMIT 10`
     ).all(),
-  };
+  }, getManualMyStreamSpaceAdjustment());
   });
   res.setHeader("Cache-Control", "private, max-age=30");
   res.json(data);

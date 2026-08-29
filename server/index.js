@@ -33,6 +33,7 @@ import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
 import { scheduleRegistrationDashboardRefresh } from "./registrationDashboardSnapshot.js";
+import { mystreamspace } from "./routes/mystreamspace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -66,6 +67,7 @@ app.use("/api/dashboard-layout", dashboardLayout);
 app.use("/api/crusades", crusades);
 app.use("/api/registrations", registrations);
 app.use("/api/campaign-settings", campaignSettings);
+app.use("/api/mystreamspace", mystreamspace);
 app.use("/api/blue-elite", blueElite);
 app.use("/api/resources", resources);
 app.use("/api/mission-nations", missionNations);

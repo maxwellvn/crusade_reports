@@ -310,6 +310,9 @@ let startupSchema = `
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('network_dashboard_inherited:Youths Aglow', '0');
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('network_dashboard_inherited:TEEVOLUTION', '0');
   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('network_dashboard_inherited:Say Yes to Kids', '0');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mystreamspace_manual_crusades', '416557');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mystreamspace_manual_online_attendance', '308240424');
+  INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mystreamspace_manual_updated_at', datetime('now'));
 
   CREATE TABLE IF NOT EXISTS mission_nation_selections (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
