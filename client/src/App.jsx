@@ -46,6 +46,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { installKeyboardViewportManager } from "@/lib/keyboardViewport";
+import { MyStreamSpaceDashboard } from "@/components/MyStreamSpaceDashboard";
 
 const BRAND = "Rhapsody End-Time Teaching Crusades";
 const DEFAULT_DESCRIPTION = "Join A Night of a Thousand Crusades, register crusades, access approved resources, and take part in global mission initiatives.";
@@ -70,6 +71,7 @@ const PAGE_META = [
   [/^\/privacy$/, "Privacy Policy", "How the Night of a Thousand Crusades platform collects, uses, stores, and protects your personal information.", true, "/privacy"],
   [/^\/terms$/, "Terms of Service", "The terms governing your use of the Night of a Thousand Crusades platform.", true, "/terms"],
   [/^\/docs$/, "NOTC Data API Documentation", "Read-only API documentation for registered crusades and submitted reports.", true, "/docs"],
+  [/^\/mystreamspace$/, "NOTC MyStreamSpace Dashboard", "Live combined totals for MyStreamSpace crusades and online attendance.", true, "/mystreamspace"],
   [/^\/zone\//, "Zone Portal", "Private NOTC zone planning and reporting portal.", false],
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
@@ -256,6 +258,7 @@ export default function App() {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/docs" element={<ApiDocumentation />} />
+        <Route path="/mystreamspace" element={<MyStreamSpaceDashboard />} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />

@@ -87,6 +87,10 @@ export function Settings() {
   const [externalApiKey, setExternalApiKey] = React.useState(null);
   const [newExternalApiKey, setNewExternalApiKey] = React.useState("");
   const [savingExternalApiKey, setSavingExternalApiKey] = React.useState(false);
+  const [myStreamSpace, setMyStreamSpace] = React.useState(null);
+  const [myStreamSpaceCrusades, setMyStreamSpaceCrusades] = React.useState("");
+  const [myStreamSpaceAttendance, setMyStreamSpaceAttendance] = React.useState("");
+  const [savingMyStreamSpace, setSavingMyStreamSpace] = React.useState(false);
 
   React.useEffect(() => {
     if (!admin?.is_super_admin) return;
@@ -101,6 +105,17 @@ export function Settings() {
     if (!admin?.is_super_admin) return;
     getJSON("/auth/external-api-key")
       .then((result) => setExternalApiKey(result.active_key))
+      .catch((error) => toast.error(error.message));
+  }, [admin]);
+
+  React.useEffect(() => {
+    if (!admin?.is_super_admin) return;
+    getJSON("/mystreamspace")
+      .then((result) => {
+        setMyStreamSpace(result);
+        setMyStreamSpaceCrusades(String(result.manual.crusades));
+        setMyStreamSpaceAttendance(String(result.manual.online_attendance));
+      })
       .catch((error) => toast.error(error.message));
   }, [admin]);
 
@@ -322,6 +337,28 @@ export function Settings() {
     }
   }
 
+  async function saveMyStreamSpace(event) {
+    event.preventDefault();
+    const crusades = Number(myStreamSpaceCrusades);
+    const onlineAttendance = Number(myStreamSpaceAttendance);
+    if (!Number.isSafeInteger(crusades) || crusades < 0 || !Number.isSafeInteger(onlineAttendance) || onlineAttendance < 0) {
+      toast.error("Enter non-negative whole numbers for both MyStreamSpace values.");
+      return;
+    }
+    setSavingMyStreamSpace(true);
+    try {
+      const result = await putJSON("/mystreamspace", { crusades, online_attendance: onlineAttendance });
+      setMyStreamSpace(result);
+      setMyStreamSpaceCrusades(String(result.manual.crusades));
+      setMyStreamSpaceAttendance(String(result.manual.online_attendance));
+      toast.success("MyStreamSpace totals updated across the dashboards.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingMyStreamSpace(false);
+    }
+  }
+
   if (!admin?.is_super_admin) {
     return <div className="mx-auto max-w-3xl border-y border-slate-200 py-8 text-sm text-muted-foreground">Only @maxwellvn can manage dashboard settings.</div>;
   }
@@ -353,6 +390,42 @@ export function Settings() {
             <span className="sr-only">{reportingOpen ? "Close reporting" : "Open reporting"}</span>
           </button>
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="MyStreamSpace totals" description="Maintain the additional MyStreamSpace crusades and online attendance that cannot be imported automatically. These figures are added to existing MyStreamSpace reports.">
+        <form onSubmit={saveMyStreamSpace} className="max-w-2xl space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Additional crusades">
+              <Input type="number" min="0" step="1" required inputMode="numeric" value={myStreamSpaceCrusades}
+                onChange={(event) => setMyStreamSpaceCrusades(event.target.value)} disabled={!myStreamSpace || savingMyStreamSpace} />
+            </Field>
+            <Field label="Additional online attendance">
+              <Input type="number" min="0" step="1" required inputMode="numeric" value={myStreamSpaceAttendance}
+                onChange={(event) => setMyStreamSpaceAttendance(event.target.value)} disabled={!myStreamSpace || savingMyStreamSpace} />
+            </Field>
+          </div>
+          {myStreamSpace && (
+            <div className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 text-sm sm:grid-cols-2">
+              <div className="bg-slate-50 p-4">
+                <p className="text-slate-500">Combined MyStreamSpace crusades</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-950">{Number(myStreamSpace.totals.crusades).toLocaleString()}</p>
+              </div>
+              <div className="bg-slate-50 p-4">
+                <p className="text-slate-500">Combined online attendance</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-950">{Number(myStreamSpace.totals.online_attendance).toLocaleString()}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={!myStreamSpace || savingMyStreamSpace} className="rounded-full">
+              {savingMyStreamSpace ? "Saving…" : "Save MyStreamSpace totals"}
+            </Button>
+            <a href="/mystreamspace" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 hover:text-blue-900">
+              Open public dashboard <ArrowUpRight className="size-4" />
+            </a>
+          </div>
+          <p className="text-xs leading-5 text-slate-500">The read-only data API and individual report exports remain based only on submitted report records.</p>
+        </form>
       </SettingsSection>
 
       <SettingsSection title="Network dashboard visibility" description="Control whether selected network dashboards also see crusades submitted by other organisations under their related crusade type.">

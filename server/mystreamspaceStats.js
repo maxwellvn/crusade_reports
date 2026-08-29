@@ -85,7 +85,10 @@ function adjustedBreakdown(rows = [], key, adjustment) {
   } else {
     next.push(aggregateRow(key, adjustment.crusades, adjustment.online_attendance));
   }
-  return next;
+  return next.sort((a, b) =>
+    (Number(b.attendance) || 0) + (Number(b.online_attendance) || 0)
+    - (Number(a.attendance) || 0) - (Number(a.online_attendance) || 0)
+  );
 }
 
 export function applyMyStreamSpaceAdjustment(data, value) {

@@ -44,6 +44,8 @@ test("manual MyStreamSpace values add to overall, type, and online-format analyt
     online_attendance: 308_240_574,
     salvation: 2,
   });
+  assert.equal(adjusted.by_category[0].key, "mystreamspace");
+  assert.equal(adjusted.by_format[0].key, "online");
   assert.equal(raw.totals.crusades, 10, "the raw database analytics remain unchanged");
 });
 
