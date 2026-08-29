@@ -91,6 +91,10 @@ if (existsSync(dist)) {
   const indexTemplate = readFileSync(join(dist, "index.html"), "utf8");
   app.use(express.static(dist, { index: false }));
   app.get("*", (req, res) => {
+    if (/^\/mystreamspace\/update\//i.test(req.path)) {
+      res.setHeader("Referrer-Policy", "no-referrer");
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
     const origin = `${req.protocol}://${req.get("host")}`;
     res.type("html").send(renderPageMetadata(indexTemplate, req.path, origin));
   });

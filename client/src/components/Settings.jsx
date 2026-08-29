@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowUpRight, Copy, KeyRound, LogOut, RefreshCw, Trash2, UserPlus, Lock } from "lucide-react";
+import { ArrowUpRight, Copy, KeyRound, Link2, LogOut, RefreshCw, Trash2, UserPlus, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { deleteJSON, getJSON, postJSON, putJSON } from "@/lib/api";
+import { formatWholeNumberInput, parseWholeNumberInput } from "@/lib/wholeNumberInput";
 import { useAdmin } from "@/components/AdminGate";
 
 // Human-readable labels for the whitelisted landing-page routes. The server is
@@ -91,6 +92,9 @@ export function Settings() {
   const [myStreamSpaceCrusades, setMyStreamSpaceCrusades] = React.useState("");
   const [myStreamSpaceAttendance, setMyStreamSpaceAttendance] = React.useState("");
   const [savingMyStreamSpace, setSavingMyStreamSpace] = React.useState(false);
+  const [myStreamSpaceLinkStatus, setMyStreamSpaceLinkStatus] = React.useState(null);
+  const [newMyStreamSpaceUpdateUrl, setNewMyStreamSpaceUpdateUrl] = React.useState("");
+  const [savingMyStreamSpaceLink, setSavingMyStreamSpaceLink] = React.useState(false);
 
   React.useEffect(() => {
     if (!admin?.is_super_admin) return;
@@ -113,9 +117,12 @@ export function Settings() {
     getJSON("/mystreamspace")
       .then((result) => {
         setMyStreamSpace(result);
-        setMyStreamSpaceCrusades(String(result.manual.crusades));
-        setMyStreamSpaceAttendance(String(result.manual.online_attendance));
+        setMyStreamSpaceCrusades(formatWholeNumberInput(result.manual.crusades));
+        setMyStreamSpaceAttendance(formatWholeNumberInput(result.manual.online_attendance));
       })
+      .catch((error) => toast.error(error.message));
+    getJSON("/mystreamspace/link")
+      .then(setMyStreamSpaceLinkStatus)
       .catch((error) => toast.error(error.message));
   }, [admin]);
 
@@ -339,9 +346,9 @@ export function Settings() {
 
   async function saveMyStreamSpace(event) {
     event.preventDefault();
-    const crusades = Number(myStreamSpaceCrusades);
-    const onlineAttendance = Number(myStreamSpaceAttendance);
-    if (!Number.isSafeInteger(crusades) || crusades < 0 || !Number.isSafeInteger(onlineAttendance) || onlineAttendance < 0) {
+    const crusades = parseWholeNumberInput(myStreamSpaceCrusades);
+    const onlineAttendance = parseWholeNumberInput(myStreamSpaceAttendance);
+    if (crusades == null || onlineAttendance == null) {
       toast.error("Enter non-negative whole numbers for both MyStreamSpace values.");
       return;
     }
@@ -349,13 +356,60 @@ export function Settings() {
     try {
       const result = await putJSON("/mystreamspace", { crusades, online_attendance: onlineAttendance });
       setMyStreamSpace(result);
-      setMyStreamSpaceCrusades(String(result.manual.crusades));
-      setMyStreamSpaceAttendance(String(result.manual.online_attendance));
+      setMyStreamSpaceCrusades(formatWholeNumberInput(result.manual.crusades));
+      setMyStreamSpaceAttendance(formatWholeNumberInput(result.manual.online_attendance));
       toast.success("MyStreamSpace totals updated across the dashboards.");
     } catch (error) {
       toast.error(error.message);
     } finally {
       setSavingMyStreamSpace(false);
+    }
+  }
+
+  function updateMyStreamSpaceField(setter, value) {
+    const formatted = formatWholeNumberInput(value);
+    if (formatted != null) setter(formatted);
+  }
+
+  async function generateMyStreamSpaceLink() {
+    const action = myStreamSpaceLinkStatus?.active
+      ? "Regenerating this link will immediately invalidate the current MyStreamSpace team link. Continue?"
+      : "Generate a private MyStreamSpace update link?";
+    if (!confirm(action)) return;
+    setSavingMyStreamSpaceLink(true);
+    try {
+      const result = await postJSON("/mystreamspace/link", {});
+      setMyStreamSpaceLinkStatus(result.status);
+      setNewMyStreamSpaceUpdateUrl(`${window.location.origin}/mystreamspace/update/${result.token}`);
+      toast.success("Private update link generated. Copy and share it with the MyStreamSpace team.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingMyStreamSpaceLink(false);
+    }
+  }
+
+  async function copyMyStreamSpaceLink() {
+    try {
+      await navigator.clipboard.writeText(newMyStreamSpaceUpdateUrl);
+      toast.success("MyStreamSpace update link copied.");
+    } catch {
+      toast.error("Could not copy the link. Select and copy it manually.");
+    }
+  }
+
+  async function revokeMyStreamSpaceLink() {
+    if (!confirm("Revoke the MyStreamSpace update link? Anyone using the current link will lose access immediately.")) return;
+    setSavingMyStreamSpaceLink(true);
+    try {
+      const result = await deleteJSON("/mystreamspace/link");
+      setMyStreamSpaceLinkStatus(result.status);
+      setNewMyStreamSpaceUpdateUrl("");
+      toast.success("MyStreamSpace update link revoked.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingMyStreamSpaceLink(false);
     }
   }
 
@@ -396,12 +450,12 @@ export function Settings() {
         <form onSubmit={saveMyStreamSpace} className="max-w-2xl space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Additional crusades">
-              <Input type="number" min="0" step="1" required inputMode="numeric" value={myStreamSpaceCrusades}
-                onChange={(event) => setMyStreamSpaceCrusades(event.target.value)} disabled={!myStreamSpace || savingMyStreamSpace} />
+              <Input type="text" required inputMode="numeric" autoComplete="off" value={myStreamSpaceCrusades}
+                onChange={(event) => updateMyStreamSpaceField(setMyStreamSpaceCrusades, event.target.value)} disabled={!myStreamSpace || savingMyStreamSpace} />
             </Field>
             <Field label="Additional online attendance">
-              <Input type="number" min="0" step="1" required inputMode="numeric" value={myStreamSpaceAttendance}
-                onChange={(event) => setMyStreamSpaceAttendance(event.target.value)} disabled={!myStreamSpace || savingMyStreamSpace} />
+              <Input type="text" required inputMode="numeric" autoComplete="off" value={myStreamSpaceAttendance}
+                onChange={(event) => updateMyStreamSpaceField(setMyStreamSpaceAttendance, event.target.value)} disabled={!myStreamSpace || savingMyStreamSpace} />
             </Field>
           </div>
           {myStreamSpace && (
@@ -420,11 +474,35 @@ export function Settings() {
             <Button type="submit" disabled={!myStreamSpace || savingMyStreamSpace} className="rounded-full">
               {savingMyStreamSpace ? "Saving…" : "Save MyStreamSpace totals"}
             </Button>
-            <a href="/mystreamspace" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 hover:text-blue-900">
-              Open public dashboard <ArrowUpRight className="size-4" />
-            </a>
           </div>
           <p className="text-xs leading-5 text-slate-500">The read-only data API and individual report exports remain based only on submitted report records.</p>
+
+          <div className="border-t border-slate-200 pt-5">
+            <p className="text-sm font-semibold text-slate-950">MyStreamSpace team update link</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">Generate a private link to let the MyStreamSpace team update these two numbers without administrator access.</p>
+            {newMyStreamSpaceUpdateUrl && (
+              <div className="mt-4 border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm font-semibold text-amber-950">Copy this link now. It will not be displayed again after leaving Settings.</p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Input readOnly value={newMyStreamSpaceUpdateUrl} aria-label="New MyStreamSpace update link" className="font-mono text-xs" />
+                  <Button type="button" variant="outline" onClick={copyMyStreamSpaceLink} className="shrink-0"><Copy /> Copy link</Button>
+                </div>
+              </div>
+            )}
+            <div className="mt-4 border border-slate-200 bg-slate-50 p-4 text-sm">
+              {myStreamSpaceLinkStatus?.active
+                ? <p className="text-slate-700">An update link is active{myStreamSpaceLinkStatus.created_at ? `, generated ${myStreamSpaceLinkStatus.created_at.slice(0, 16).replace("T", " ")}.` : "."}</p>
+                : <p className="text-slate-600">No MyStreamSpace update link is active.</p>}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button type="button" disabled={savingMyStreamSpaceLink || myStreamSpaceLinkStatus === null} onClick={generateMyStreamSpaceLink} className="rounded-full">
+                <Link2 /> {myStreamSpaceLinkStatus?.active ? "Regenerate link" : "Generate link"}
+              </Button>
+              {myStreamSpaceLinkStatus?.active && (
+                <Button type="button" variant="outline" disabled={savingMyStreamSpaceLink} onClick={revokeMyStreamSpaceLink} className="rounded-full"><RefreshCw /> Revoke link</Button>
+              )}
+            </div>
+          </div>
         </form>
       </SettingsSection>
 

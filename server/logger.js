@@ -45,7 +45,8 @@ function redactUrl(value) {
   try {
     const url = new URL(String(value || ""), "http://local");
     for (const key of url.searchParams.keys()) if (SENSITIVE_KEY.test(key)) url.searchParams.set(key, "[REDACTED]");
-    return `${url.pathname}${url.search}`;
+    const pathname = url.pathname.replace(/(\/api\/mystreamspace\/update\/)[^/]+/i, "$1[REDACTED]");
+    return `${pathname}${url.search}`;
   } catch { return String(value || ""); }
 }
 
