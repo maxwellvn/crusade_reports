@@ -18,7 +18,6 @@ const KPI_TONES = {
   registered: "bg-indigo-50/65 [&_.stat-value]:!text-indigo-700",
   registered_reported: "bg-emerald-50/70 [&_.stat-value]:!text-emerald-700",
   awaiting_reports: "bg-amber-50/75 [&_.stat-value]:!text-amber-700",
-  registered_expected_attendance: "bg-violet-50/65 [&_.stat-value]:!text-violet-700",
   onsite_attendance: "bg-sky-50/70 [&_.stat-value]:!text-sky-700",
   online_attendance: "bg-cyan-50/70 [&_.stat-value]:!text-cyan-700",
   salvations: "bg-rose-50/65 [&_.stat-value]:!text-rose-700",
@@ -151,7 +150,7 @@ export function Dashboard() {
           {layout.filter((w) => KPI_IDS.has(w.id)).map(({ id }, index) => (
             <div key={id} className={`group relative min-h-32 border-blue-100 p-5 [&_.text-muted-foreground]:!text-slate-500 ${KPI_TONES[id] || "bg-white [&_.stat-value]:!text-blue-700"} ${index % 2 ? "border-l" : ""} ${index >= 2 ? "border-t" : ""} ${index >= 4 ? "lg:border-t" : "lg:border-t-0"} ${index % 4 ? "lg:border-l" : "lg:border-l-0"}`}
               onDragOver={(e) => e.preventDefault()} onDrop={() => dropOn(id)}>
-              {id === "registered" || id === "registered_expected_attendance" ? (
+              {id === "registered" ? (
                 <button type="button" className="w-full text-left" onClick={() => goToRegistrations()}>{WIDGETS[id].render(stats)}</button>
               ) : id === "registered_reported" ? (
                 <button type="button" className="w-full text-left" onClick={() => goToRegistrations({ report_status: "reported" })}>{WIDGETS[id].render(stats)}</button>

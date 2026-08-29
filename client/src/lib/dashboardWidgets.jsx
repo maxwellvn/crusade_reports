@@ -280,10 +280,6 @@ const KPI_WIDGETS = {
     title: "Awaiting Reports",
     render: (s) => <StatTile label="Awaiting Reports" value={nfull.format(s.registered?.awaiting || 0)} sub="Registered crusades without reports" />,
   },
-  registered_expected_attendance: {
-    title: "Expected Attendance",
-    render: (s) => <StatTile label="Expected Attendance" value={nfull.format(s.registered?.expected_attendance || 0)} sub="Across registered crusades" />,
-  },
 };
 
 // Planned (registrations) vs held (reports): a progress bar per key.

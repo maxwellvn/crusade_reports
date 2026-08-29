@@ -70,7 +70,6 @@ export function BlueEliteDashboard() {
     { id: "departments", label: "Departments", value: data.totals.departments },
     { id: "countries", label: "Countries", value: data.totals.countries },
     { id: "cities", label: "Cities", value: data.totals.cities },
-    { id: "expected_attendance", label: "Expected attendance", value: data.totals.expected_attendance },
     { id: "confirmed", label: "Confirmed", value: data.totals.confirmed },
     { id: "reported", label: "Reports submitted", value: data.totals.reported },
     { id: "awaiting", label: "Awaiting reports", value: Math.max(data.totals.awaiting, 0) },
