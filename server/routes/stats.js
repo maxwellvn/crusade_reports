@@ -146,6 +146,9 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
     ).all(),
   }, getManualMyStreamSpaceAdjustment());
   });
-  res.setHeader("Cache-Control", "private, max-age=30");
+  // Revalidate in the browser on every dashboard visit so a value saved from
+  // Settings is visible immediately. The in-process dashboard cache still
+  // protects SQLite from repeated aggregation work and is cleared on updates.
+  res.setHeader("Cache-Control", "private, no-cache");
   res.json(data);
 }));

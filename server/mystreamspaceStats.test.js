@@ -9,6 +9,7 @@ import {
 
 test("manual MyStreamSpace values add to overall, type, and online-format analytics once", () => {
   const raw = {
+    reports: 7,
     totals: { crusades: 10, attendance: 20, online_participation: 50 },
     by_category: [
       { key: "mystreamspace", crusades: 4, attendance: 0, online_attendance: 110, salvation: 2 },
@@ -30,6 +31,7 @@ test("manual MyStreamSpace values add to overall, type, and online-format analyt
     attendance: 20,
     online_participation: 308_240_474,
   });
+  assert.equal(adjusted.reports, 416_564);
   assert.deepEqual(adjusted.by_category.find((row) => row.key === "mystreamspace"), {
     key: "mystreamspace",
     crusades: 416_561,
@@ -44,13 +46,19 @@ test("manual MyStreamSpace values add to overall, type, and online-format analyt
     online_attendance: 308_240_574,
     salvation: 2,
   });
+  assert.deepEqual(adjusted.mystreamspace, {
+    crusades: 416_561,
+    online_attendance: 308_240_534,
+  });
   assert.equal(adjusted.by_category[0].key, "mystreamspace");
   assert.equal(adjusted.by_format[0].key, "online");
+  assert.equal(raw.reports, 7, "the raw report submission count remains unchanged");
   assert.equal(raw.totals.crusades, 10, "the raw database analytics remain unchanged");
 });
 
-test("manual MyStreamSpace values create missing aggregate rows without fabricating report records", () => {
+test("manual MyStreamSpace values create missing dashboard aggregates without fabricating database rows", () => {
   const adjusted = applyMyStreamSpaceAdjustment({
+    reports: 0,
     totals: { crusades: 0, online_participation: 0 },
     by_category: [],
     by_format: [],
@@ -62,6 +70,7 @@ test("manual MyStreamSpace values create missing aggregate rows without fabricat
   assert.deepEqual(adjusted.by_format, [{
     key: "online", crusades: 12, attendance: 0, online_attendance: 34, salvation: 0,
   }]);
+  assert.equal(adjusted.reports, 12);
 });
 
 test("public MyStreamSpace totals expose existing, manual, and combined values", () => {

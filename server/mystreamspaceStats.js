@@ -93,15 +93,28 @@ function adjustedBreakdown(rows = [], key, adjustment) {
 
 export function applyMyStreamSpaceAdjustment(data, value) {
   const adjustment = normalizeMyStreamSpaceAdjustment(value);
+  const byCategory = adjustedBreakdown(data.by_category, "mystreamspace", adjustment);
+  const byFormat = adjustedBreakdown(data.by_format, "online", adjustment);
+  const myStreamSpace = byCategory.find((row) => row.key === "mystreamspace")
+    || aggregateRow("mystreamspace", 0, 0);
   return {
     ...data,
+    // The manual figure represents completed MyStreamSpace reporting, even
+    // though it is stored as one aggregate rather than millions of synthetic
+    // report/crusade rows. Keep the dashboard KPI consistent with that total;
+    // the raw reports API and reports table remain unchanged.
+    reports: (Number(data.reports) || 0) + adjustment.crusades,
     totals: {
       ...data.totals,
       crusades: (Number(data.totals?.crusades) || 0) + adjustment.crusades,
       online_participation: (Number(data.totals?.online_participation) || 0) + adjustment.online_attendance,
     },
-    by_category: adjustedBreakdown(data.by_category, "mystreamspace", adjustment),
-    by_format: adjustedBreakdown(data.by_format, "online", adjustment),
+    by_category: byCategory,
+    by_format: byFormat,
+    mystreamspace: {
+      crusades: Number(myStreamSpace.crusades) || 0,
+      online_attendance: Number(myStreamSpace.online_attendance) || 0,
+    },
     mystreamspace_manual_adjustment: adjustment,
   };
 }
