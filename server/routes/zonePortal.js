@@ -17,7 +17,7 @@ import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
 import { portalItemOrder, PORTAL_UNREGISTERED_REPORT_ORDER } from "../reportOrdering.js";
 import { portalReportPreview } from "../portalReportImport.js";
 import { personalDashboardScope } from "../portalVisibility.js";
-import { cachedDashboardData } from "../dashboardCache.js";
+import { cachedDashboardData, clearDashboardCache } from "../dashboardCache.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -375,10 +375,9 @@ zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
 
 // Download a protected Excel workbook containing this dashboard's own
 // registrations that do not yet have reports. Network visitor rows are excluded.
-zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
-  ensureReportingOpen();
-  const { name, kind, col, slug } = resolvePortalScope(req.params.token);
-  const rows = db.prepare(`
+export function portalReportTemplateRows({ name, col }) {
+  if (!["zone", "network_name"].includes(col)) throw new Error("Invalid personal dashboard scope.");
+  return db.prepare(`
     SELECT i.id, i.event_type,
            CASE WHEN i.event_type = 'other' THEN COALESCE(NULLIF(i.other_event_type, ''), 'Other') ELSE COALESCE(i.other_event_type, '') END AS other_event_type,
            i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
@@ -388,6 +387,12 @@ zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
       AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
     ORDER BY COALESCE(i.event_date, i.plan_date), i.id
   `).all(name);
+}
+
+zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
+  ensureReportingOpen();
+  const { name, kind, col, slug } = resolvePortalScope(req.params.token);
+  const rows = portalReportTemplateRows({ name, col });
   const workbook = await buildPortalReportWorkbook(rows, `${name} ${kind} dashboard`);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${slug}-report-template.xlsx"`);
@@ -477,6 +482,7 @@ zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.sing
     registration_item_id: item.id,
     ...submitRegisteredCrusadeReport(item, body),
   })))();
+  clearDashboardCache();
   res.status(201).json({ ok: true, submitted: submitted.length, summary, reports: submitted });
 }));
 
@@ -517,5 +523,7 @@ zonePortal.post("/zone-portal/:token/crusades/:id/report", withReportPhotoUpload
     removeUploadedFiles(files);
     throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");
   }
-  res.status(201).json(submitRegisteredCrusadeReport(item, parseReportPayload(req), files));
+  const submitted = submitRegisteredCrusadeReport(item, parseReportPayload(req), files);
+  clearDashboardCache();
+  res.status(201).json(submitted);
 })));
