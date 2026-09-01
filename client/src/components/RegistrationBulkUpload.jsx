@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Download, Upload, FileSpreadsheet, Loader2, ArrowUpRight, ArrowLeft, AlertTriangle, Check, ChevronDown } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2, ArrowUpRight, ArrowLeft, AlertTriangle, Check, ChevronDown } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,9 @@ import { PHONE_CODES } from "@/lib/constants";
 import { useOrgData } from "@/lib/orgForm";
 import { getJSON } from "@/lib/api";
 import { DRAFT_KEY } from "@/components/RegistrationForm";
+import { UploadProgress } from "@/components/UploadProgress";
+import { uploadForm } from "@/lib/upload";
+import { TemplateDownloadButton } from "@/components/TemplateDownloadButton";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
 
 // Public bulk-upload page for crusade registrations. The org identity (who is
@@ -65,6 +68,7 @@ export function RegistrationBulkUpload() {
   const [file, setFile] = React.useState(null);
   const [preview, setPreview] = React.useState(null); // { ok, errors, warnings, summary, organization, items }
   const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState(null);
   const [portalScope, setPortalScope] = React.useState(null);
   const [portalError, setPortalError] = React.useState("");
   const inputRef = React.useRef(null);
@@ -112,6 +116,7 @@ export function RegistrationBulkUpload() {
       return;
     }
     setBusy(true);
+    setProgress({ phase: "uploading", percent: 0, bytesPerSecond: 0 });
     try {
       const v = getValues();
       const fd = new FormData();
@@ -122,9 +127,7 @@ export function RegistrationBulkUpload() {
         "contact_name", "contact_email", "phone_country_code", "phone_number", "kingschat_username"]) {
         fd.append(k, v[k] ?? "");
       }
-      const res = await fetch("/api/registrations/import", { method: "POST", body: fd });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error?.message || "Import failed");
+      const body = await uploadForm("/registrations/import", fd, { onProgress: setProgress });
       if (commit && body.committed) {
         toast.success(`${body.count} crusades registered successfully.`);
         setFile(null);
@@ -134,9 +137,11 @@ export function RegistrationBulkUpload() {
       }
       setPreview(body);
     } catch (e) {
+      setProgress({ phase: "error", message: e.message });
       toast.error(e.message);
     } finally {
       setBusy(false);
+      setTimeout(() => setProgress(null), 1200);
     }
   }
 
@@ -329,15 +334,15 @@ export function RegistrationBulkUpload() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" asChild>
-                  <a href="/api/registrations/import/template" download><Download /> Download template</a>
-                </Button>
+                <TemplateDownloadButton url="/registrations/import/template" filename="crusade-registration-template.xlsx">Download template</TemplateDownloadButton>
                 <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={busy}>
                   {busy ? <Loader2 className="animate-spin" /> : <Upload />} {file ? "Choose another file" : "Upload filled template"}
                 </Button>
                 <input ref={inputRef} type="file" accept=".xlsx" className="hidden"
                   onChange={(e) => pick(e.target.files?.[0] || null)} />
               </div>
+
+              <UploadProgress progress={progress} />
 
               {preview && (
                 <div className="space-y-2 rounded-lg border p-3 text-sm">

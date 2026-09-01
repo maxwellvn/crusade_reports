@@ -1,5 +1,9 @@
 export const DIRECT_REPORT_COMMIT_THRESHOLD = 100;
 
+export function shouldDirectCommitReport(reportCount, commitRequested = false) {
+  return commitRequested || reportCount > DIRECT_REPORT_COMMIT_THRESHOLD;
+}
+
 export function portalReportPreview(validated, summary) {
   const commitRequired = validated.length > DIRECT_REPORT_COMMIT_THRESHOLD;
   return {

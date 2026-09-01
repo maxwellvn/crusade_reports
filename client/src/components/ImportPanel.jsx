@@ -1,8 +1,11 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Download, Upload, FileSpreadsheet, Loader2, ChevronDown, AlertTriangle } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2, ChevronDown, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { UploadProgress } from "@/components/UploadProgress";
+import { uploadForm } from "@/lib/upload";
+import { TemplateDownloadButton } from "@/components/TemplateDownloadButton";
 
 // Parallel path for high-volume reporters: fill the app-generated template, upload,
 // see a preview + row errors, then LOAD the rows into the form. Nothing is saved
@@ -12,6 +15,7 @@ export function ImportPanel({ onLoaded, getReportFields }) {
   const [file, setFile] = React.useState(null);
   const [preview, setPreview] = React.useState(null); // { ok, errors, summary, crusades }
   const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState(null);
   const inputRef = React.useRef(null);
 
   async function send(f) {
@@ -21,18 +25,19 @@ export function ImportPanel({ onLoaded, getReportFields }) {
       return;
     }
     setBusy(true);
+    setProgress({ phase: "uploading", percent: 0, bytesPerSecond: 0 });
     try {
       const fd = new FormData();
       fd.append("file", f);
       for (const [k, v] of Object.entries(fields)) fd.append(k, v ?? "");
-      const res = await fetch("/api/import", { method: "POST", body: fd });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error?.message || "Import failed");
+      const body = await uploadForm("/import", fd, { onProgress: setProgress });
       setPreview(body);
     } catch (e) {
+      setProgress({ phase: "error", message: e.message });
       toast.error(e.message);
     } finally {
       setBusy(false);
+      setTimeout(() => setProgress(null), 1200);
     }
   }
 
@@ -68,15 +73,15 @@ export function ImportPanel({ onLoaded, getReportFields }) {
             <strong> 3.</strong> Upload it — you'll see a preview and any row-by-row errors, then the rows load into the form below for you to review and submit.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" asChild>
-              <a href="/api/import/template" download><Download /> Download template</a>
-            </Button>
+            <TemplateDownloadButton url="/import/template" filename="crusade-report-template.xlsx">Download template</TemplateDownloadButton>
             <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={busy}>
               {busy ? <Loader2 className="animate-spin" /> : <Upload />} {file ? "Choose another file" : "Upload filled template"}
             </Button>
             <input ref={inputRef} type="file" accept=".xlsx" className="hidden"
               onChange={(e) => pick(e.target.files?.[0] || null)} />
           </div>
+
+          <UploadProgress progress={progress} />
 
           {preview && (
             <div className="space-y-2 rounded-lg border p-3 text-sm">

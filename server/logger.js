@@ -72,6 +72,14 @@ export function errorHandler(err, req, res, _next) {
     err.message
   );
 
+  // A streamed download may fail after its headers have started. Trying to
+  // replace it with JSON throws ERR_HTTP_HEADERS_SENT and can destabilize the
+  // process; close that response and leave subsequent requests unaffected.
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+
   // ponytail: user-safe payload only; stack/details stay in the log.
   res.status(status).json({
     error: {

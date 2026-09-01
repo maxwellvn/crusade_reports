@@ -12,15 +12,30 @@ import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "
 import { sendStreamingExport } from "./exporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, FORMAT_LABELS, METRIC_LABELS, yesNo, phone } from "../labels.js";
 import multer from "multer";
-import { buildPortalReportWorkbook, parsePortalReportWorkbook } from "../portalReportTemplate.js";
+import { tmpdir } from "node:os";
+import { unlink } from "node:fs/promises";
 import { ONLINE_TYPES } from "../../client/src/lib/constants.js";
 import { portalItemOrder, PORTAL_UNREGISTERED_REPORT_ORDER } from "../reportOrdering.js";
-import { portalReportPreview } from "../portalReportImport.js";
+import { portalReportPreview, shouldDirectCommitReport } from "../portalReportImport.js";
 import { personalDashboardScope } from "../portalVisibility.js";
 import { cachedDashboardData, clearDashboardCache } from "../dashboardCache.js";
+import { generatePortalReportTemplate, parsePortalReportTemplateInWorker, removeGeneratedTemplate } from "../portalReportTemplateJobs.js";
 
 export const zonePortal = Router();
-const portalTemplateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+const portalTemplateUpload = multer({ dest: tmpdir(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
+const receivePortalTemplate = (req, res, next) => {
+  portalTemplateUpload.single("file")(req, res, (error) => {
+    if (!error) return next();
+    if (req.file?.path) unlink(req.file.path).catch(() => {});
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return next(new ApiError(413, "TEMPLATE_TOO_LARGE", "The Excel template is larger than 100 MB. Submit the reports in smaller batches."));
+    }
+    if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
+      return next(new ApiError(400, "INVALID_UPLOAD", "Upload one .xlsx report template at a time."));
+    }
+    return next(new ApiError(400, "INVALID_UPLOAD", "Could not receive the Excel template. Please choose the downloaded .xlsx file and try again."));
+  });
+};
 
 export function validIsoDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -392,29 +407,36 @@ export function portalReportTemplateRows({ name, col }) {
 zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
   ensureReportingOpen();
   const { name, kind, col, slug } = resolvePortalScope(req.params.token);
-  const rows = portalReportTemplateRows({ name, col });
-  const workbook = await buildPortalReportWorkbook(rows, `${name} ${kind} dashboard`);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${slug}-report-template.xlsx"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  const controller = new AbortController();
+  res.once("close", () => { if (!res.writableFinished) controller.abort(); });
+  const path = await generatePortalReportTemplate({ name, col, dashboardName: `${name} ${kind} dashboard` }, { signal: controller.signal });
+  await new Promise((resolve, reject) => {
+    res.download(path, `${slug}-report-template.xlsx`, (error) => {
+      removeGeneratedTemplate(path).finally(() => error ? reject(error) : resolve());
+    });
+  });
 }));
 
 // Preview or commit a completed workbook. Every Registration ID is resolved
 // again under the capability token before validation or insertion.
-zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.single("file"), wrap(async (req, res) => {
+zonePortal.post("/zone-portal/:token/report-template", receivePortalTemplate, wrap(async (req, res) => {
   ensureReportingOpen();
   if (!req.file) throw new ApiError(400, "NO_FILE", "Choose a completed .xlsx report template.");
   const scope = resolvePortalScope(req.params.token);
   let parsedWorkbook;
+  const controller = new AbortController();
+  res.once("close", () => { if (!res.writableFinished) controller.abort(); });
   try {
-    parsedWorkbook = await parsePortalReportWorkbook(req.file.buffer);
+    parsedWorkbook = await parsePortalReportTemplateInWorker(req.file.path, { signal: controller.signal });
   } catch (error) {
     throw new ApiError(422, "BAD_TEMPLATE", error.message || "Could not read the report template.");
+  } finally {
+    if (req.file?.path) await unlink(req.file.path).catch(() => {});
   }
 
   const errors = [...parsedWorkbook.errors];
   const validated = [];
+  let alreadySubmitted = 0;
   for (const uploaded of parsedWorkbook.reports) {
     const item = db.prepare(`
       SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
@@ -426,7 +448,10 @@ zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.sing
       continue;
     }
     if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
-      errors.push(`Row ${uploaded.row_number}: ${item.event_name || `Registration ${item.id}`} already has a submitted report.`);
+      // Idempotent retry: the previous request may have committed successfully
+      // even if its HTTP response was lost. Never duplicate or reject the rest
+      // of the workbook because this registration is already complete.
+      alreadySubmitted += 1;
       continue;
     }
     const changedFixedFields = changedPortalTemplateFields(uploaded, item);
@@ -470,20 +495,28 @@ zonePortal.post("/zone-portal/:token/report-template", portalTemplateUpload.sing
 
   const summary = {
     reports: validated.length,
+    already_submitted: alreadySubmitted,
     attendance: validated.reduce((sum, entry) => sum + entry.body.crusade.attendance + entry.body.crusade.online_participation, 0),
     salvations: validated.reduce((sum, entry) => sum + entry.body.crusade.salvation, 0),
   };
   if (errors.length) return res.json({ ok: false, errors: errors.slice(0, 100), summary });
-  if (req.query.commit !== "1") {
+  if (validated.length === 0 && alreadySubmitted > 0) {
+    return res.json({ ok: true, committed: true, submitted: 0, skipped_already_submitted: alreadySubmitted, summary });
+  }
+  if (!shouldDirectCommitReport(validated.length, req.query.commit === "1")) {
     return res.json(portalReportPreview(validated, summary));
   }
 
-  const submitted = db.transaction(() => validated.map(({ item, body }) => ({
-    registration_item_id: item.id,
-    ...submitRegisteredCrusadeReport(item, body),
-  })))();
+  const submittedCount = db.transaction(() => {
+    let count = 0;
+    for (const { item, body } of validated) {
+      submitRegisteredCrusadeReport(item, body);
+      count += 1;
+    }
+    return count;
+  })();
   clearDashboardCache();
-  res.status(201).json({ ok: true, submitted: submitted.length, summary, reports: submitted });
+  res.status(201).json({ ok: true, committed: true, submitted: submittedCount, skipped_already_submitted: alreadySubmitted, summary });
 }));
 
 // The capability token may update only individual crusades belonging to its zone/network.

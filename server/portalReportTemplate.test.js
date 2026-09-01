@@ -34,3 +34,21 @@ test("personal dashboard report imports support more than 1,000 registration row
   assert.deepEqual(parsed.errors, []);
   assert.equal(parsed.reports.length, 1001);
 });
+
+test("an unchanged personal dashboard template gives explicit empty-report feedback", async () => {
+  const workbook = await buildPortalReportWorkbook([{
+    id: 880001,
+    event_name: "Unfilled report",
+    event_type: "street",
+    event_date: "2026-08-28",
+    country: "Nigeria",
+    city: "Lagos",
+    venue: "Test Venue",
+    minister_name: "Pastor Test",
+  }], "Test Zone dashboard");
+  const parsed = await parsePortalReportWorkbook(await workbook.xlsx.writeBuffer());
+  assert.equal(parsed.reports.length, 0);
+  assert.deepEqual(parsed.errors, [
+    "No report data was found in the file. Fill at least one green cell with a report number (attendance, outcome, or expense) or a photo/video evidence link, save the file as .xlsx, then upload it again.",
+  ]);
+});

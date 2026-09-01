@@ -18,6 +18,9 @@ import { nfull, orgHierarchy, typeLabel, StatSlab } from "@/lib/dashboardWidgets
 import { Pagination } from "@/lib/tableTools";
 import { CORE_OUTCOMES, CRUSADE_TYPES, EXTENDED_OUTCOMES, FORMATS, METRIC_KEYS, ONLINE_TYPES, PERMIT_OPTIONS } from "@/lib/constants";
 import { ReportMediaFields, buildReportFormData, formatBytes, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
+import { UploadProgress } from "@/components/UploadProgress";
+import { uploadForm } from "@/lib/upload";
+import { TemplateDownloadButton } from "@/components/TemplateDownloadButton";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
@@ -481,16 +484,19 @@ function ReportTemplateWorkflow({ token, pendingCount, onImported }) {
   const [file, setFile] = React.useState(null);
   const [preview, setPreview] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState(null);
 
   async function upload(selectedFile, commit = false) {
     if (!selectedFile) return;
     setBusy(true);
+    setProgress({ phase: "uploading", percent: 0, bytesPerSecond: 0 });
     try {
       const form = new FormData();
       form.append("file", selectedFile);
-      const result = await postForm(`/zone-portal/${encodeURIComponent(token)}/report-template${commit ? "?commit=1" : ""}`, form);
-      if (commit) {
-        toast.success(`${result.submitted} ${result.submitted === 1 ? "report" : "reports"} submitted from Excel.`);
+      const result = await uploadForm(`/zone-portal/${encodeURIComponent(token)}/report-template${commit ? "?commit=1" : ""}`, form, { onProgress: setProgress });
+      if (commit || result.committed) {
+        const skipped = result.skipped_already_submitted || 0;
+        toast.success(`${result.submitted} new ${result.submitted === 1 ? "report" : "reports"} submitted${skipped ? `; ${skipped} already submitted ${skipped === 1 ? "row was" : "rows were"} safely skipped` : ""}.`);
         setFile(null);
         setPreview(null);
         if (inputRef.current) inputRef.current.value = "";
@@ -500,9 +506,11 @@ function ReportTemplateWorkflow({ token, pendingCount, onImported }) {
         setPreview(result);
       }
     } catch (error) {
+      setProgress({ phase: "error", message: error.message });
       toast.error(error.message || "Could not process the Excel report template.");
     } finally {
       setBusy(false);
+      setTimeout(() => setProgress(null), 1200);
     }
   }
 
@@ -514,19 +522,19 @@ function ReportTemplateWorkflow({ token, pendingCount, onImported }) {
         <p className="mt-1 text-xs font-medium text-emerald-800">{nfull.format(pendingCount)} registered {pendingCount === 1 ? "crusade needs" : "crusades need"} a report.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {pendingCount > 0 ? <Button asChild type="button" variant="outline" size="sm"><a href={`/api/zone-portal/${encodeURIComponent(token)}/report-template`} download><Download /> Download Excel template</a></Button> : <Button type="button" variant="outline" size="sm" disabled><Download /> Download Excel template</Button>}
+        <TemplateDownloadButton url={`/zone-portal/${encodeURIComponent(token)}/report-template`} filename="report-template.xlsx" size="sm" disabled={pendingCount < 1}>Download Excel template</TemplateDownloadButton>
         <Button type="button" size="sm" onClick={() => inputRef.current?.click()} disabled={busy || pendingCount < 1}>{busy ? <Loader2 className="animate-spin" /> : <Upload />} Upload completed template</Button>
         <input ref={inputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => upload(event.target.files?.[0] || null)} />
       </div>
     </div>
+    <div className="mt-4"><UploadProgress progress={progress} /></div>
     {preview && <div className={`mt-4 border p-3 text-sm ${preview.ok ? "border-emerald-300 bg-white" : "border-red-300 bg-red-50"}`}>
       {preview.ok ? <>
         <p className="flex items-center gap-2 font-semibold text-emerald-800"><CheckCircle2 className="size-4" /> Ready to submit {preview.summary.reports} {preview.summary.reports === 1 ? "report" : "reports"}</p>
         <p className="mt-1 text-xs text-slate-600">{nfull.format(preview.summary.attendance)} total attendance · {nfull.format(preview.summary.salvations)} salvations</p>
-        {preview.commit_required
-          ? <p className="mt-3 text-xs text-emerald-800">All {nfull.format(preview.summary.reports)} rows passed validation. Files over 100 rows upload directly without a row preview.</p>
-          : <div className="mt-3 max-h-40 overflow-y-auto border-y border-slate-200">{preview.rows.map((row) => <div key={row.registration_item_id} className="flex flex-wrap justify-between gap-2 border-b px-2 py-2 text-xs last:border-0"><span className="font-medium">{row.event_name}</span><span className="text-slate-500">{row.event_date} · {nfull.format(row.attendance)} attendance</span></div>)}</div>}
-        <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => upload(file, true)}>{busy ? <Loader2 className="animate-spin" /> : <Upload />} {preview.commit_required ? `Upload all ${nfull.format(preview.summary.reports)} reports directly` : "Confirm and submit"}</Button><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}>Cancel</Button></div>
+        {!!preview.summary.already_submitted && <p className="mt-1 text-xs text-amber-700">{nfull.format(preview.summary.already_submitted)} already-submitted {preview.summary.already_submitted === 1 ? "row will" : "rows will"} be safely skipped.</p>}
+        <div className="mt-3 max-h-40 overflow-y-auto border-y border-slate-200">{preview.rows.map((row) => <div key={row.registration_item_id} className="flex flex-wrap justify-between gap-2 border-b px-2 py-2 text-xs last:border-0"><span className="font-medium">{row.event_name}</span><span className="text-slate-500">{row.event_date} · {nfull.format(row.attendance)} attendance</span></div>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => upload(file, true)}>{busy ? <Loader2 className="animate-spin" /> : <Upload />} Confirm and submit</Button><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }}>Cancel</Button></div>
       </> : <>
         <p className="flex items-center gap-2 font-semibold text-red-800"><AlertTriangle className="size-4" /> Correct these issues and upload the file again</p>
         <ul className="mt-2 max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-red-800">{preview.errors.map((error, index) => <li key={index}>{error}</li>)}</ul>

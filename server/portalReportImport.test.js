@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { portalReportPreview } from "./portalReportImport.js";
+import { portalReportPreview, shouldDirectCommitReport } from "./portalReportImport.js";
 
 const entry = (id) => ({
   row_number: id + 1,
@@ -27,4 +27,10 @@ test("personal-dashboard report imports over 100 rows omit preview rows and requ
   assert.equal(result.commit_required, true);
   assert.deepEqual(result.rows, []);
   assert.equal(result.summary.reports, 101);
+});
+
+test("personal-dashboard report imports over 100 rows commit on the first upload", () => {
+  assert.equal(shouldDirectCommitReport(100), false);
+  assert.equal(shouldDirectCommitReport(101), true);
+  assert.equal(shouldDirectCommitReport(1, true), true);
 });
