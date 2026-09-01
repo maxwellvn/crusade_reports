@@ -29,6 +29,7 @@ import { coverage } from "./routes/coverage.js";
 import { countryCoverage } from "./routes/countryCoverage.js";
 import { countryConsolidation } from "./routes/countryConsolidation.js";
 import { pastoralChecklist } from "./routes/pastoralChecklist.js";
+import { blwCampus } from "./routes/blwCampus.js";
 import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
@@ -40,6 +41,10 @@ const app = express();
 app.set("trust proxy", 1); // Coolify terminates HTTPS before forwarding to Node.
 const PORT = process.env.PORT || 4000;
 
+// A single organisation report can contain thousands of crusade rows. Give
+// only this endpoint enough JSON headroom for those legitimate submissions;
+// every other API route keeps the tighter global request limit below.
+app.use("/api/reports", express.json({ limit: "20mb" }), express.urlencoded({ extended: false, limit: "20mb" }), reports);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
@@ -56,7 +61,6 @@ app.use("/resource-files", express.static(RESOURCE_FILES_DIR, {
 }));
 // Cheap probe retained for clients that only need an authenticated check.
 app.get("/api/admin/check", requireAdmin, (req, res) => res.json({ ok: true, user: req.admin }));
-app.use("/api/reports", reports);
 app.use("/api/networks", networks);
 app.use("/api/zones", zones);
 app.use("/api/places", places);
@@ -79,6 +83,7 @@ app.use("/api/coverage", coverage);
 app.use("/api/country-coverage", countryCoverage);
 app.use("/api/admin/country-consolidation", countryConsolidation);
 app.use("/api/zone-checklist", pastoralChecklist);
+app.use("/api/blw-campus", blwCampus);
 app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 

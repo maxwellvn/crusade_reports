@@ -35,6 +35,7 @@ const ASSIGNABLE_PAGES = [
   { key: "registrations", label: "Registered crusades" },
   { key: "registrations/live", label: "Live registrations" },
   { key: "dashboard/crusade-analysis", label: "Crusade analysis" },
+  { key: "dashboard/blw-campus", label: "BLW Campus" },
   { key: "dashboard/zone-links", label: "Zone links" },
   { key: "dashboard/coverage", label: "Coverage map" },
   { key: "dashboard/country-coverage", label: "Country coverage" },

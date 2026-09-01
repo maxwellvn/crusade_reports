@@ -26,6 +26,7 @@ export const ASSIGNABLE_PAGES = [
   { key: "registrations", label: "Registered crusades", path: "/registrations" },
   { key: "registrations/live", label: "Live registrations", path: "/registrations/live" },
   { key: "dashboard/crusade-analysis", label: "Crusade analysis", path: "/dashboard/crusade-analysis" },
+  { key: "dashboard/blw-campus", label: "BLW Campus", path: "/dashboard/blw-campus" },
   { key: "dashboard/zone-links", label: "Zone links", path: "/dashboard/zone-links" },
   { key: "dashboard/coverage", label: "Coverage map", path: "/dashboard/coverage" },
   { key: "dashboard/country-coverage", label: "Country coverage", path: "/dashboard/country-coverage" },
