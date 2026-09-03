@@ -91,17 +91,10 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
     by_group: by("group_name", "WHERE group_name IS NOT NULL", 100),
     by_church: by("church_name", "WHERE church_name IS NOT NULL", 100),
     by_cell: by("cell_name", "WHERE cell_name IS NOT NULL", 500),
-    by_network: db.prepare(
-      `SELECT i.network_name AS key,
-              COALESCE(SUM(i.planned_count), 0) AS crusades,
-              COALESCE(SUM(i.expected_attendance), 0) AS attendance,
-              0 AS online_attendance,
-              0 AS salvation
-       FROM registration_items i
-       WHERE (i.program = 'public' OR i.program IS NULL)
-         AND i.network_name IS NOT NULL AND TRIM(i.network_name) <> ''
-       GROUP BY key ORDER BY crusades DESC`
-    ).all(),
+    // Same aggregation shape as every other by_* dimension: actual held
+    // crusades from the fact table. Planned-by-network lives on the
+    // registrations dashboard (registered.by_network / registrations routes).
+    by_network: by("network_name", "WHERE network_name IS NOT NULL AND TRIM(network_name) <> ''"),
     by_country: byCountryNormalized,
     by_city: by("city", "", 1_000),
     // Real geocoded city points for the map — no coordinates, no row.
@@ -125,7 +118,7 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
                 COUNT(ri.id) AS items,
                 COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance,
                 COUNT(c.id) AS reported,
-                COALESCE(SUM(ri.planned_count), 0) - COUNT(c.id) AS awaiting,
+                MAX(COALESCE(SUM(ri.planned_count), 0) - COUNT(c.id), 0) AS awaiting,
                 COALESCE(SUM(CASE WHEN ri.readiness_status = 'ready' THEN ri.planned_count ELSE 0 END), 0) AS ready
          FROM registration_items ri
          LEFT JOIN crusades c ON c.registration_item_id = ri.id
