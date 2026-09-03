@@ -228,12 +228,15 @@ export function ReportForm() {
     }
     try {
       const payload = { ...data, portal_token: portalToken || undefined };
-      const { id } = photos.length
+      const { id, skipped_duplicates: skippedDuplicates = 0 } = photos.length
         ? await postForm("/reports", buildReportFormData(payload, photos))
         : await postJSON("/reports", payload);
       clearStoredDraft();
       setPhotos([]);
       setDone({ id, n: totals.n, att: totals.att });
+      if (skippedDuplicates > 0) {
+        toast.info(`${skippedDuplicates.toLocaleString()} duplicate ${skippedDuplicates === 1 ? "crusade was" : "crusades were"} already reported and ${skippedDuplicates === 1 ? "was" : "were"} skipped — everything else is in.`);
+      }
       window.scrollTo({ top: 0 });
     } catch (e) {
       toast.error(e.message || "Could not submit the report. Please try again.");

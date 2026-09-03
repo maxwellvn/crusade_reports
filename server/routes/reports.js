@@ -106,8 +106,18 @@ export function mediaReportRequest(query = {}) {
   return { clause: `WHERE ${where.join(" AND ")}`, params };
 }
 
-// One transaction: the report row + one fact row per crusade. Attribution is copied
-// onto each crusade so dashboards GROUP BY any hierarchy level. Shared by form + import.
+// Submit-time duplicate guard. Mirrors the import parser: a crusade is a
+// duplicate when its date + name + country + city already exist in the fact
+// table or repeat inside this same payload. Checked inside the transaction so
+// double-clicks / double-submits can never insert the same crusade twice —
+// the duplicates are skipped and the rest is submitted.
+const alreadyReportedStmt = db.prepare(
+  `SELECT 1 FROM crusades
+   WHERE event_date = @event_date AND lower(event_name) = lower(@event_name)
+     AND lower(coalesce(country, '')) = lower(@country) AND lower(coalesce(city, '')) = lower(@city)
+   LIMIT 1`
+);
+
 export const insertReport = db.transaction((d) => {
   // Country is per-crusade now; the report row keeps the first crusade's country
   // as its primary (the column is NOT NULL and drives report-level grouping).
@@ -133,7 +143,24 @@ export const insertReport = db.transaction((d) => {
     video_links: media.video_links,
   }).lastInsertRowid;
 
+  let skippedDuplicates = 0;
+  const seenInPayload = new Set();
   for (const c of d.crusades) {
+    // Rows linked to a registration are uniqueness-guarded by the unique
+    // registration_item_id index — never drop them on a name/date heuristic.
+    const key = `${c.event_date}|${String(c.event_name || "").toLowerCase()}|${String(c.country || "").toLowerCase()}|${String(c.city || "").toLowerCase()}`;
+    if (!c.registration_item_id && c.event_name && c.event_date) {
+      if (seenInPayload.has(key) || alreadyReportedStmt.get({
+        event_date: c.event_date, event_name: c.event_name, country: c.country || "", city: c.city || "",
+      })) {
+        skippedDuplicates += 1;
+        continue;
+      }
+      seenInPayload.add(key);
+    } else if (seenInPayload.has(key)) {
+      skippedDuplicates += 1;
+      continue;
+    }
     const row = {
       report_id: reportId,
       organization_type: d.organization_type,
@@ -161,6 +188,7 @@ export const insertReport = db.transaction((d) => {
     for (const m of METRIC_FIELDS) row[m] = c[m] ?? 0;
     insertCrusadeStmt.run(row);
   }
+  d.skippedDuplicates = skippedDuplicates;
   return reportId;
 });
 
@@ -226,15 +254,17 @@ reports.post("/", withReportPhotoUpload(wrap((req, res) => {
     throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
   }
   let id;
+  let skippedDuplicates;
   try {
     id = insertReport(parsed.data);
+    skippedDuplicates = parsed.data.skippedDuplicates || 0;
     saveReportPhotos(id, files);
   } catch (error) {
     removeUploadedFiles(files);
     throw error;
   }
   backfillCityCoords().catch(() => {}); // fire-and-forget; map fills in shortly after submit
-  res.status(201).json({ id, photos: listReportPhotos(id) });
+  res.status(201).json({ id, photos: listReportPhotos(id), skipped_duplicates: skippedDuplicates });
 })));
 
 reports.get("/", requireExternalOrPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
