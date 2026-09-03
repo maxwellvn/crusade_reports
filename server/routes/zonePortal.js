@@ -409,7 +409,9 @@ zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
   const { name, kind, col, slug } = resolvePortalScope(req.params.token);
   const controller = new AbortController();
   res.once("close", () => { if (!res.writableFinished) controller.abort(); });
-  const path = await generatePortalReportTemplate({ name, col, dashboardName: `${name} ${kind} dashboard` }, { signal: controller.signal });
+  // Rows are queried on the main thread (portalReportTemplateRows) — the
+  // generation worker must not touch better-sqlite3.
+  const path = await generatePortalReportTemplate({ rows: portalReportTemplateRows({ name, col }), dashboardName: `${name} ${kind} dashboard` }, { signal: controller.signal });
   await new Promise((resolve, reject) => {
     res.download(path, `${slug}-report-template.xlsx`, (error) => {
       removeGeneratedTemplate(path).finally(() => error ? reject(error) : resolve());

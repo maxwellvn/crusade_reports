@@ -13,6 +13,7 @@
     "seed": "node server/seed.js"
   },
   "dependencies": {
+    "adm-zip": "^0.6.0",
     "animejs": "^3.2.2",
     "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",
@@ -24,6 +25,7 @@
     "pino": "^9.6.0",
     "react-router-dom": "^7.18.1",
     "simpleheat": "^0.4.0",
+    "yazl": "^3.3.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

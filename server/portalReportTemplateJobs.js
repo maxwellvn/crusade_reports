@@ -1,104 +1,64 @@
-import { Worker } from "node:worker_threads";
+// Portal-template generation. Rows are computed by the caller (main thread —
+// see portalReportTemplateRows in routes/zonePortal.js and the find-my-crusade
+// bulk flow). Generation runs inline: ExcelJS's stream writer flushes in small
+// chunks so the event loop stays responsive, and the previous worker-thread
+// approach hard-crashed Node 22 on file-handle teardown.
+
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { unlink } from "node:fs/promises";
-import { db, REGISTRATION_DB_PATH } from "./db.js";
+import { unlink, createWriteStream } from "node:fs";
+import AdmZip from "adm-zip";
+import yazl from "yazl";
+import { Worker } from "node:worker_threads";
 import { ApiError, logger } from "./logger.js";
-
-const MAX_QUEUED_GENERATIONS = 4;
-let active = null;
-const queue = [];
-
-function runNext() {
-  if (active || !queue.length) return;
-  const job = queue.shift();
-  if (job.signal?.aborted) {
-    job.reject(new ApiError(499, "REQUEST_CANCELLED", "Template generation was cancelled."));
-    runNext();
-    return;
-  }
-  active = job;
-  const outputPath = join(tmpdir(), `notc-report-template-${randomUUID()}.xlsx`);
-  const worker = new Worker(new URL("./portalReportTemplateWorker.js", import.meta.url), {
-    workerData: {
-      ...job.scope,
-      reportsPath: db.name,
-      registrationPath: REGISTRATION_DB_PATH,
-      outputPath,
-    },
-    resourceLimits: { maxOldGenerationSizeMb: 1400 },
-  });
-  job.worker = worker;
-  let settled = false;
-  const finish = () => {
-    job.signal?.removeEventListener("abort", cancel);
-    active = null;
-    runNext();
-  };
-  const cancel = () => {
-    if (settled) return;
-    settled = true;
-    worker.terminate();
-    unlink(outputPath).catch(() => {});
-    job.reject(new ApiError(499, "REQUEST_CANCELLED", "Template generation was cancelled."));
-    finish();
-  };
-  job.signal?.addEventListener("abort", cancel, { once: true });
-  worker.once("message", (message) => {
-    settled = true;
-    if (message.ok) job.resolve(outputPath);
-    else {
-      unlink(outputPath).catch(() => {});
-      job.reject(new ApiError(500, "TEMPLATE_FAILED", message.message || "Could not generate the report template."));
-    }
-    finish();
-  });
-  worker.once("error", (error) => {
-    if (settled) return;
-    settled = true;
-    unlink(outputPath).catch(() => {});
-    logger.error({ err: error }, "report template worker failed");
-    job.reject(new ApiError(500, "TEMPLATE_FAILED", "Could not generate the report template. Please try again."));
-    finish();
-  });
-  worker.once("exit", (code) => {
-    if (settled || code === 0) return;
-    settled = true;
-    unlink(outputPath).catch(() => {});
-    job.reject(new ApiError(500, "TEMPLATE_FAILED", "The report template was too large to generate safely."));
-    finish();
-  });
-}
-
-export function generatePortalReportTemplate(scope, { signal } = {}) {
-  if (queue.length >= MAX_QUEUED_GENERATIONS) {
-    throw new ApiError(429, "TEMPLATE_BUSY", "Several large templates are already being prepared. Please wait a moment and try again.");
-  }
-  return new Promise((resolve, reject) => {
-    const job = { scope, signal, resolve, reject, worker: null };
-    if (signal?.aborted) {
-      reject(new ApiError(499, "REQUEST_CANCELLED", "Template generation was cancelled."));
-      return;
-    }
-    const cancelQueued = () => {
-      const index = queue.indexOf(job);
-      if (index < 0) return;
-      queue.splice(index, 1);
-      reject(new ApiError(499, "REQUEST_CANCELLED", "Template generation was cancelled."));
-    };
-    signal?.addEventListener("abort", cancelQueued, { once: true });
-    const originalResolve = job.resolve;
-    const originalReject = job.reject;
-    job.resolve = (value) => { signal?.removeEventListener("abort", cancelQueued); originalResolve(value); };
-    job.reject = (error) => { signal?.removeEventListener("abort", cancelQueued); originalReject(error); };
-    queue.push(job);
-    runNext();
-  });
-}
+import { writePortalReportWorkbookStream } from "./portalReportWorkbookWriter.js";
 
 export function removeGeneratedTemplate(path) {
   return unlink(path).catch(() => {});
+}
+
+// The ExcelJS streaming writer produces a zip with data-descriptor entries
+// (general-purpose flag 0x8) and buries [Content_Types].xml mid-archive.
+// Excel — macOS Excel in particular — treats that package layout as corrupt
+// and offers to "recover" the workbook even though every XML part is valid.
+// Repack the same entries as a buffered zip: [Content_Types].xml first, known
+// sizes (no descriptors). Same bytes inside, package wrapper Excel accepts.
+function repackForExcel(path) {
+  const inZip = new AdmZip(path);
+  const entries = inZip.getEntries().filter((entry) => !entry.isDirectory);
+  const isContentTypes = (entry) => entry.entryName.replace(/^\//, "") === "[Content_Types].xml";
+  entries.sort((a, b) => {
+    if (isContentTypes(a)) return -1;
+    if (isContentTypes(b)) return 1;
+    return 0;
+  });
+  const outZip = new yazl.ZipFile();
+  for (const entry of entries) {
+    outZip.addBuffer(entry.getData(), entry.entryName.replace(/^\//, ""), { compress: true });
+  }
+  outZip.end();
+  return new Promise((resolve, reject) => {
+    outZip.outputStream
+      .pipe(createWriteStream(path))
+      .on("finish", resolve)
+      .on("error", reject);
+  });
+}
+
+export async function generatePortalReportTemplate({ rows, dashboardName }) {
+  if (!Array.isArray(rows)) throw new ApiError(500, "TEMPLATE_FAILED", "Template rows must be provided.");
+  const outputPath = join(tmpdir(), `notc-report-template-${randomUUID()}.xlsx`);
+  try {
+    await writePortalReportWorkbookStream(rows, dashboardName, createWriteStream(outputPath));
+    await repackForExcel(outputPath);
+    return outputPath;
+  } catch (error) {
+    await unlink(outputPath).catch(() => {});
+    if (error instanceof ApiError) throw error;
+    logger.error({ err: error }, "report template generation failed");
+    throw new ApiError(500, "TEMPLATE_FAILED", "Could not generate the report template. Please try again.");
+  }
 }
 
 export function parsePortalReportTemplateInWorker(path, { timeoutMs = 2 * 60 * 1000, signal } = {}) {
