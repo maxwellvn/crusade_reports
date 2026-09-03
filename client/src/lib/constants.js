@@ -102,7 +102,7 @@ export const emptyCrusade = () => ({
   venue: "",
   photo_links: "",
   video_links: "",
-  ...Object.fromEntries(METRIC_KEYS.map((k) => 0)),
+  ...Object.fromEntries(METRIC_KEYS.map((k) => [k, 0])),
 });
 
 // Loveworld Blue Elite staff departments — the official list of ministry units
