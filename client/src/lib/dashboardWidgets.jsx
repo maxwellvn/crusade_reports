@@ -252,7 +252,7 @@ const KPI_WIDGETS = {
   holy_spirit_filled: { title: "Filled with Holy Spirit", render: (s) => <StatTile label="Filled with Holy Spirit" value={nfull.format(s.totals.holy_spirit_filled || 0)} /> },
   water_baptisms: { title: "Water Baptisms", render: (s) => <StatTile label="Water Baptisms" value={nfull.format(s.totals.water_baptisms || 0)} /> },
   ror_distributed: { title: "Rhapsody Distributed", render: (s) => <StatTile label="Rhapsody Distributed" value={nfull.format(s.totals.ror_distributed || 0)} /> },
-  bibles_distributed: { title: "Bibles Distributed", render: (s) => <StatTile label="Bibles Distributed" value={nfull.format(s.totals.bibles_distributed || 0)} /> },
+  bibles_distributed: { title: "Rhapsody Bibles Distributed", render: (s) => <StatTile label="Rhapsody Bibles Distributed" value={nfull.format(s.totals.bibles_distributed || 0)} /> },
   radio_tv_reach: { title: "Estimated Radio/TV Reach", render: (s) => <StatTile label="Estimated Radio/TV Reach" value={nfull.format(s.totals.radio_tv_reach || 0)} /> },
   testimonies_recorded: { title: "Testimonies Recorded", render: (s) => <StatTile label="Testimonies Recorded" value={nfull.format(s.totals.testimonies_recorded || 0)} /> },
   tap2read_distributed: { title: "TAP2read Distributed", render: (s) => <StatTile label="TAP2read Distributed" value={nfull.format(s.totals.tap2read_distributed || 0)} /> },
