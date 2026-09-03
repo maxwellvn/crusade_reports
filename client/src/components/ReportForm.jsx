@@ -233,10 +233,8 @@ export function ReportForm() {
         : await postJSON("/reports", payload);
       clearStoredDraft();
       setPhotos([]);
-      setDone({ id, n: totals.n, att: totals.att });
-      if (skippedDuplicates > 0) {
-        toast.info(`${skippedDuplicates.toLocaleString()} duplicate ${skippedDuplicates === 1 ? "crusade was" : "crusades were"} already reported and ${skippedDuplicates === 1 ? "was" : "were"} skipped — everything else is in.`);
-      }
+      const submitted = Math.max(totals.n - skippedDuplicates, 0);
+      setDone({ id, n: submitted, att: totals.att, skipped: skippedDuplicates, loaded: totals.n });
       window.scrollTo({ top: 0 });
     } catch (e) {
       toast.error(e.message || "Could not submit the report. Please try again.");
@@ -304,6 +302,11 @@ export function ReportForm() {
               <span className="font-semibold text-foreground"> {nfull.format(done.att)}</span> total attendance reported.
               Thank you — your results are now in the dashboards.
             </p>
+            {done.skipped > 0 && (
+              <p className="mx-auto max-w-md rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {nfull.format(done.skipped)} {done.skipped === 1 ? "crusade was" : "crusades were"} skipped as duplicates — they matched crusades already reported earlier (same name, date, country and city). The dashboard shows the {nfull.format(done.n)} new {done.n === 1 ? "one" : "ones"} only.
+              </p>
+            )}
             <div className="flex flex-wrap justify-center gap-3 pt-2">
               <Button type="button" onClick={reportAnother}>Report another organization</Button>
               <Button type="button" variant="outline" asChild><Link to="/crusade-registration">Back to campaign page</Link></Button>
