@@ -207,8 +207,12 @@ export async function buildPortalReportWorkbook(rows, dashboardName) {
 // The normal Workbook API retains every cell in memory. Personal dashboards can
 // contain hundreds of thousands of pending registrations, so downloads use the
 // streaming writer and commit each row as soon as it is serialized.
+// useSharedStrings must stay ON: with it off the writer emits string cells as
+// t="str" (the formula-result type) with no <f> element, which Excel flags as
+// corrupt and offers to "repair". Shared strings only keep unique strings in
+// the in-memory index; the values themselves still stream to disk.
 export async function writePortalReportWorkbookStream(rows, dashboardName, stream) {
-  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream, useStyles: true, useSharedStrings: false });
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream, useStyles: true, useSharedStrings: true });
   workbook.creator = "Night of a Thousand Crusades";
   const sheet = workbook.addWorksheet("Report Template", { views: [{ state: "frozen", ySplit: 1, xSplit: REGISTRATION_COLUMNS.length }] });
   sheet.columns = PORTAL_TEMPLATE_COLUMNS.map(([header, key]) => ({ header, key, width: Math.min(Math.max(header.length + 3, 15), 28) }));
