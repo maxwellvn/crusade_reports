@@ -36,6 +36,8 @@ const CRUSADE_COLS = [
   { h: "Minister", k: "minister_name", req: true, d: "Name of the minister who ministered at this crusade." },
   { h: "Venue", k: "venue", req: true, d: "Where it held (e.g. City Stadium, Main Market). For online/TV/radio, put 'Online' or 'N/A'." },
   { h: "Event Name", k: "event_name", req: true, d: "A short name/label for this crusade (e.g. 'Aba Street Reach June')." },
+  { h: "Photo Links", k: "photo_links", d: "http(s) links to photos of THIS crusade, separated by commas. Optional." },
+  { h: "Video Links", k: "video_links", d: "http(s) links to videos of THIS crusade, separated by commas. Optional." },
   ...METRIC_COLS,
 ];
 const ALL_COLS = CRUSADE_COLS;
@@ -117,7 +119,15 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
     throw new ApiError(422, "BAD_FILE", "Could not read that file — use the .xlsx template");
   }
   const ws = wb.getWorksheet("Crusades");
-  if (!ws) throw new ApiError(422, "NO_SHEET", "The file has no 'Crusades' sheet — use the template");
+  if (!ws) {
+    // Wrong-door detection: the zone portal template has its own sheet and
+    // headers. Point the reporter at the place that template actually works.
+    if (wb.getWorksheet("Report Template")) {
+      throw new ApiError(422, "WRONG_TEMPLATE_PORTAL",
+        "This is a zone portal report template — it can only be uploaded on the zone portal page it was downloaded from. For general crusade reports, download the template from the report form (\"Import a spreadsheet\").");
+    }
+    throw new ApiError(422, "NO_SHEET", "The file has no 'Crusades' sheet — use the template");
+  }
 
   // Map header text -> column index (tolerant of reordering + the " *" required marks).
   const colByKey = {};
@@ -153,6 +163,19 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
   // ---- Parse rows with precise, per-row/per-field errors ----
   const rowErrors = [];
   const crusades = [];
+  // Duplicate detection: same date + name + country + city, either repeated in
+  // this file or already reported. Duplicates are excluded from the loaded
+  // rows and surfaced as counts so the reporter submits the rest confidently.
+  const dupKey = (c) => `${c.event_date}|${c.event_name.toLowerCase()}|${c.country.toLowerCase()}|${c.city.toLowerCase()}`;
+  const seenInFile = new Set();
+  const dupInFile = [];
+  const dupReported = [];
+  const reportedKeys = new Set(
+    db.prepare(`
+      SELECT event_date || '|' || lower(event_name) || '|' || lower(coalesce(country, '')) || '|' || lower(coalesce(city, '')) AS k
+      FROM crusades WHERE event_name IS NOT NULL AND trim(event_name) <> '' AND event_date IS NOT NULL AND event_date <> ''
+    `).all().map((row) => row.k)
+  );
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const get = (k) => (colByKey[k] ? cellValue(row.getCell(colByKey[k])) : "");
@@ -191,12 +214,33 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
       country: country || rawCountry, city: raw("city"), city_place_id: "", event_date: date, attendance: toInt(get("attendance"), 0),
       online_participation: toInt(get("online_participation"), 0),
       minister_name: raw("minister_name"), venue: raw("venue"),
+      photo_links: raw("photo_links"), video_links: raw("video_links"),
     };
     for (const m of METRIC_COLS) c[m.k] = toInt(get(m.k), 0);
+    if (c.event_name && c.event_date) {
+      const key = dupKey(c);
+      if (seenInFile.has(key)) { dupInFile.push(r); continue; }
+      if (reportedKeys.has(key)) { dupReported.push(r); continue; }
+      seenInFile.add(key);
+    }
     crusades.push(c);
   }
 
-  if (!crusades.length) throw new ApiError(422, "EMPTY", "No crusade rows found — fill at least one row under the headers.");
+  const duplicates = {
+    in_file: dupInFile.length,
+    already_reported: dupReported.length,
+    samples: [
+      ...dupInFile.slice(0, 5).map((r) => `Row ${r} repeats an earlier row in this file`),
+      ...dupReported.slice(0, 5).map((r) => `Row ${r} matches a crusade already reported`),
+    ],
+  };
+
+  if (!crusades.length) {
+    if (dupInFile.length + dupReported.length > 0) {
+      throw new ApiError(422, "ALL_DUPLICATES", `Every crusade in this file is a duplicate — ${dupReported.length} already reported, ${dupInFile.length} repeated in the file. Nothing to submit.`);
+    }
+    throw new ApiError(422, "EMPTY", "No crusade rows found — fill at least one row under the headers.");
+  }
 
   // ---- Canonicalize the report identity against the live lists ----
   const t = report.organization_type;
@@ -219,6 +263,7 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
 
   const summary = {
     crusades: crusades.length,
+    skipped_duplicates: duplicates.in_file + duplicates.already_reported,
     onsite_attendance: crusades.reduce((s, c) => s + c.attendance, 0),
     online_attendance: crusades.reduce((s, c) => s + c.online_participation, 0),
     total_attendance: crusades.reduce((s, c) => s + c.attendance + c.online_participation, 0),
@@ -228,7 +273,7 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
 
   if (rowErrors.length) {
     logger.warn({ errors: rowErrors.length, sample: rowErrors.slice(0, 5) }, "import rejected");
-    return res.status(200).json({ ok: false, errors: rowErrors.slice(0, 100), summary });
+    return res.status(200).json({ ok: false, errors: rowErrors.slice(0, 100), summary, duplicates });
   }
 
   // Data is clean → relate each city to Google Places (canonical name + place_id);
@@ -258,7 +303,7 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
   // No server-side commit: the parsed rows go back to the client, which loads
   // them into the form so the reporter reviews and submits like a manual entry.
   logger.info(summary, "import parsed");
-  res.status(200).json({ ok: true, errors: [], warnings, summary, crusades: parsed.data.crusades });
+  res.status(200).json({ ok: true, errors: [], warnings, summary, duplicates, crusades: parsed.data.crusades });
 }));
 
 function cellValue(cell) {

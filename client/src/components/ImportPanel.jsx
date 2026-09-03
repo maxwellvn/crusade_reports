@@ -41,13 +41,31 @@ export function ImportPanel({ onLoaded, getReportFields }) {
     }
   }
 
-  function load() {
-    onLoaded?.(preview.crusades || []);
-    toast.success(`Loaded ${preview.crusades?.length || 0} crusades into the form — check them, then click Next to review.`);
-    setFile(null);
-    setPreview(null);
-    if (inputRef.current) inputRef.current.value = "";
-    setOpen(false);
+  async function load() {
+    setBusy(true);
+    try {
+      const rows = preview.crusades || [];
+      await onLoaded?.(rows, ({ loaded, total }) => {
+        setProgress({
+          phase: "loading",
+          percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
+          message: `Loading ${loaded.toLocaleString()} of ${total.toLocaleString()} crusades into the form…`,
+        });
+      });
+      toast.success(`Loaded ${rows.length.toLocaleString()} crusades into the form — check them, then click Next to review.`);
+      const skipped = preview.duplicates?.in_file + preview.duplicates?.already_reported || 0;
+      if (skipped) toast.info(`${skipped} duplicate rows were skipped and are not part of this report.`);
+      setFile(null);
+      setPreview(null);
+      if (inputRef.current) inputRef.current.value = "";
+      setOpen(false);
+    } catch (e) {
+      setProgress({ phase: "error", message: e.message });
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setProgress(null), 1200);
+    }
   }
 
   function pick(f) {
@@ -93,6 +111,24 @@ export function ImportPanel({ onLoaded, getReportFields }) {
               </p>
               {preview.ok ? (
                 <div className="space-y-2">
+                  {(preview.duplicates?.in_file || preview.duplicates?.already_reported) ? (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      <p className="font-semibold">
+                        {preview.duplicates.in_file + preview.duplicates.already_reported} duplicate {preview.duplicates.in_file + preview.duplicates.already_reported === 1 ? "row" : "rows"} will be skipped — only the rest are loaded.
+                      </p>
+                      {preview.duplicates.already_reported > 0 && (
+                        <p className="mt-0.5">{preview.duplicates.already_reported} match crusades already reported (same name, date, country and city).</p>
+                      )}
+                      {preview.duplicates.in_file > 0 && (
+                        <p className="mt-0.5">{preview.duplicates.in_file} {preview.duplicates.in_file === 1 ? "row repeats" : "rows repeat"} an earlier row in this file.</p>
+                      )}
+                      {(preview.duplicates.samples || []).length > 0 && (
+                        <ul className="mt-1 list-disc pl-4">
+                          {preview.duplicates.samples.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
                   {preview.warnings?.length > 0 && (
                     <ul className="space-y-0.5 text-xs text-muted-foreground">
                       {preview.warnings.map((w, i) => (
@@ -101,7 +137,7 @@ export function ImportPanel({ onLoaded, getReportFields }) {
                     </ul>
                   )}
                   <Button type="button" size="sm" onClick={load} disabled={busy}>
-                    Load into form
+                    {busy ? <><Loader2 className="animate-spin" /> Loading…</> : "Load into form"}
                   </Button>
                 </div>
               ) : (

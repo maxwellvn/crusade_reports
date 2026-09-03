@@ -144,7 +144,9 @@ let startupSchema = `
 
     minister_name     TEXT,
     venue             TEXT,
-    registration_item_id INTEGER REFERENCES registration_items(id)
+    registration_item_id INTEGER REFERENCES registration_items(id),
+    photo_links       TEXT,
+    video_links       TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_crusades_report  ON crusades(report_id);
@@ -796,6 +798,11 @@ if (!crusadeCols.includes("registration_item_id")) {
     ? "ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER"
     : "ALTER TABLE crusades ADD COLUMN registration_item_id INTEGER REFERENCES registration_items(id)");
 }
+
+// Per-crusade evidence links. Report-level photo/video links stay for manual
+// entries; bulk imports carry links on each crusade row instead.
+if (!crusadeCols.includes("photo_links")) db.exec("ALTER TABLE crusades ADD COLUMN photo_links TEXT");
+if (!crusadeCols.includes("video_links")) db.exec("ALTER TABLE crusades ADD COLUMN video_links TEXT");
 
 // RABAH crusade metrics — added for the RABAH crusade type.
 if (!crusadeCols.includes("rabah_crusades")) {

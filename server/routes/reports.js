@@ -29,7 +29,7 @@ const insertReportStmt = db.prepare(`
 const CRUSADE_COLS = [
   "report_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country",
   "format", "event_type", "other_event_type", "event_name", "city", "city_place_id", "event_date", "attendance", "crusade_expense",
-  ...METRIC_FIELDS, "minister_name", "venue", "registration_item_id",
+  ...METRIC_FIELDS, "minister_name", "venue", "photo_links", "video_links", "registration_item_id",
 ];
 const insertCrusadeStmt = db.prepare(
   `INSERT INTO crusades (${CRUSADE_COLS.join(", ")}) VALUES (${CRUSADE_COLS.map((c) => "@" + c).join(", ")})`
@@ -154,6 +154,8 @@ export const insertReport = db.transaction((d) => {
       crusade_expense: c.crusade_expense,
       minister_name: c.minister_name || null,
       venue: c.venue || null,
+      photo_links: c.photo_links || null,
+      video_links: c.video_links || null,
       registration_item_id: c.registration_item_id || null,
     };
     for (const m of METRIC_FIELDS) row[m] = c[m] ?? 0;

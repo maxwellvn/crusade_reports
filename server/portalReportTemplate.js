@@ -37,6 +37,16 @@ export const PORTAL_TEMPLATE_EDITABLE_KEYS = new Set([
 ]);
 
 const normalizedHeader = (value) => String(value || "").trim().toLowerCase();
+// Wrong-door hint: the general report-form template (from /report) has its own
+// sheet and headers. Tell the reporter where that file actually works.
+const GENERAL_TEMPLATE_HINT = "This looks like the general report template from the Report a Crusade page. Upload it there via \"Import a spreadsheet\" — this portal only accepts the template downloaded from this page's \"Download Excel template\" button.";
+function headerLooksLikeGeneralTemplate(headerRow) {
+  let looksGeneral = false;
+  headerRow.eachCell((cell) => {
+    if (normalizedHeader(cell.value) === "crusade type") looksGeneral = true;
+  });
+  return looksGeneral;
+}
 const cellText = (cell) => {
   const value = cell?.value;
   if (value == null) return "";
@@ -295,12 +305,18 @@ export async function parsePortalReportWorkbook(buffer) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
   const sheet = workbook.getWorksheet("Report Template");
-  if (!sheet) throw new Error("The workbook does not contain the Report Template sheet.");
+  if (!sheet) {
+    if (workbook.getWorksheet("Crusades")) throw new Error(GENERAL_TEMPLATE_HINT);
+    throw new Error("The workbook does not contain the Report Template sheet.");
+  }
 
   const columnByKey = reportColumnMap(sheet.getRow(1));
   const requiredColumns = [...REGISTRATION_COLUMNS.map(([, key]) => key), "submit", "format", "event_date", "city", "venue", "minister_name", "attendance"];
   const missing = requiredColumns.filter((key) => !columnByKey[key]);
-  if (missing.length) throw new Error("Required template columns are missing. Download a fresh template and try again.");
+  if (missing.length) {
+    if (headerLooksLikeGeneralTemplate(sheet.getRow(1))) throw new Error(GENERAL_TEMPLATE_HINT);
+    throw new Error("Required template columns are missing. Download a fresh template and try again.");
+  }
 
   const reports = [];
   const errors = [];
@@ -332,14 +348,17 @@ export async function parsePortalReportWorkbookFile(path) {
         columnByKey = reportColumnMap(row);
         const required = [...REGISTRATION_COLUMNS.map(([, key]) => key), "submit", "format", "event_date", "city", "venue", "minister_name", "attendance"];
         const missing = required.filter((key) => !columnByKey[key]);
-        if (missing.length) throw new Error("Required template columns are missing. Download a fresh template and try again.");
+        if (missing.length) {
+          if (headerLooksLikeGeneralTemplate(row)) throw new Error(GENERAL_TEMPLATE_HINT);
+          throw new Error("Required template columns are missing. Download a fresh template and try again.");
+        }
         continue;
       }
       const report = parseReportRow(row, row.number, columnByKey, seen, errors);
       if (report) reports.push(report);
     }
   }
-  if (!found) throw new Error("The workbook does not contain the Report Template sheet.");
+  if (!found) throw new Error(`The workbook does not contain the report template sheet. ${GENERAL_TEMPLATE_HINT}`);
   if (!reports.length) errors.push("No report data was found in the file. Fill at least one green cell with a report number (attendance, outcome, or expense) or a photo/video evidence link, save the file as .xlsx, then upload it again.");
   return { reports, errors };
 }

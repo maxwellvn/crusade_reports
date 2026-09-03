@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { db } from "../db.js";
+import multer from "multer";
+import { tmpdir } from "node:os";
+import { unlink } from "node:fs/promises";
+import { db, METRIC_FIELDS } from "../db.js";
 import { backupDatabase } from "../databaseProtection.js";
 import { registrationCrusadeEditSchema, registrationSchema, manualOrgUpdateSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
@@ -8,14 +11,18 @@ import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
 import { ensureReportingOpen, isManualGroupsEnabled, isManualZonesEnabled } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
+import { generatePortalReportTemplate, removeGeneratedTemplate, parsePortalReportTemplateInWorker } from "../portalReportTemplateJobs.js";
+import { portalCrusadeReportSchema } from "../validation.js";
+import { validIsoDate, invalidMediaLink, changedPortalTemplateFields } from "./zonePortal.js";
+import { shouldDirectCommitReport } from "../portalReportImport.js";
 import { parseReportPayload, removeUploadedFiles, withReportPhotoUpload } from "../reportMedia.js";
 import { sendExport, sendStreamingExport } from "./exporter.js";
 import { registrationImporter } from "./registrationImporter.js";
 import { typeLabel, READINESS_LABELS, ORG_TYPE_LABELS, yesNo, phone } from "../labels.js";
 import { COUNTRIES, resolveCountryName } from "./countries.js";
-import { CRUSADE_TYPES } from "../../client/src/lib/constants.js";
+import { CRUSADE_TYPES, ONLINE_TYPES } from "../../client/src/lib/constants.js";
 import { loadZones } from "./zones.js";
-import { cachedDashboardData } from "../dashboardCache.js";
+import { cachedDashboardData, clearDashboardCache } from "../dashboardCache.js";
 import { registrationDashboardData, scheduleRegistrationDashboardRefresh } from "../registrationDashboardSnapshot.js";
 
 export const registrations = Router();
@@ -340,7 +347,19 @@ export function updateRegistrationCrusade(id, d) {
 registrations.post("/find", wrap((req, res) => {
   enforcePublicLookupLimit(req);
   res.setHeader("Cache-Control", "no-store");
-  res.json({ rows: findCrusadesForLookup(req.body?.lookup) });
+  const rows = findCrusadesForLookup(req.body?.lookup);
+  // Unreported total is uncapped — the list above stops at 250, but the bulk
+  // upload offer needs the real number.
+  const total_pending = normalizeCrusadeLookup(req.body?.lookup).length >= 2
+    ? db.prepare(`
+        SELECT COUNT(*) AS n
+        FROM registration_items i
+        JOIN registrations r ON r.id = i.registration_id
+        WHERE ${LOOKUP_MATCH_SQL} AND (i.program = 'public' OR i.program IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
+      `).get({ lookup: normalizeCrusadeLookup(req.body?.lookup) }).n
+    : 0;
+  res.json({ rows, total_pending });
 }));
 
 registrations.post("/find/:id/report", withReportPhotoUpload(wrap((req, res) => {
@@ -361,6 +380,139 @@ registrations.post("/find/:id/report", withReportPhotoUpload(wrap((req, res) => 
   }
   res.status(201).json(submitRegisteredCrusadeReport(item, body, files));
 })));
+
+// Bulk self-service reporting: reporters with many registered crusades (the
+// per-crusade dialog caps out around 50) download a portal-style Excel
+// template of THEIR unreported items and upload it back. Every Registration
+// ID is re-verified against the lookup on upload, so a stolen file without
+// the email address is useless.
+function findBulkTemplateRows(lookup) {
+  const l = requireCrusadeLookup(lookup);
+  return db.prepare(`
+    SELECT i.id, i.event_type,
+           CASE WHEN i.event_type = 'other' THEN COALESCE(NULLIF(i.other_event_type, ''), 'Other') ELSE COALESCE(i.other_event_type, '') END AS other_event_type,
+           i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
+           i.country, i.city, i.city_place_id, i.venue, i.minister_name
+    FROM registration_items i
+    JOIN registrations r ON r.id = i.registration_id
+    WHERE ${LOOKUP_MATCH_SQL} AND (i.program = 'public' OR i.program IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
+    ORDER BY COALESCE(i.event_date, i.plan_date), i.id
+  `).all({ lookup: l });
+}
+
+const findBulkUpload = multer({ dest: tmpdir(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
+
+registrations.post("/find/bulk-template", wrap(async (req, res) => {
+  enforcePublicLookupLimit(req);
+  ensureReportingOpen();
+  const rows = findBulkTemplateRows(req.body?.lookup);
+  if (!rows.length) throw new ApiError(404, "NOT_FOUND", "No unreported registered crusades were found for that email address or KingsChat username.");
+  const path = await generatePortalReportTemplate({ rows, dashboardName: "Your registered crusades" });
+  await new Promise((resolve, reject) => {
+    res.download(path, "your-crusade-report-template.xlsx", (error) => {
+      removeGeneratedTemplate(path).finally(() => error ? reject(error) : resolve());
+    });
+  });
+}));
+
+registrations.post("/find/bulk-report", findBulkUpload.single("file"), wrap(async (req, res) => {
+  ensureReportingOpen();
+  enforcePublicLookupLimit(req);
+  if (!req.file) throw new ApiError(400, "NO_FILE", "Choose a completed .xlsx report template.");
+  const lookup = req.body?.lookup;
+  let parsedWorkbook;
+  const controller = new AbortController();
+  res.once("close", () => { if (!res.writableFinished) controller.abort(); });
+  try {
+    parsedWorkbook = await parsePortalReportTemplateInWorker(req.file.path, { signal: controller.signal });
+  } catch (error) {
+    throw new ApiError(422, "BAD_TEMPLATE", error.message || "Could not read the report template.");
+  } finally {
+    if (req.file?.path) await unlink(req.file.path).catch(() => {});
+  }
+
+  const errors = [...parsedWorkbook.errors];
+  const warnings = [];
+  const validated = [];
+  let alreadySubmitted = 0;
+  for (const uploaded of parsedWorkbook.reports) {
+    const item = registrationForLookup(uploaded.registration_item_id, lookup);
+    if (!item) {
+      errors.push(`Row ${uploaded.row_number}: Registration ID ${uploaded.registration_item_id} was not found for that email address or KingsChat username.`);
+      continue;
+    }
+    if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
+      alreadySubmitted += 1;
+      continue;
+    }
+    const changedFixedFields = changedPortalTemplateFields(uploaded, item);
+    if (changedFixedFields.length) {
+      errors.push(`Row ${uploaded.row_number}: protected registration fields were changed (${changedFixedFields.join(", ")}). Download a fresh template.`);
+      continue;
+    }
+    if (!validIsoDate(uploaded.event_date)) {
+      errors.push(`Row ${uploaded.row_number}: Date Held must be a valid date in YYYY-MM-DD format.`);
+      continue;
+    }
+    const badPhotoLink = invalidMediaLink(uploaded.photo_links);
+    const badVideoLink = invalidMediaLink(uploaded.video_links);
+    if (badPhotoLink || badVideoLink) {
+      errors.push(`Row ${uploaded.row_number}: ${badPhotoLink ? "Photo Links" : "Video Links"} contains an invalid link. Use complete http:// or https:// links, separated by commas or new lines.`);
+      continue;
+    }
+    const crusade = {
+      format: ONLINE_TYPES.includes(item.event_type) ? "online" : "physical",
+      event_type: item.event_type,
+      other_event_type: item.event_type === "other" ? (item.other_event_type || "Other") : (item.other_event_type || ""),
+      event_name: item.event_name,
+      country: item.country,
+      city: item.city,
+      city_place_id: item.city_place_id || "",
+      event_date: item.event_date || item.plan_date,
+      attendance: uploaded.attendance,
+      crusade_expense: uploaded.crusade_expense,
+      minister_name: item.minister_name,
+      venue: item.venue,
+      photo_links: uploaded.photo_links,
+      video_links: uploaded.video_links,
+      ...Object.fromEntries(METRIC_FIELDS.map((field) => [field, uploaded[field] || 0])),
+    };
+    const body = { crusade, highlights: "", photo_links: "", video_links: "" };
+    const parsed = portalCrusadeReportSchema.safeParse(body);
+    if (!parsed.success) {
+      errors.push(`Row ${uploaded.row_number}: ${parsed.error.issues[0]?.message || "Check the report details."}`);
+      continue;
+    }
+    validated.push({ item, body: parsed.data });
+  }
+
+  const summary = {
+    reports: validated.length,
+    already_submitted: alreadySubmitted,
+    attendance: validated.reduce((sum, entry) => sum + entry.body.crusade.attendance + entry.body.crusade.online_participation, 0),
+    salvations: validated.reduce((sum, entry) => sum + entry.body.crusade.salvation, 0),
+  };
+  if (errors.length) return res.json({ ok: false, errors: errors.slice(0, 100), warnings, summary });
+  if (!validated.length && alreadySubmitted > 0) {
+    return res.json({ ok: true, committed: true, submitted: 0, skipped_already_submitted: alreadySubmitted, summary });
+  }
+  if (!shouldDirectCommitReport(validated.length, req.query.commit === "1")) {
+    return res.json({ ok: true, committed: false, preview: true, summary });
+  }
+
+  const submittedCount = db.transaction(() => {
+    let count = 0;
+    for (const { item, body } of validated) {
+      submitRegisteredCrusadeReport(item, body);
+      count += 1;
+    }
+    return count;
+  })();
+  clearDashboardCache();
+  backfillCityCoords().catch(() => {});
+  res.status(201).json({ ok: true, committed: true, submitted: submittedCount, skipped_already_submitted: alreadySubmitted, summary });
+}));
 
 registrations.put("/:id", requirePageAccess("registrations"), wrap((req, res) => {
   const parsed = registrationCrusadeEditSchema.safeParse(req.body);

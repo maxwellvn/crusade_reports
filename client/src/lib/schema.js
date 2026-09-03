@@ -27,6 +27,8 @@ const crusade = z
     crusade_expense: z.coerce.number().finite().min(0, "Expense cannot be negative").default(0),
     minister_name: z.string().min(1, "Minister is required"),
     venue: z.string().min(1, "Venue is required"),
+    photo_links: z.string().optional().default(""),
+    video_links: z.string().optional().default(""),
     ...perCrusadeMetrics,
   })
   .refine((c) => c.event_type !== "other" || c.other_event_type.trim().length > 0, {

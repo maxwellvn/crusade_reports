@@ -28,6 +28,14 @@ import "../landing.css"; // campaign fonts; report theme lives in the .reg-page 
 // difference: this captures RESULTS (attendance, salvations, outcomes) for
 // crusades that have already held, whether or not they were pre-registered.
 
+// Imports can carry tens of thousands of rows. Rendering every row as a live
+// form editor (or a review line) freezes the tab, so the lists are capped and
+// the full data still rides in form state — totals and submission stay complete.
+const MAX_ROW_EDITORS = 100;
+const MAX_REVIEW_ROWS = 200;
+const IMPORT_CHUNK = 2000;
+const DRAFT_MAX_CRUSADES = 5000;
+
 const STEPS = ["Who is reporting", "Your crusades", "Evidence & media", "Review"];
 const DRAFT_KEY = "crusade-report-draft-v1";
 const clearStoredDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ } };
@@ -124,6 +132,9 @@ export function ReportForm() {
         const values = getValues();
         const hasProgress = Object.values(values).some((value) => Array.isArray(value) ? value.length > 0 : String(value || "").trim());
         if (!hasProgress && !batchType) return clearStoredDraft();
+        // Huge imports blow the localStorage quota and burn seconds serializing
+        // on every chunk — drafts only cover manually-sized entries.
+        if ((values.crusades || []).length > DRAFT_MAX_CRUSADES) return;
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step, batchType, savedAt: Date.now() }));
       } catch { /* storage may be unavailable or full */ }
     };
@@ -133,11 +144,16 @@ export function ReportForm() {
     return () => { clearTimeout(timer); subscription.unsubscribe(); };
   }, [watch, getValues, step, batchType, done]);
 
-  const totals = (crusades || []).reduce(
-    (a, c) => ({ n: a.n + 1, onsite: a.onsite + (+c.attendance || 0), online: a.online + (+c.online_participation || 0) }),
-    { n: 0, onsite: 0, online: 0 }
-  );
-  totals.att = totals.onsite + totals.online;
+  // 43k-row imports: every render must stay cheap, so totals only recompute
+  // when the crusades array reference actually changes.
+  const totals = React.useMemo(() => {
+    const t = (crusades || []).reduce(
+      (a, c) => ({ n: a.n + 1, onsite: a.onsite + (+c.attendance || 0), online: a.online + (+c.online_participation || 0) }),
+      { n: 0, onsite: 0, online: 0 }
+    );
+    t.att = t.onsite + t.online;
+    return t;
+  }, [crusades]);
 
   // ---- Handlers ---------------------------------------------------------------
   function applyScope(scope) {
@@ -409,7 +425,19 @@ export function ReportForm() {
                         phone_number: v.phone_number, kingschat_username: v.kingschat_username,
                       };
                     }}
-                    onLoaded={(rows) => crusadeArray.replace(rows.map((r) => ({ ...emptyCrusade(), ...r })))}
+                    onLoaded={async (rows, onProgress) => {
+                      // Load in chunks with paint yields so the tab stays alive on
+                      // huge imports; report percent back to the import panel.
+                      crusadeArray.replace([]);
+                      const total = rows.length;
+                      for (let i = 0; i < total; i += IMPORT_CHUNK) {
+                        const chunk = rows.slice(i, i + IMPORT_CHUNK).map((r) => ({ ...emptyCrusade(), ...r }));
+                        crusadeArray.append(chunk, { shouldFocus: false });
+                        onProgress?.({ loaded: Math.min(i + IMPORT_CHUNK, total), total });
+                        // eslint-disable-next-line no-await-in-loop
+                        await new Promise((resolve) => setTimeout(resolve, 0));
+                      }
+                    }}
                   />
                   <Card>
                     <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
@@ -445,7 +473,12 @@ export function ReportForm() {
                         </div>
                       )}
 
-                      {crusadeArray.fields.map((f, i) => (
+                      {crusadeArray.fields.length > MAX_ROW_EDITORS && (
+                        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                          Showing the first {nfull.format(MAX_ROW_EDITORS)} of {nfull.format(crusadeArray.fields.length)} imported crusade rows — all of them are included when you submit. The Review step lists the totals for every row.
+                        </p>
+                      )}
+                      {crusadeArray.fields.slice(0, MAX_ROW_EDITORS).map((f, i) => (
                         <CrusadeRow key={f.id} id={`crusade-card-${i}`} index={i} form={form} errors={errors} fetchCountries={fetchCountries} cityFetcherFor={cityFetcherFor}
                           manualCities={manualCities} onRemove={() => removeCrusade(i)} onClone={() => cloneCrusade(i)} />
                       ))}
@@ -511,12 +544,17 @@ export function ReportForm() {
                         <Summary label="Video links" value={watch("video_links")?.trim() ? "Added" : "None"} />
                       </div>
                       <div className="rounded-lg border divide-y">
-                        {(crusades || []).map((c, i) => (
+                        {(crusades || []).slice(0, MAX_REVIEW_ROWS).map((c, i) => (
                           <div key={i} className="flex items-center justify-between gap-2 px-3 py-2">
                             <span className="truncate">{typeLabel(c.event_type)}{c.format === "online" ? " (online)" : ""} · {c.city}, {c.country} · {c.venue}</span>
                             <span className="shrink-0 text-muted-foreground">{c.event_date} · {((+c.attendance || 0) + (+c.online_participation || 0)).toLocaleString()} · {(+c.salvation || 0).toLocaleString()} saved</span>
                           </div>
                         ))}
+                        {(crusades || []).length > MAX_REVIEW_ROWS && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">
+                            + {nfull.format((crusades || []).length - MAX_REVIEW_ROWS)} more rows — all included in the totals above.
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

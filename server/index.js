@@ -41,10 +41,11 @@ const app = express();
 app.set("trust proxy", 1); // Coolify terminates HTTPS before forwarding to Node.
 const PORT = process.env.PORT || 4000;
 
-// A single organisation report can contain thousands of crusade rows. Give
-// only this endpoint enough JSON headroom for those legitimate submissions;
-// every other API route keeps the tighter global request limit below.
-app.use("/api/reports", express.json({ limit: "20mb" }), express.urlencoded({ extended: false, limit: "20mb" }), reports);
+// A single organisation report can contain tens of thousands of crusade rows
+// (bulk imports) — the JSON body for a 43k-row report is ~27 MB. Give only this
+// endpoint enough headroom for those legitimate submissions; every other API
+// route keeps the tighter global request limit below.
+app.use("/api/reports", express.json({ limit: "64mb" }), express.urlencoded({ extended: false, limit: "64mb" }), reports);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
