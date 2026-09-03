@@ -7,7 +7,8 @@
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { unlink, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
+import { unlink } from "node:fs/promises";
 import AdmZip from "adm-zip";
 import yazl from "yazl";
 import { Worker } from "node:worker_threads";
@@ -35,7 +36,19 @@ function repackForExcel(path) {
   });
   const outZip = new yazl.ZipFile();
   for (const entry of entries) {
-    outZip.addBuffer(entry.getData(), entry.entryName.replace(/^\//, ""), { compress: true });
+    const entryName = entry.entryName.replace(/^\//, "");
+    let contents = entry.getData();
+    if (/^xl\/worksheets\/sheet\d+\.xml$/.test(entryName)) {
+      const xml = contents.toString("utf8");
+      const protection = xml.match(/<sheetProtection\b[^>]*(?:\/>|>[\s\S]*?<\/sheetProtection>)/)?.[0];
+      if (protection) {
+        // ExcelJS 4's streaming writer serializes sheetProtection after
+        // dataValidations. OOXML requires it immediately after sheetData (and
+        // before autoFilter), so desktop Excel repairs otherwise-valid files.
+        contents = Buffer.from(xml.replace(protection, "").replace("</sheetData>", `</sheetData>${protection}`));
+      }
+    }
+    outZip.addBuffer(contents, entryName, { compress: true });
   }
   outZip.end();
   return new Promise((resolve, reject) => {
