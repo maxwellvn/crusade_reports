@@ -1,10 +1,40 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import AdmZip from "adm-zip";
 import {
   buildPortalReportWorkbook,
   parsePortalReportWorkbook,
   PORTAL_TEMPLATE_COLUMNS,
 } from "./portalReportTemplate.js";
+import { generatePortalReportTemplate, removeGeneratedTemplate } from "./portalReportTemplateJobs.js";
+
+test("downloaded personal dashboard templates use Excel-compatible worksheet element order", async (t) => {
+  const path = await generatePortalReportTemplate({
+    rows: [{
+      id: 770001,
+      event_name: "Abuja Ministry Center Crusade",
+      event_type: "mega",
+      event_date: "2026-09-03",
+      country: "Nigeria",
+      city: "Abuja",
+      venue: "Ministry Center",
+      minister_name: "Pastor Test",
+    }],
+    dashboardName: "Abuja Ministry Center dashboard",
+  });
+  t.after(() => removeGeneratedTemplate(path));
+
+  const worksheetXml = new AdmZip(path).readAsText("xl/worksheets/sheet1.xml");
+  const sheetDataEnd = worksheetXml.indexOf("</sheetData>");
+  const protection = worksheetXml.indexOf("<sheetProtection");
+  const autoFilter = worksheetXml.indexOf("<autoFilter");
+  const validations = worksheetXml.indexOf("<dataValidations");
+
+  assert.ok(sheetDataEnd >= 0);
+  assert.ok(sheetDataEnd < protection, "sheet protection must follow sheet data");
+  assert.ok(protection < autoFilter, "sheet protection must precede the auto-filter");
+  assert.ok(autoFilter < validations, "the auto-filter must precede data validations");
+});
 
 test("personal dashboard report imports support more than 1,000 registration rows", async () => {
   const registrations = Array.from({ length: 1001 }, (_, index) => ({
