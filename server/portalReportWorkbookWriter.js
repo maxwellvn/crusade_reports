@@ -45,8 +45,8 @@ export const PORTAL_TEMPLATE_EDITABLE_KEYS = new Set([
 ]);
 
 const columnNumber = (key) => PORTAL_TEMPLATE_COLUMNS.findIndex(([, field]) => field === key) + 1;
-const MAX_COUNT = 2_147_483_647;
-const MAX_EXPENSE = 1_000_000_000_000_000;
+export const MAX_COUNT = 2_147_483_647;
+export const MAX_EXPENSE = 1_000_000_000_000_000;
 
 function validationError(message) {
   return { showErrorMessage: true, errorStyle: "stop", errorTitle: "Invalid value", error: message };

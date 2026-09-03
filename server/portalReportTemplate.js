@@ -12,6 +12,8 @@ export {
   PORTAL_TEMPLATE_COLUMNS,
   PORTAL_TEMPLATE_EDITABLE_KEYS,
   REGISTRATION_COLUMNS,
+  MAX_COUNT,
+  MAX_EXPENSE,
   buildPortalReportWorkbook,
   writePortalReportWorkbookStream,
 } from "./portalReportWorkbookWriter.js";
