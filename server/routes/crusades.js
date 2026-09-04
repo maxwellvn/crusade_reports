@@ -5,27 +5,19 @@ import { requireAnyPageAccess, requirePageAccess, requireSuperAdmin } from "../a
 import { sendExport } from "./exporter.js";
 import { typeLabel, METRIC_LABELS, FORMAT_LABELS, ORG_TYPE_LABELS, phone } from "../labels.js";
 import {
-  composeMediaLinks, deleteReportPhotos, listReportPhotos, parseReportPayload, removeUploadedFiles,
+  composeMediaLinks, listReportPhotos, parseReportPayload, removeUploadedFiles,
   saveReportPhotos, withReportPhotoUpload,
 } from "../reportMedia.js";
 import { ADMIN_REPORT_ORDER } from "../reportOrdering.js";
 import { cachedDashboardData } from "../dashboardCache.js";
+import { cleanDuplicateReports, deleteCrusadeReportRow, duplicateReportPage } from "../duplicateReports.js";
 
 export const crusades = Router();
 
 export function deleteCrusadeReport(id) {
   const row = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(id);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found.");
-
-  return db.transaction(() => {
-    db.prepare("DELETE FROM crusades WHERE id = ?").run(row.id);
-    const reportDeleted = !db.prepare("SELECT 1 FROM crusades WHERE report_id = ?").get(row.report_id);
-    if (reportDeleted) {
-      deleteReportPhotos(row.report_id);
-      db.prepare("DELETE FROM reports WHERE id = ?").run(row.report_id);
-    }
-    return { id: row.id, report_id: row.report_id, report_deleted: reportDeleted };
-  })();
+  return db.transaction(() => deleteCrusadeReportRow(row))();
 }
 
 // Exact-match filters are driven by dropdowns in the admin tables.
@@ -133,76 +125,6 @@ const CRUSADE_EXPORT_COLUMNS = [
   { header: "KingsChat", value: (row) => row.kingschat_username },
 ];
 
-const DUPLICATE_REPORT_GROUPS = `
-  WITH duplicate_groups AS (
-    SELECT event_date,
-           LOWER(TRIM(event_name)) AS normalized_event_name,
-           LOWER(TRIM(country)) AS normalized_country,
-           LOWER(TRIM(city)) AS normalized_city,
-           COUNT(*) AS duplicate_count,
-           MIN(id) AS keeper_id
-    FROM crusades
-    WHERE event_name IS NOT NULL AND TRIM(event_name) <> ''
-      AND event_date IS NOT NULL AND TRIM(event_date) <> ''
-    GROUP BY event_date, LOWER(TRIM(event_name)), LOWER(TRIM(country)), LOWER(TRIM(city))
-    HAVING COUNT(*) > 1
-  ), matching_groups AS (
-    SELECT duplicate_groups.*
-    FROM duplicate_groups
-    WHERE @search = '' OR EXISTS (
-      SELECT 1
-      FROM crusades search_crusade
-      LEFT JOIN reports search_report ON search_report.id = search_crusade.report_id
-      WHERE search_crusade.event_date = duplicate_groups.event_date
-        AND LOWER(TRIM(search_crusade.event_name)) = duplicate_groups.normalized_event_name
-        AND LOWER(TRIM(search_crusade.country)) = duplicate_groups.normalized_country
-        AND LOWER(TRIM(search_crusade.city)) = duplicate_groups.normalized_city
-        AND (search_crusade.event_name LIKE @search
-          OR search_crusade.city LIKE @search
-          OR search_crusade.country LIKE @search
-          OR search_crusade.zone LIKE @search
-          OR search_crusade.group_name LIKE @search
-          OR search_crusade.church_name LIKE @search
-          OR search_crusade.network_name LIKE @search
-          OR search_report.contact_name LIKE @search
-          OR search_report.contact_email LIKE @search
-          OR search_report.kingschat_username LIKE @search)
-    )
-  )`;
-
-export function duplicateReportPage(query = {}) {
-  const pageSize = Math.min(Math.max(parseInt(query.page_size, 10) || 25, 1), 100);
-  const page = Math.max(parseInt(query.page, 10) || 1, 1);
-  const searchText = String(query.q || "").trim().slice(0, 200);
-  const params = { search: searchText ? `%${searchText}%` : "" };
-  const summary = db.prepare(`${DUPLICATE_REPORT_GROUPS}
-    SELECT COALESCE(SUM(duplicate_count), 0) AS total,
-           COUNT(*) AS duplicate_groups,
-           COALESCE(SUM(duplicate_count - 1), 0) AS excess_reports
-    FROM matching_groups
-  `).get(params);
-  const rows = db.prepare(`${DUPLICATE_REPORT_GROUPS}
-    SELECT c.id, c.report_id, c.created_at AS submitted_at, c.event_date, c.event_name,
-           c.event_type, c.other_event_type, c.format, c.city, c.country, c.venue, c.minister_name,
-           c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
-           c.attendance, c.online_participation,
-           r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username,
-           matching_groups.normalized_event_name, matching_groups.duplicate_count, matching_groups.keeper_id
-    FROM matching_groups
-    JOIN crusades c
-      ON c.event_date = matching_groups.event_date
-      AND LOWER(TRIM(c.event_name)) = matching_groups.normalized_event_name
-      AND LOWER(TRIM(c.country)) = matching_groups.normalized_country
-      AND LOWER(TRIM(c.city)) = matching_groups.normalized_city
-    LEFT JOIN reports r ON r.id = c.report_id
-    ORDER BY c.event_date DESC, matching_groups.normalized_country, matching_groups.normalized_city,
-             matching_groups.normalized_event_name, c.created_at, c.id
-    LIMIT @limit OFFSET @offset
-  `).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
-
-  return { rows, ...summary, page, page_size: pageSize };
-}
-
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
 crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
   const { clause, params, fileFormat } = crusadeExportRequest(req.query);
@@ -224,6 +146,13 @@ crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wra
 // event name, country, and city match after case/whitespace normalization.
 crusades.get("/duplicates", requireSuperAdmin, wrap((req, res) => {
   res.json(duplicateReportPage(req.query));
+}));
+
+crusades.post("/duplicates/clean", requireSuperAdmin, wrap((req, res) => {
+  if (req.body.confirmed !== true) {
+    throw new ApiError(400, "CONFIRMATION_REQUIRED", "Confirm duplicate cleanup before continuing.");
+  }
+  res.json(cleanDuplicateReports(String(req.body.strategy || ""), req.query, req.body.expected_excess_reports));
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.

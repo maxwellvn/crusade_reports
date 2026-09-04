@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { LoadingRows } from "@/components/ui/skeleton";
-import { deleteJSON, getJSON } from "@/lib/api";
+import { deleteJSON, getJSON, postJSON } from "@/lib/api";
 import { typeLabel, nfull, orgHierarchy } from "@/lib/dashboardWidgets";
 import { Pagination } from "@/lib/tableTools";
 
@@ -18,6 +19,8 @@ export function DuplicateReports() {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [deleting, setDeleting] = React.useState(null);
+  const [cleaning, setCleaning] = React.useState(false);
+  const [strategy, setStrategy] = React.useState("best");
   const [reload, setReload] = React.useState(0);
   const page = Math.max(parseInt(params.get("page"), 10) || 1, 1);
   const [query, setQuery] = React.useState(params.get("q") || "");
@@ -76,6 +79,34 @@ export function DuplicateReports() {
     }
   }
 
+  async function cleanDuplicates() {
+    if (!data?.excess_reports) return;
+    const labels = {
+      earliest: "the earliest submitted report",
+      latest: "the latest submitted report",
+      highest: "the report with the highest combined attendance and outcome figures",
+      best: "the most complete report, then the highest figures and most recent report as tie-breakers",
+    };
+    const scope = params.get("q") ? " in the current search" : "";
+    if (!window.confirm(`Clean ${data.duplicate_groups} duplicate set${data.duplicate_groups === 1 ? "" : "s"}${scope}? This keeps ${labels[strategy]} in each set and permanently deletes ${data.excess_reports} extra report${data.excess_reports === 1 ? "" : "s"}.`)) return;
+    setCleaning(true);
+    try {
+      const request = new URLSearchParams();
+      if (params.get("q")) request.set("q", params.get("q"));
+      const result = await postJSON(`/crusades/duplicates/clean?${request.toString()}`, {
+        strategy,
+        confirmed: true,
+        expected_excess_reports: data.excess_reports,
+      });
+      toast.success(`Cleaned ${result.groups_cleaned} duplicate set${result.groups_cleaned === 1 ? "" : "s"}; ${result.reports_deleted} extra report${result.reports_deleted === 1 ? "" : "s"} deleted.`);
+      setReload((value) => value + 1);
+    } catch (error) {
+      toast.error(error.message || "Could not clean duplicate reports.");
+    } finally {
+      setCleaning(false);
+    }
+  }
+
   const totalPages = data ? Math.max(Math.ceil(data.total / PAGE_SIZE), 1) : 1;
 
   return (
@@ -112,6 +143,26 @@ export function DuplicateReports() {
         </div>
       </section>
 
+      <section aria-labelledby="duplicate-cleanup-heading" className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <h3 id="duplicate-cleanup-heading" className="font-semibold text-amber-950">Clean duplicate sets</h3>
+            <p className="mt-1 text-sm leading-6 text-amber-900">Keep one report per set and permanently remove the extras. “Best record” prefers filled registration, location, ministry, reporter and evidence details; it then uses reported figures and recency as tie-breakers. Review uncertain sets manually first.</p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <Select aria-label="Report to keep in each duplicate set" value={strategy} onChange={(event) => setStrategy(event.target.value)} className="h-10 min-w-64 bg-white">
+              <option value="best">Keep best record (recommended)</option>
+              <option value="highest">Keep highest reported figures</option>
+              <option value="latest">Keep latest submitted</option>
+              <option value="earliest">Keep earliest submitted</option>
+            </Select>
+            <Button type="button" variant="destructive" disabled={!data?.excess_reports || cleaning || loading} onClick={cleanDuplicates}>
+              <Trash2 /> {cleaning ? "Cleaning…" : params.get("q") ? "Clean matching sets" : "Clean all duplicates"}
+            </Button>
+          </div>
+        </div>
+      </section>
+
       <section aria-label="Duplicate report records" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           {loading && !data ? (
@@ -141,7 +192,7 @@ export function DuplicateReports() {
                   <tr key={row.id} className="border-b border-slate-200 last:border-0 even:bg-slate-50/45">
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.id === row.keeper_id ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                        {row.id === row.keeper_id ? "Earliest · keep" : `Duplicate · ${row.duplicate_count} total`}
+                        {row.id === row.keeper_id ? "Earliest entry" : `Duplicate · ${row.duplicate_count} total`}
                       </span>
                     </td>
                     <td className="py-3 pr-4 whitespace-nowrap text-slate-600">{row.submitted_at || "—"}</td>

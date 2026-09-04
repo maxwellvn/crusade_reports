@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { db } from "./db.js";
-import { cleanDuplicateReports, crusades, duplicateReportPage } from "./routes/crusades.js";
+import { cleanDuplicateReports, duplicateReportPage } from "./duplicateReports.js";
 
 function insertReport({ marker, eventName, city = "Abuja", country = "Nigeria", date = "2026-09-04" }) {
   const reportId = db.prepare(`
@@ -43,7 +43,25 @@ test("duplicate report page returns only normalized duplicate groups with row pa
   }
 });
 
-test("duplicate report listing is restricted to the super admin", () => {
+test("duplicate report page includes matching reports with blank locations", () => {
+  const marker = `Duplicate Blank Location ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    insertReport({ marker, eventName: marker, city: "", country: "" });
+    insertReport({ marker, eventName: marker, city: "", country: "" });
+
+    const result = duplicateReportPage({ q: marker });
+
+    assert.equal(result.duplicate_groups, 1);
+    assert.equal(result.total, 2);
+    assert.equal(result.rows.length, 2);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("duplicate report listing is restricted to the super admin", async () => {
+  const { crusades } = await import("./routes/crusades.js");
   const route = crusades.stack.find((entry) => entry.route?.path === "/duplicates" && entry.route.methods.get);
   assert.ok(route);
   assert.match(String(route.route.stack[0].handle), /requireSuperAdmin/);
@@ -67,7 +85,7 @@ for (const [strategy, expectedKey] of [["earliest", "earliest"], ["latest", "lat
     db.exec("BEGIN");
     try {
       const ids = duplicateCleanupFixture(marker);
-      const result = cleanDuplicateReports(strategy, { q: marker });
+      const result = cleanDuplicateReports(strategy, { q: marker }, 2);
       const remaining = db.prepare("SELECT id FROM crusades WHERE zone = ?").all(marker).map((row) => row.id);
 
       assert.deepEqual(remaining, [ids[expectedKey]]);
@@ -84,7 +102,20 @@ test("duplicate cleanup rejects an unknown keep strategy", () => {
   assert.throws(() => cleanDuplicateReports("guess", {}), (error) => error.code === "INVALID_STRATEGY");
 });
 
-test("duplicate cleanup endpoint is restricted to the super admin", () => {
+test("duplicate cleanup stops when the confirmed duplicate count is stale", () => {
+  const marker = `Cleanup stale ${Date.now()}`;
+  db.exec("BEGIN");
+  try {
+    duplicateCleanupFixture(marker);
+    assert.throws(() => cleanDuplicateReports("best", { q: marker }, 1), (error) => error.code === "DUPLICATES_CHANGED");
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM crusades WHERE zone = ?").get(marker).n, 3);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("duplicate cleanup endpoint is restricted to the super admin", async () => {
+  const { crusades } = await import("./routes/crusades.js");
   const route = crusades.stack.find((entry) => entry.route?.path === "/duplicates/clean" && entry.route.methods.post);
   assert.ok(route);
   assert.match(String(route.route.stack[0].handle), /requireSuperAdmin/);
