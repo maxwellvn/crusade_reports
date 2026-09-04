@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "client/src/App.jsx"
+        ],
+        "createdAt": "2026-09-04T07:07:37.078Z",
+        "reason": "Assistant reviewed: conditional classes render white on blue only when active and slate text on white when inactive; no gray-on-color state exists."
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "client/src/index.css"
+        ],
+        "createdAt": "2026-09-04T07:07:37.114Z",
+        "reason": "Assistant reviewed: slate-600 table header text on slate-50/90 is an intentional same-hue high-contrast neutral table style."
+      }
+    ]
+  }
+}
