@@ -38,9 +38,32 @@ const cellText = (cell) => {
   if (typeof value === "object") return String(value.text ?? value.result ?? "").trim();
   return String(value).trim();
 };
+const ZERO_WORDS = new Set(["nil", "none", "n/a", "na", "-"]);
+const excelDateText = (cell) => {
+  let value = cell?.value;
+  if (value && typeof value === "object" && !(value instanceof Date)) value = value.result ?? value.text ?? "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const text = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(text)) return text.slice(0, 10);
+  const serial = typeof value === "number" ? value : /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : NaN;
+  if (Number.isFinite(serial) && serial > 0 && serial < 2_958_466) {
+    return new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86_400_000).toISOString().slice(0, 10);
+  }
+  const localDate = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (localDate) {
+    const first = Number(localDate[1]);
+    const second = Number(localDate[2]);
+    const dayFirst = first > 12;
+    const month = dayFirst ? second : first;
+    const day = dayFirst ? first : second;
+    return `${localDate[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  return text;
+};
 const numberValue = (value) => {
-  const text = String(value ?? "").replaceAll(",", "").trim();
-  return text === "" ? 0 : Number(text);
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "" || ZERO_WORDS.has(text)) return 0;
+  return Number(text.replace(/[\s,\u00a0]/g, ""));
 };
 function reportColumnMap(headerRow) {
   const columnByKey = {};
@@ -53,6 +76,7 @@ function reportColumnMap(headerRow) {
 
 function parseReportRow(row, rowNumber, columnByKey, seen, errors) {
   const text = (key) => columnByKey[key] ? cellText(row.getCell(columnByKey[key])) : "";
+  const date = (key) => columnByKey[key] ? excelDateText(row.getCell(columnByKey[key])) : "";
   const hasReportData = [...PORTAL_TEMPLATE_EDITABLE_KEYS].some((key) => text(key) !== "");
   if (!hasReportData) return null;
   const formulaFields = PORTAL_TEMPLATE_COLUMNS.filter(([, key]) => columnByKey[key] && row.getCell(columnByKey[key]).value?.formula).map(([header]) => header);
@@ -76,11 +100,11 @@ function parseReportRow(row, rowNumber, columnByKey, seen, errors) {
     registration_item_id: id,
     registered_event_name: text("registered_event_name"),
     registered_event_type: text("registered_event_type"),
-    registered_event_date: text("registered_event_date"),
+    registered_event_date: date("registered_event_date"),
     registered_country: text("registered_country"),
     format: text("format").toLowerCase(),
     other_event_type: text("other_event_type"),
-    event_date: text("event_date"),
+    event_date: date("event_date"),
     city: text("city"),
     venue: text("venue"),
     minister_name: text("minister_name"),

@@ -82,3 +82,29 @@ test("an unchanged personal dashboard template gives explicit empty-report feedb
     "No report data was found in the file. Fill at least one green cell with a report number (attendance, outcome, or expense) or a photo/video evidence link, save the file as .xlsx, then upload it again.",
   ]);
 });
+
+test("personal dashboard imports normalize Excel dates and common count formatting", async () => {
+  const workbook = await buildPortalReportWorkbook([{
+    id: 880002,
+    event_name: "Formatted report",
+    event_type: "rabah",
+    event_date: "2026-08-29",
+    country: "Nigeria",
+    city: "Lagos",
+    venue: "Test Venue",
+    minister_name: "Pastor Test",
+  }], "Test Zone dashboard");
+  const sheet = workbook.getWorksheet("Report Template");
+  const column = (key) => PORTAL_TEMPLATE_COLUMNS.findIndex(([, field]) => field === key) + 1;
+  sheet.getRow(2).getCell(column("event_date")).value = 46263;
+  sheet.getRow(2).getCell(column("attendance")).value = "1 000";
+  sheet.getRow(2).getCell(column("salvation")).value = "NIL";
+  sheet.getRow(2).getCell(column("bibles_distributed")).value = "2,500";
+
+  const parsed = await parsePortalReportWorkbook(await workbook.xlsx.writeBuffer());
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.reports[0].event_date, "2026-08-29");
+  assert.equal(parsed.reports[0].attendance, 1000);
+  assert.equal(parsed.reports[0].salvation, 0);
+  assert.equal(parsed.reports[0].bibles_distributed, 2500);
+});
