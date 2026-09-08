@@ -21,6 +21,7 @@ const EXTERNAL_API_LIMIT = 120;
 // super admin assigns specific pages, only those pages are accessible.
 export const ASSIGNABLE_PAGES = [
   { key: "dashboard", label: "Reports dashboard", path: "/dashboard" },
+  { key: "dashboard/collective-report", label: "Collective report", path: "/dashboard/collective-report" },
   { key: "crusades", label: "Reports", path: "/crusades" },
   { key: "dashboard/media-reports", label: "Media reports", path: "/dashboard/media-reports" },
   { key: "registrations", label: "Registered crusades", path: "/registrations" },

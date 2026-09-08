@@ -30,6 +30,7 @@ import { countryCoverage } from "./routes/countryCoverage.js";
 import { countryConsolidation } from "./routes/countryConsolidation.js";
 import { pastoralChecklist } from "./routes/pastoralChecklist.js";
 import { blwCampus } from "./routes/blwCampus.js";
+import { collectiveReport } from "./routes/collectiveReport.js";
 import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
@@ -85,6 +86,7 @@ app.use("/api/country-coverage", countryCoverage);
 app.use("/api/admin/country-consolidation", countryConsolidation);
 app.use("/api/zone-checklist", pastoralChecklist);
 app.use("/api/blw-campus", blwCampus);
+app.use("/api/collective-report", collectiveReport);
 app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 
