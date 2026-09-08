@@ -38,6 +38,7 @@ const crusade = z
     venue: z.string().trim().min(1, "Venue is required").max(1000),
     photo_links: z.string().trim().max(8000).optional().default(""),
     video_links: z.string().trim().max(8000).optional().default(""),
+    spreadsheet_imported: z.boolean().optional().default(false),
     ...perCrusadeMetrics,
   })
   .refine((c) => c.event_type !== "other" || c.other_event_type.length > 0, {

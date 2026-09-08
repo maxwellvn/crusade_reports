@@ -72,6 +72,10 @@ export function Settings() {
   const [lookup, setLookup] = React.useState({ state: "idle", user: null, message: "" });
   const [reportingOpen, setReportingOpen] = React.useState(null);
   const [savingReporting, setSavingReporting] = React.useState(false);
+  const [spreadsheetDuplicateProtection, setSpreadsheetDuplicateProtection] = React.useState(null);
+  const [savingSpreadsheetDuplicateProtection, setSavingSpreadsheetDuplicateProtection] = React.useState(false);
+  const [organizationReportCredit, setOrganizationReportCredit] = React.useState(null);
+  const [savingOrganizationReportCredit, setSavingOrganizationReportCredit] = React.useState(false);
   const [landingPage, setLandingPage] = React.useState("");
   const [landingOptions, setLandingOptions] = React.useState([]);
   const [savingLanding, setSavingLanding] = React.useState(false);
@@ -155,6 +159,8 @@ export function Settings() {
     getJSON("/campaign-settings")
       .then((settings) => {
         setReportingOpen(settings.reporting_open);
+        setSpreadsheetDuplicateProtection(settings.spreadsheet_duplicate_protection_enabled ?? true);
+        setOrganizationReportCredit(settings.organization_report_credit_enabled ?? false);
         setLandingPage(settings.default_landing_page || "");
         setLandingOptions(Array.isArray(settings.landing_page_options) ? settings.landing_page_options : []);
         setManualZones(settings.manual_zones_enabled ?? false);
@@ -256,6 +262,38 @@ export function Settings() {
       toast.error(error.message);
     } finally {
       setSavingReporting(false);
+    }
+  }
+
+  async function toggleSpreadsheetDuplicateProtection() {
+    const next = !spreadsheetDuplicateProtection;
+    setSavingSpreadsheetDuplicateProtection(true);
+    try {
+      const settings = await putJSON("/campaign-settings", { spreadsheet_duplicate_protection_enabled: next });
+      setSpreadsheetDuplicateProtection(settings.spreadsheet_duplicate_protection_enabled);
+      toast.success(settings.spreadsheet_duplicate_protection_enabled
+        ? "Spreadsheet duplicate protection enabled."
+        : "Spreadsheet duplicate protection disabled.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingSpreadsheetDuplicateProtection(false);
+    }
+  }
+
+  async function toggleOrganizationReportCredit() {
+    const next = !organizationReportCredit;
+    setSavingOrganizationReportCredit(true);
+    try {
+      const settings = await putJSON("/campaign-settings", { organization_report_credit_enabled: next });
+      setOrganizationReportCredit(settings.organization_report_credit_enabled);
+      toast.success(settings.organization_report_credit_enabled
+        ? "Organization-level report credit enabled."
+        : "Strict registration-linked progress restored.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSavingOrganizationReportCredit(false);
     }
   }
 
@@ -446,6 +484,31 @@ export function Settings() {
             <span className="sr-only">{reportingOpen ? "Close reporting" : "Open reporting"}</span>
           </button>
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="Spreadsheet duplicate reports" description="Control whether repeated crusade reports are removed from Excel uploads before submission.">
+        <SettingsToggle
+          label="Duplicate protection"
+          description={spreadsheetDuplicateProtection
+            ? "On - uploaded rows matching an existing report or an earlier row in the workbook are skipped."
+            : "Off - duplicate rows in spreadsheet uploads are accepted. Manual reports and registered-crusade IDs remain protected."}
+          checked={Boolean(spreadsheetDuplicateProtection)}
+          disabled={spreadsheetDuplicateProtection === null || savingSpreadsheetDuplicateProtection}
+          onChange={toggleSpreadsheetDuplicateProtection}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Planned versus reported" description="Choose how submitted reports count toward each organization's planned crusades on the dashboard.">
+        <SettingsToggle
+          label="Count organization reports toward plan"
+          description={organizationReportCredit
+            ? "On - every submitted report counts toward the matching organization's plan, whether or not it is linked to a registration. Credit is capped at the planned total."
+            : "Off - only reports linked to specific registered crusades count toward planned progress."}
+          checked={Boolean(organizationReportCredit)}
+          disabled={organizationReportCredit === null || savingOrganizationReportCredit}
+          onChange={toggleOrganizationReportCredit}
+        />
+        <p className="mt-3 text-xs leading-5 text-slate-500">This changes dashboard calculations only. Reports submitted for registered crusades still save and remain linked normally.</p>
       </SettingsSection>
 
       <SettingsSection title="MyStreamSpace totals" description="Maintain the additional MyStreamSpace crusades and online attendance that cannot be imported automatically. These figures are added to existing MyStreamSpace reports.">

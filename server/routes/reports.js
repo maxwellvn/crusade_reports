@@ -4,7 +4,7 @@ import { portalCrusadeReportSchema, reportSchema } from "../validation.js";
 import { wrap, ApiError } from "../logger.js";
 import { requireAnyPageAccess, requireExternalOrPageAccess, requirePageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
-import { ensureReportingOpen } from "../appSettings.js";
+import { ensureReportingOpen, shouldProtectAgainstDuplicateReports } from "../appSettings.js";
 import { applyPortalScope } from "../portalScope.js";
 import { cachedDashboardData } from "../dashboardCache.js";
 import {
@@ -149,7 +149,8 @@ export const insertReport = db.transaction((d) => {
     // Rows linked to a registration are uniqueness-guarded by the unique
     // registration_item_id index — never drop them on a name/date heuristic.
     const key = `${c.event_date}|${String(c.event_name || "").toLowerCase()}|${String(c.country || "").toLowerCase()}|${String(c.city || "").toLowerCase()}`;
-    if (!c.registration_item_id && c.event_name && c.event_date) {
+    const duplicateProtectionEnabled = shouldProtectAgainstDuplicateReports(c.spreadsheet_imported ? "spreadsheet" : "manual");
+    if (duplicateProtectionEnabled && !c.registration_item_id && c.event_name && c.event_date) {
       if (seenInPayload.has(key) || alreadyReportedStmt.get({
         event_date: c.event_date, event_name: c.event_name, country: c.country || "", city: c.city || "",
       })) {
@@ -157,7 +158,7 @@ export const insertReport = db.transaction((d) => {
         continue;
       }
       seenInPayload.add(key);
-    } else if (seenInPayload.has(key)) {
+    } else if (duplicateProtectionEnabled && seenInPayload.has(key)) {
       skippedDuplicates += 1;
       continue;
     }

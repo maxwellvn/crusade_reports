@@ -274,11 +274,17 @@ const KPI_WIDGETS = {
   },
   registered_reported: {
     title: "Registered Crusades Held",
-    render: (s) => <StatTile label="Registered Crusades Held" value={nfull.format(s.registered?.reported || 0)} sub="Reports linked to registrations" />,
+    render: (s) => <StatTile label="Registered Crusades Held" value={nfull.format(s.registered?.reported || 0)}
+      sub={s.registered?.organization_report_credit_enabled
+        ? "Submitted reports counted toward each organization's plan"
+        : "Reports linked to registrations"} />,
   },
   awaiting_reports: {
     title: "Awaiting Reports",
-    render: (s) => <StatTile label="Awaiting Reports" value={nfull.format(s.registered?.awaiting || 0)} sub="Registered crusades without reports" />,
+    render: (s) => <StatTile label="Awaiting Reports" value={nfull.format(s.registered?.awaiting || 0)}
+      sub={s.registered?.organization_report_credit_enabled
+        ? "Planned crusades still uncounted for their organization"
+        : "Registered crusades without reports"} />,
   },
 };
 

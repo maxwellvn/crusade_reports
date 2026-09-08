@@ -10,6 +10,30 @@ export function ensureReportingOpen() {
   if (!isReportingOpen()) throw new ApiError(403, "REPORTING_CLOSED", "Reporting is not open yet.");
 }
 
+// On by default: spreadsheet uploads skip rows that repeat an existing report
+// or an earlier row in the same workbook. Administrators may temporarily turn
+// this off when legitimate same-name crusades share a date and location.
+export const isSpreadsheetDuplicateProtectionEnabled = () => {
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'spreadsheet_duplicate_protection_enabled'").get();
+  return row ? row.value === "1" : true;
+};
+export const setSpreadsheetDuplicateProtectionEnabled = (enabled) => db.prepare(
+  "INSERT INTO app_settings (key, value) VALUES ('spreadsheet_duplicate_protection_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+).run(enabled ? "1" : "0");
+export const shouldProtectAgainstDuplicateReports = (submissionSource) => (
+  submissionSource !== "spreadsheet" || isSpreadsheetDuplicateProtectionEnabled()
+);
+
+// Off by default: when enabled, independently submitted reports can satisfy an
+// organisation's planned count on dashboards without changing report records
+// or creating synthetic registration links.
+export const isOrganizationReportCreditEnabled = () => (
+  db.prepare("SELECT value FROM app_settings WHERE key = 'organization_report_credit_enabled'").get()?.value === "1"
+);
+export const setOrganizationReportCreditEnabled = (enabled) => db.prepare(
+  "INSERT INTO app_settings (key, value) VALUES ('organization_report_credit_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+).run(enabled ? "1" : "0");
+
 // Routes an admin can pick as the post-login / /admin landing page. Constrained
 // so a bad value can never brick the redirect — only real admin surface routes.
 const LANDING_PAGE_OPTIONS = ["/dashboard", "/registrations/live", "/registrations", "/crusades", "/dashboard/zone-links"];

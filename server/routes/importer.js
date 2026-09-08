@@ -8,6 +8,7 @@ import { loadZones } from "./zones.js";
 import { resolveCountryName } from "./countries.js";
 import { db } from "../db.js";
 import { reportSchema } from "../validation.js";
+import { isSpreadsheetDuplicateProtectionEnabled } from "../appSettings.js";
 // Reuse the client's single source of truth so the template columns, the dropdown
 // options and the validator can never drift apart. constants.js is pure data.
 import { CRUSADE_TYPES, CORE_OUTCOMES, EXTENDED_OUTCOMES } from "../../client/src/lib/constants.js";
@@ -167,15 +168,16 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
   // this file or already reported. Duplicates are excluded from the loaded
   // rows and surfaced as counts so the reporter submits the rest confidently.
   const dupKey = (c) => `${c.event_date}|${c.event_name.toLowerCase()}|${c.country.toLowerCase()}|${c.city.toLowerCase()}`;
+  const duplicateProtectionEnabled = isSpreadsheetDuplicateProtectionEnabled();
   const seenInFile = new Set();
   const dupInFile = [];
   const dupReported = [];
-  const reportedKeys = new Set(
+  const reportedKeys = duplicateProtectionEnabled ? new Set(
     db.prepare(`
       SELECT event_date || '|' || lower(event_name) || '|' || lower(coalesce(country, '')) || '|' || lower(coalesce(city, '')) AS k
       FROM crusades WHERE event_name IS NOT NULL AND trim(event_name) <> '' AND event_date IS NOT NULL AND event_date <> ''
     `).all().map((row) => row.k)
-  );
+  ) : new Set();
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const get = (k) => (colByKey[k] ? cellValue(row.getCell(colByKey[k])) : "");
@@ -215,9 +217,10 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
       online_participation: toInt(get("online_participation"), 0),
       minister_name: raw("minister_name"), venue: raw("venue"),
       photo_links: raw("photo_links"), video_links: raw("video_links"),
+      spreadsheet_imported: true,
     };
     for (const m of METRIC_COLS) c[m.k] = toInt(get(m.k), 0);
-    if (c.event_name && c.event_date) {
+    if (duplicateProtectionEnabled && c.event_name && c.event_date) {
       const key = dupKey(c);
       if (seenInFile.has(key)) { dupInFile.push(r); continue; }
       if (reportedKeys.has(key)) { dupReported.push(r); continue; }

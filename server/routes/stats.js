@@ -5,23 +5,25 @@ import { requirePageAccess } from "../auth.js";
 import { resolveCountryName } from "./countries.js";
 import { cachedDashboardData } from "../dashboardCache.js";
 import { applyMyStreamSpaceAdjustment, getManualMyStreamSpaceAdjustment } from "../mystreamspaceStats.js";
+import { isOrganizationReportCreditEnabled } from "../appSettings.js";
 
 export const stats = Router();
 
 // Everything aggregates from the crusades fact table — one source, no drift.
 const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 
-// Registration progress must compare like with like: a registered crusade is
-// "held" only after a report has been submitted for that exact item. General
-// reports without a registration_item_id still belong in outcome totals, but
-// never in planned-vs-held progress. Scoped to program='public' (NULL allowed
-// for pre-migration rows) so Blue Elite registrations don't appear here.
+// Registration progress compares planned registrations with held reports.
+// Default: a crusade is held only after a report is linked to that exact item.
+// When organization report credit is on, unlinked reports for the same
+// organisation also count, capped at that organisation's planned total.
+// Scoped to program='public' (NULL allowed for pre-migration rows) so Blue
+// Elite registrations don't appear here.
 const REGISTRATION_DIMENSIONS = new Set(["event_type", "organization_type", "zone", "network_name", "country", "city"]);
 export function registrationProgress(column, limit = 500) {
   if (!REGISTRATION_DIMENSIONS.has(column)) throw new Error(`Unsupported registration dimension: ${column}`);
   const qualified = `ri.${column}`;
   if (column === "event_type") {
-    return db.prepare(
+    const rows = db.prepare(
       `SELECT ri.event_type AS key,
               COALESCE(SUM(ri.planned_count), 0) AS planned,
               COUNT(ri.id) AS items,
@@ -44,8 +46,9 @@ export function registrationProgress(column, limit = 500) {
        HAVING COUNT(ri.id) > 0
        ORDER BY planned DESC, key COLLATE NOCASE`
     ).all();
+    return isOrganizationReportCreditEnabled() ? applyReportCredit(rows, column) : rows;
   }
-  return db.prepare(
+  const rows = db.prepare(
     `SELECT ${qualified} AS key,
             COALESCE(SUM(ri.planned_count), 0) AS planned,
             COUNT(ri.id) AS items,
@@ -58,6 +61,138 @@ export function registrationProgress(column, limit = 500) {
      GROUP BY ${qualified}
      ORDER BY planned DESC, key COLLATE NOCASE LIMIT ?`
   ).all(limit);
+  return isOrganizationReportCreditEnabled() ? applyReportCredit(rows, column) : rows;
+}
+
+const eligibleReportFilter = `(c.registration_item_id IS NULL OR linked.program = 'public' OR linked.program IS NULL)`;
+
+const organizationIdentity = (alias) => `CASE ${alias}.organization_type
+  WHEN 'network' THEN lower(trim(coalesce(${alias}.network_name, '')))
+  WHEN 'cell' THEN lower(trim(coalesce(${alias}.zone, ''))) || '|' || lower(trim(coalesce(${alias}.group_name, ''))) || '|' || lower(trim(coalesce(${alias}.church_name, ''))) || '|' || lower(trim(coalesce(${alias}.cell_name, '')))
+  WHEN 'church' THEN lower(trim(coalesce(${alias}.zone, ''))) || '|' || lower(trim(coalesce(${alias}.group_name, ''))) || '|' || lower(trim(coalesce(${alias}.church_name, '')))
+  WHEN 'group' THEN lower(trim(coalesce(${alias}.zone, ''))) || '|' || lower(trim(coalesce(${alias}.group_name, '')))
+  ELSE lower(trim(coalesce(${alias}.zone, ''))) END`;
+
+function heldMap(rows) {
+  return new Map(rows.map((row) => [String(row.key || "").trim().toLowerCase(), Number(row.held || 0)]));
+}
+
+function creditedHeldByEventType() {
+  const typeRows = db.prepare(`
+    WITH planned_orgs AS (
+      SELECT ri.organization_type, ${organizationIdentity("ri")} AS org_key, ri.event_type AS dim_key,
+             SUM(ri.planned_count) AS planned
+      FROM registration_items ri
+      WHERE (ri.program = 'public' OR ri.program IS NULL) AND ri.event_type <> 'rabah'
+      GROUP BY ri.organization_type, org_key, ri.event_type
+    ), reported_orgs AS (
+      SELECT c.organization_type, ${organizationIdentity("c")} AS org_key, c.event_type AS dim_key, COUNT(*) AS reported
+      FROM crusades c LEFT JOIN registration_items linked ON linked.id = c.registration_item_id
+      WHERE ${eligibleReportFilter} AND c.event_type <> 'rabah'
+      GROUP BY c.organization_type, org_key, c.event_type
+    )
+    SELECT p.dim_key AS key, SUM(MIN(p.planned, COALESCE(r.reported, 0))) AS held
+    FROM planned_orgs p
+    LEFT JOIN reported_orgs r
+      ON r.organization_type = p.organization_type AND r.org_key = p.org_key AND r.dim_key = p.dim_key
+    GROUP BY p.dim_key
+  `).all();
+  const cellular = db.prepare(`
+    WITH planned_orgs AS (
+      SELECT ri.organization_type, ${organizationIdentity("ri")} AS org_key, SUM(ri.planned_count) AS planned
+      FROM registration_items ri
+      WHERE (ri.program = 'public' OR ri.program IS NULL)
+        AND (ri.organization_type = 'cell' OR ri.event_type = 'rabah')
+      GROUP BY ri.organization_type, org_key
+    ), reported_orgs AS (
+      SELECT c.organization_type, ${organizationIdentity("c")} AS org_key, COUNT(*) AS reported
+      FROM crusades c LEFT JOIN registration_items linked ON linked.id = c.registration_item_id
+      WHERE ${eligibleReportFilter} AND (c.organization_type = 'cell' OR c.event_type = 'rabah')
+      GROUP BY c.organization_type, org_key
+    )
+    SELECT 'cellular' AS key, COALESCE(SUM(MIN(p.planned, COALESCE(r.reported, 0))), 0) AS held
+    FROM planned_orgs p
+    LEFT JOIN reported_orgs r
+      ON r.organization_type = p.organization_type AND r.org_key = p.org_key
+  `).get();
+  return heldMap([...typeRows, cellular]);
+}
+
+function creditedHeldBy(column) {
+  if (column === "event_type") return creditedHeldByEventType();
+  const dim = (alias) => `${alias}.${column}`;
+  const rows = db.prepare(`
+    WITH planned_orgs AS (
+      SELECT ri.organization_type, ${organizationIdentity("ri")} AS org_key, ${dim("ri")} AS dim_key,
+             SUM(ri.planned_count) AS planned
+      FROM registration_items ri
+      WHERE (ri.program = 'public' OR ri.program IS NULL)
+        AND ${dim("ri")} IS NOT NULL AND TRIM(${dim("ri")}) <> ''
+      GROUP BY ri.organization_type, org_key, LOWER(TRIM(${dim("ri")}))
+    ), reported_orgs AS (
+      SELECT c.organization_type, ${organizationIdentity("c")} AS org_key, ${dim("c")} AS dim_key, COUNT(*) AS reported
+      FROM crusades c LEFT JOIN registration_items linked ON linked.id = c.registration_item_id
+      WHERE ${eligibleReportFilter}
+        AND ${dim("c")} IS NOT NULL AND TRIM(${dim("c")}) <> ''
+      GROUP BY c.organization_type, org_key, LOWER(TRIM(${dim("c")}))
+    )
+    SELECT p.dim_key AS key, SUM(MIN(p.planned, COALESCE(r.reported, 0))) AS held
+    FROM planned_orgs p
+    LEFT JOIN reported_orgs r
+      ON r.organization_type = p.organization_type AND r.org_key = p.org_key
+     AND LOWER(TRIM(r.dim_key)) = LOWER(TRIM(p.dim_key))
+    GROUP BY LOWER(TRIM(p.dim_key))
+  `).all();
+  return heldMap(rows);
+}
+
+function applyReportCredit(rows, column) {
+  const held = creditedHeldBy(column);
+  return rows.map((row) => ({
+    ...row,
+    held: held.get(String(row.key || "").trim().toLowerCase()) || 0,
+  }));
+}
+
+export function registrationSummary() {
+  if (!isOrganizationReportCreditEnabled()) {
+    return db.prepare(
+      `SELECT COALESCE(SUM(ri.planned_count), 0) AS total,
+              COUNT(ri.id) AS items,
+              COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance,
+              COUNT(c.id) AS reported,
+              MAX(COALESCE(SUM(ri.planned_count), 0) - COUNT(c.id), 0) AS awaiting,
+              COALESCE(SUM(CASE WHEN ri.readiness_status = 'ready' THEN ri.planned_count ELSE 0 END), 0) AS ready
+       FROM registration_items ri
+       LEFT JOIN crusades c ON c.registration_item_id = ri.id
+       WHERE (ri.program = 'public' OR ri.program IS NULL)`
+    ).get();
+  }
+  return db.prepare(`
+    WITH planned_orgs AS (
+      SELECT ri.organization_type, ${organizationIdentity("ri")} AS org_key,
+             SUM(ri.planned_count) AS planned
+      FROM registration_items ri
+      WHERE (ri.program = 'public' OR ri.program IS NULL)
+      GROUP BY ri.organization_type, org_key
+    ), reported_orgs AS (
+      SELECT c.organization_type, ${organizationIdentity("c")} AS org_key, COUNT(*) AS reported
+      FROM crusades c LEFT JOIN registration_items linked ON linked.id = c.registration_item_id
+      WHERE ${eligibleReportFilter}
+      GROUP BY c.organization_type, org_key
+    ), credited AS (
+      SELECT p.planned, MIN(p.planned, COALESCE(r.reported, 0)) AS reported
+      FROM planned_orgs p LEFT JOIN reported_orgs r
+        ON r.organization_type = p.organization_type AND r.org_key = p.org_key
+    )
+    SELECT COALESCE(SUM(ri.planned_count), 0) AS total,
+           COUNT(ri.id) AS items,
+           COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance,
+           COALESCE((SELECT SUM(reported) FROM credited), 0) AS reported,
+           MAX(COALESCE(SUM(ri.planned_count), 0) - COALESCE((SELECT SUM(reported) FROM credited), 0), 0) AS awaiting,
+           COALESCE(SUM(CASE WHEN ri.readiness_status = 'ready' THEN ri.planned_count ELSE 0 END), 0) AS ready
+    FROM registration_items ri WHERE (ri.program = 'public' OR ri.program IS NULL)
+  `).get();
 }
 
 // GET /api/stats  -> overall totals + breakdowns by category / zone / network / country / month.
@@ -109,21 +244,11 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
               SUM(online_participation) AS online_attendance, SUM(salvation) AS salvation
        FROM crusades GROUP BY key ORDER BY key`
     ).all(),
-    // Planned vs held uses only reports linked to the exact registered item.
-    // Scoped to public registrations so Blue Elite rows stay out of the existing
-    // dashboard's progress numbers.
+    // Planned vs held is registration-linked by default, or organisation-credited
+    // when that setting is on. Blue Elite rows stay out of these progress numbers.
     registered: {
-      ...db.prepare(
-        `SELECT COALESCE(SUM(ri.planned_count), 0) AS total,
-                COUNT(ri.id) AS items,
-                COALESCE(SUM(ri.expected_attendance), 0) AS expected_attendance,
-                COUNT(c.id) AS reported,
-                MAX(COALESCE(SUM(ri.planned_count), 0) - COUNT(c.id), 0) AS awaiting,
-                COALESCE(SUM(CASE WHEN ri.readiness_status = 'ready' THEN ri.planned_count ELSE 0 END), 0) AS ready
-         FROM registration_items ri
-         LEFT JOIN crusades c ON c.registration_item_id = ri.id
-         WHERE (ri.program = 'public' OR ri.program IS NULL)`
-      ).get(),
+      ...registrationSummary(),
+      organization_report_credit_enabled: isOrganizationReportCreditEnabled(),
       by_type: registrationProgress("event_type"),
       by_org_type: registrationProgress("organization_type"),
       by_zone: registrationProgress("zone"),

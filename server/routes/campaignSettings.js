@@ -3,8 +3,11 @@ import { requireSuperAdmin } from "../auth.js";
 import { isReportingOpen, setReportingOpen, getDefaultLandingPage, setDefaultLandingPage, landingPageOptions,
   isManualZonesEnabled, setManualZonesEnabled, isManualGroupsEnabled, setManualGroupsEnabled,
   isManualCitiesEnabled, setManualCitiesEnabled,
+  isSpreadsheetDuplicateProtectionEnabled, setSpreadsheetDuplicateProtectionEnabled,
+  isOrganizationReportCreditEnabled, setOrganizationReportCreditEnabled,
   networkDashboardInheritanceSettings, setNetworkDashboardInheritanceEnabled } from "../appSettings.js";
 import { wrap } from "../logger.js";
+import { clearDashboardCache } from "../dashboardCache.js";
 
 export const campaignSettings = Router();
 
@@ -15,6 +18,8 @@ export const getCampaignSettings = () => ({
   manual_zones_enabled: isManualZonesEnabled(),
   manual_groups_enabled: isManualGroupsEnabled(),
   manual_cities_enabled: isManualCitiesEnabled(),
+  spreadsheet_duplicate_protection_enabled: isSpreadsheetDuplicateProtectionEnabled(),
+  organization_report_credit_enabled: isOrganizationReportCreditEnabled(),
   network_dashboard_inherited_crusades: networkDashboardInheritanceSettings(),
 });
 
@@ -24,11 +29,18 @@ export function updateCampaignSettings(body = {}) {
   if (body.manual_zones_enabled != null) setManualZonesEnabled(body.manual_zones_enabled === true);
   if (body.manual_groups_enabled != null) setManualGroupsEnabled(body.manual_groups_enabled === true);
   if (body.manual_cities_enabled != null) setManualCitiesEnabled(body.manual_cities_enabled === true);
+  if (body.spreadsheet_duplicate_protection_enabled != null) {
+    setSpreadsheetDuplicateProtectionEnabled(body.spreadsheet_duplicate_protection_enabled === true);
+  }
+  if (body.organization_report_credit_enabled != null) {
+    setOrganizationReportCreditEnabled(body.organization_report_credit_enabled === true);
+  }
   if (body.network_dashboard_inherited_crusades && typeof body.network_dashboard_inherited_crusades === "object") {
     for (const [name, enabled] of Object.entries(body.network_dashboard_inherited_crusades)) {
       setNetworkDashboardInheritanceEnabled(name, enabled === true);
     }
   }
+  clearDashboardCache();
   return getCampaignSettings();
 }
 
