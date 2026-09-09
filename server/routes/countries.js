@@ -17,6 +17,16 @@ export const COUNTRIES = CODES.map((code) => ({ code, name: DISPLAY_NAME_OVERRID
   .filter((c) => c.name && c.name !== c.code)
   .sort((a, b) => a.name.localeCompare(b.name));
 
+// Spreadsheet contributors sometimes paste labels copied from messages,
+// including a "COUNTRY:" prefix and flag emoji. Strip presentation text before
+// matching while preserving punctuation used by real country names.
+export const normalizeCountryInput = (value) => String(value || "")
+  .normalize("NFKC")
+  .replace(/^\s*country\s*:\s*/i, "")
+  .replace(/[\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, "")
+  .replace(/\s+/g, " ")
+  .trim();
+
 // name (any case) -> ISO code, for resolving a typed country during import.
 export const countryCodeByName = (name) =>
   ({ "st helena": "SH", "st. helena": "SH", türkiye: "TR", turkiye: "TR" }[String(name || "").trim().toLowerCase()]
@@ -76,6 +86,7 @@ const NAME_ALIASES = {
   "palestine": "Palestinian Territories",
   "palestinian territory": "Palestinian Territories",
   "west bank and gaza": "Palestinian Territories",
+  "state of palestine": "Palestinian Territories",
   "saint helena": "Saint Helena",
   "st. helena": "Saint Helena",
   "st helena": "Saint Helena",
@@ -98,13 +109,23 @@ const NAME_ALIASES = {
   "congo (brazzaville)": "Congo - Brazzaville",
   "dr congo (kinshasa)": "Congo - Kinshasa",
   "tanzania, united republic": "Tanzania",
+  "solomon island": "Solomon Islands",
+  "saint lucia": "St. Lucia",
+  "st lucia": "St. Lucia",
+  "saint kitts and nevis": "St. Kitts & Nevis",
+  "st kitts and nevis": "St. Kitts & Nevis",
+  "st. kitts and nevis": "St. Kitts & Nevis",
+  "saint vincent and grenadines": "St. Vincent & Grenadines",
+  "saint vincent and the grenadines": "St. Vincent & Grenadines",
+  "st vincent and grenadines": "St. Vincent & Grenadines",
+  "st. vincent and grenadines": "St. Vincent & Grenadines",
 };
 
 // Map any stored country string to its canonical COUNTRIES name, or "" if
 // unresolvable. Dashboards normalize through this so DISTINCT counts can never
 // exceed COUNTRIES.length (242) — variant spellings collapse into one entry.
 export const resolveCountryName = (name) => {
-  const raw = String(name || "").trim();
+  const raw = normalizeCountryInput(name);
   if (!raw) return "";
   const lowered = raw.toLowerCase();
   if (NAME_ALIASES[lowered]) return NAME_ALIASES[lowered];

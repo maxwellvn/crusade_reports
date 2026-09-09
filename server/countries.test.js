@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { COUNTRIES, resolveCountryName } from "./routes/countries.js";
+import { COUNTRIES, normalizeCountryInput, resolveCountryName } from "./routes/countries.js";
 import { registrationSchema } from "./validation.js";
 
 const validRegistration = (country) => ({
@@ -37,4 +37,18 @@ test("unknown bulk-upload country values are rejected", () => {
   const parsed = registrationSchema.safeParse(validRegistration("Nigria"));
   assert.equal(parsed.success, false);
   assert.match(parsed.error.issues[0].message, /not recognized/);
+});
+
+test("bulk-upload countries tolerate copied labels, flags, and common long names", () => {
+  assert.equal(normalizeCountryInput("COUNTRY: BAHRAIN \u{1F1E7}\u{1F1ED}"), "BAHRAIN");
+  const cases = {
+    "COUNTRY: BAHRAIN \u{1F1E7}\u{1F1ED}": "Bahrain",
+    "COUNTRY: PALESTINE \u{1F1F5}\u{1F1F8}": "Palestinian Territories",
+    "COUNTRY: SOLOMON ISLAND \u{1F1F8}\u{1F1E7}": "Solomon Islands",
+    "COUNTRY: SAINT LUCIA \u{1F1F1}\u{1F1E8}": "St. Lucia",
+    "COUNTRY: SAINT KITTS AND NEVIS \u{1F1F0}\u{1F1F3}": "St. Kitts & Nevis",
+    "COUNTRY: SAINT VINCENT AND GRENADINES \u{1F1FB}\u{1F1E8}": "St. Vincent & Grenadines",
+    "COUNTRY: COOK ISLANDS \u{1F1E8}\u{1F1F0}": "Cook Islands",
+  };
+  for (const [input, expected] of Object.entries(cases)) assert.equal(resolveCountryName(input), expected);
 });
