@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
 import { getJSON, putJSON } from "@/lib/api";
-import { WIDGETS, KPI_IDS, DEFAULT_LAYOUT, DRILL_MAP, Empty } from "@/lib/dashboardWidgets";
+import { WIDGETS, KPI_IDS, DEFAULT_LAYOUT, DRILL_MAP, Empty, nfull, typeLabel } from "@/lib/dashboardWidgets";
 
 const LS_KEY = "crusades-dash-v1"; // first-paint cache only; the server row is the source of truth
 const KPI_TONES = {
@@ -84,6 +84,10 @@ export function Dashboard() {
   function goToRegistrations(filters = {}) {
     if (filters.event_type === "cellular") filters = { cellular: "1" };
     navigate(`/registrations?${new URLSearchParams(filters).toString()}`);
+  }
+
+  function goToRhapsodyEndTime(filters = {}) {
+    navigate(`/crusades?${new URLSearchParams({ date_from: stats.rhapsody_end_time.start_date, ...filters }).toString()}`);
   }
 
   if (error) return <Empty text="Stats are unavailable right now — try again shortly." />;
@@ -173,6 +177,8 @@ export function Dashboard() {
         </section>
       )}
 
+      <RhapsodyEndTimeSection data={stats.rhapsody_end_time} onOpen={goToRhapsodyEndTime} />
+
       <section aria-labelledby="breakdowns-heading" className="space-y-4">
         <div className="flex items-end justify-between gap-4">
           <div><h3 id="breakdowns-heading" className="text-lg font-semibold text-slate-950">Operational breakdowns</h3><p className="mt-1 text-sm text-slate-500">Select any row to inspect the underlying records.</p></div>
@@ -220,5 +226,80 @@ export function Dashboard() {
       </div>
       </section>
     </div>
+  );
+}
+
+function RhapsodyEndTimeSection({ data, onOpen }) {
+  if (!data) return null;
+  const totals = data.totals || {};
+  const dateLabel = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" })
+    .format(new Date(`${data.start_date}T00:00:00Z`));
+  const shortDate = (value) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${value}T00:00:00Z`));
+
+  return (
+    <section aria-labelledby="rhapsody-end-time-heading" className="border-y border-emerald-200 bg-white">
+      <div className="flex flex-col gap-3 border-b border-emerald-100 bg-emerald-50/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 id="rhapsody-end-time-heading" className="text-base font-semibold text-slate-950">Rhapsody End-Time Crusades</h3>
+          <p className="mt-1 text-xs text-slate-600">Crusades held from {dateLabel}</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" className="self-start bg-white sm:self-auto" onClick={() => onOpen()}>
+          View all reports
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 border-b border-slate-200 lg:grid-cols-4">
+        {[
+          ["Crusades held", totals.crusades],
+          ["Countries", totals.countries],
+          ["Combined attendance", Number(totals.attendance || 0) + Number(totals.online_attendance || 0)],
+          ["Souls won", totals.salvation],
+        ].map(([label, value], index) => (
+          <div key={label} className={`min-h-24 p-4 ${index % 2 ? "border-l" : ""} ${index >= 2 ? "border-t lg:border-t-0" : ""} ${index % 4 ? "lg:border-l" : "lg:border-l-0"}`}>
+            <p className="text-xs text-slate-500">{label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{nfull.format(value || 0)}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-[minmax(15rem,0.7fr)_minmax(0,1.3fr)]">
+        <div className="border-b border-slate-200 p-5 lg:border-b-0 lg:border-r">
+          <h4 className="text-xs font-semibold text-slate-700">By crusade type</h4>
+          {!data.by_type?.length ? <Empty text="No Rhapsody End-Time Crusade reports yet." /> : (
+            <div className="mt-4 space-y-2">
+              {data.by_type.map((row) => (
+                <button key={row.key} type="button" onClick={() => onOpen({ event_type: row.key })}
+                  className="flex w-full items-center justify-between gap-3 border-b border-slate-100 py-2 text-left text-sm last:border-0 hover:text-blue-700">
+                  <span>{typeLabel(row.key)}</span>
+                  <span className="shrink-0 font-medium tabular-nums">{nfull.format(row.crusades)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 p-5">
+          <h4 className="text-xs font-semibold text-slate-700">Recent crusades</h4>
+          {!data.recent?.length ? <Empty text="No Rhapsody End-Time Crusade reports yet." /> : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[34rem] text-sm">
+                <thead><tr className="border-b text-left text-xs text-slate-500"><th className="py-2 pr-3 font-medium">Date held</th><th className="py-2 pr-3 font-medium">Crusade</th><th className="py-2 pr-3 font-medium">Type</th><th className="py-2 font-medium">Location</th></tr></thead>
+                <tbody>
+                  {data.recent.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                      <td className="whitespace-nowrap py-2 pr-3 tabular-nums">{shortDate(row.event_date)}</td>
+                      <td className="max-w-48 truncate py-2 pr-3">{row.event_name || typeLabel(row.event_type)}</td>
+                      <td className="whitespace-nowrap py-2 pr-3">{row.event_type === "other" ? row.other_event_type || "Other" : typeLabel(row.event_type)}</td>
+                      <td className="max-w-48 truncate py-2">{[row.city, row.country].filter(Boolean).join(", ") || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }

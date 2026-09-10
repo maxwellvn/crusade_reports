@@ -11,6 +11,45 @@ export const stats = Router();
 
 // Everything aggregates from the crusades fact table — one source, no drift.
 const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
+export const RHAPSODY_END_TIME_START_DATE = "2026-09-01";
+
+export function rhapsodyEndTimeSummary(database = db) {
+  const totals = database.prepare(`
+    SELECT COUNT(*) AS crusades,
+           COALESCE(SUM(attendance), 0) AS attendance,
+           COALESCE(SUM(online_participation), 0) AS online_attendance,
+           COALESCE(SUM(salvation), 0) AS salvation
+    FROM crusades
+    WHERE event_date >= ?
+  `).get(RHAPSODY_END_TIME_START_DATE);
+  const countries = database.prepare(`
+    SELECT DISTINCT TRIM(country) AS country
+    FROM crusades
+    WHERE event_date >= ? AND country IS NOT NULL AND TRIM(country) <> ''
+  `).all(RHAPSODY_END_TIME_START_DATE);
+  totals.countries = new Set(countries.map(({ country }) => resolveCountryName(country) || country.toLowerCase())).size;
+
+  const byType = database.prepare(`
+    SELECT event_type AS key, COUNT(*) AS crusades,
+           COALESCE(SUM(attendance), 0) AS attendance,
+           COALESCE(SUM(online_participation), 0) AS online_attendance,
+           COALESCE(SUM(salvation), 0) AS salvation
+    FROM crusades
+    WHERE event_date >= ?
+    GROUP BY event_type
+    ORDER BY crusades DESC, key COLLATE NOCASE
+  `).all(RHAPSODY_END_TIME_START_DATE);
+
+  const recent = database.prepare(`
+    SELECT id, event_date, event_name, event_type, other_event_type, city, country, zone, network_name
+    FROM crusades
+    WHERE event_date >= ?
+    ORDER BY event_date DESC, id DESC
+    LIMIT 6
+  `).all(RHAPSODY_END_TIME_START_DATE);
+
+  return { start_date: RHAPSODY_END_TIME_START_DATE, totals, by_type: byType, recent };
+}
 
 // Registration progress compares planned registrations with held reports.
 // Default: a crusade is held only after a report is linked to that exact item.
@@ -244,6 +283,7 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
               SUM(online_participation) AS online_attendance, SUM(salvation) AS salvation
        FROM crusades GROUP BY key ORDER BY key`
     ).all(),
+    rhapsody_end_time: rhapsodyEndTimeSummary(),
     // Planned vs held is registration-linked by default, or organisation-credited
     // when that setting is on. Blue Elite rows stay out of these progress numbers.
     registered: {
