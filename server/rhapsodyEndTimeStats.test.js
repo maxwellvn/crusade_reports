@@ -23,6 +23,7 @@ test("Rhapsody End-Time summary starts after 31 August 2026", () => {
     addCrusade("2026-08-31", "NOTC");
     addCrusade("2026-09-01", "RETC 1");
     addCrusade("2026-09-03", "RETC 2");
+    addCrusade("September 4, 2026", "Malformed date");
 
     const after = rhapsodyEndTimeSummary();
     assert.equal(RHAPSODY_END_TIME_START_DATE, "2026-09-01");
@@ -32,6 +33,7 @@ test("Rhapsody End-Time summary starts after 31 August 2026", () => {
     assert.equal(after.totals.salvation, before.totals.salvation + 6);
     assert.equal(after.by_type.find((row) => row.key === "street").crusades >= 2, true);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary NOTC"), false);
+    assert.equal(after.recent.some((row) => row.event_name === "Date Boundary Malformed date"), false);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary RETC 2"), true);
   } finally {
     db.exec("ROLLBACK");

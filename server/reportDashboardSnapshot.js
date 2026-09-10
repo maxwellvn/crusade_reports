@@ -2,7 +2,7 @@ import { Worker, isMainThread } from "node:worker_threads";
 import { db } from "./db.js";
 import { logger } from "./logger.js";
 
-const SNAPSHOT_KEY = "reports-dashboard-v1";
+export const REPORT_DASHBOARD_SNAPSHOT_KEY = "reports-dashboard-v2";
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 let refreshWorker = null;
 let refreshPromise = null;
@@ -13,7 +13,7 @@ const snapshotStatement = () => db.prepare(`
 `);
 
 export function readReportDashboardSnapshot() {
-  const row = snapshotStatement().get(SNAPSHOT_KEY);
+  const row = snapshotStatement().get(REPORT_DASHBOARD_SNAPSHOT_KEY);
   if (!row) return null;
   try {
     return { data: JSON.parse(row.payload), sourceMaxId: row.source_max_id, refreshedAt: row.refreshed_at };
@@ -32,7 +32,7 @@ export function saveReportDashboardSnapshot(data) {
       payload = excluded.payload,
       source_max_id = excluded.source_max_id,
       refreshed_at = excluded.refreshed_at
-  `).run(SNAPSHOT_KEY, JSON.stringify(data), sourceMaxId);
+  `).run(REPORT_DASHBOARD_SNAPSHOT_KEY, JSON.stringify(data), sourceMaxId);
   return { sourceMaxId };
 }
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { db } from "./db.js";
 import {
   readReportDashboardSnapshot,
+  REPORT_DASHBOARD_SNAPSHOT_KEY,
   reportDashboardData,
   saveReportDashboardSnapshot,
 } from "./reportDashboardSnapshot.js";
@@ -10,7 +11,7 @@ import {
 test("reports dashboard serves its persisted snapshot without rebuilding", async () => {
   db.exec("BEGIN");
   try {
-    db.prepare("DELETE FROM registration_dashboard_snapshots WHERE key = 'reports-dashboard-v1'").run();
+    db.prepare("DELETE FROM registration_dashboard_snapshots WHERE key = ?").run(REPORT_DASHBOARD_SNAPSHOT_KEY);
     let builds = 1;
     saveReportDashboardSnapshot({ marker: builds });
     const second = await reportDashboardData(() => ({ marker: ++builds }));

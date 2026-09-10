@@ -87,7 +87,7 @@ export function Dashboard() {
   }
 
   function goToRhapsodyEndTime(filters = {}) {
-    navigate(`/crusades?${new URLSearchParams({ date_from: stats.rhapsody_end_time.start_date, ...filters }).toString()}`);
+    navigate(`/crusades?${new URLSearchParams({ date_from: stats.rhapsody_end_time?.start_date || "2026-09-01", ...filters }).toString()}`);
   }
 
   if (error) return <Empty text="Stats are unavailable right now — try again shortly." />;
@@ -232,10 +232,12 @@ export function Dashboard() {
 function RhapsodyEndTimeSection({ data, onOpen }) {
   if (!data) return null;
   const totals = data.totals || {};
-  const dateLabel = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" })
-    .format(new Date(`${data.start_date}T00:00:00Z`));
-  const shortDate = (value) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
-    .format(new Date(`${value}T00:00:00Z`));
+  const formatDate = (value, options, fallback) => {
+    const date = new Date(`${value || ""}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? fallback : new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "UTC" }).format(date);
+  };
+  const dateLabel = formatDate(data.start_date, { dateStyle: "long" }, "1 September 2026");
+  const shortDate = (value) => formatDate(value, { day: "numeric", month: "short", year: "numeric" }, value || "Date unavailable");
 
   return (
     <section aria-labelledby="rhapsody-end-time-heading" className="border-y border-emerald-200 bg-white">

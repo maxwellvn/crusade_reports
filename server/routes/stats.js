@@ -12,6 +12,11 @@ export const stats = Router();
 // Everything aggregates from the crusades fact table — one source, no drift.
 const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 export const RHAPSODY_END_TIME_START_DATE = "2026-09-01";
+const VALID_EVENT_DATE_SQL = `
+  event_date >= ?
+  AND event_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+  AND date(event_date) IS NOT NULL
+`;
 
 export function rhapsodyEndTimeSummary(database = db) {
   const totals = database.prepare(`
@@ -20,12 +25,12 @@ export function rhapsodyEndTimeSummary(database = db) {
            COALESCE(SUM(online_participation), 0) AS online_attendance,
            COALESCE(SUM(salvation), 0) AS salvation
     FROM crusades
-    WHERE event_date >= ?
+    WHERE ${VALID_EVENT_DATE_SQL}
   `).get(RHAPSODY_END_TIME_START_DATE);
   const countries = database.prepare(`
     SELECT DISTINCT TRIM(country) AS country
     FROM crusades
-    WHERE event_date >= ? AND country IS NOT NULL AND TRIM(country) <> ''
+    WHERE ${VALID_EVENT_DATE_SQL} AND country IS NOT NULL AND TRIM(country) <> ''
   `).all(RHAPSODY_END_TIME_START_DATE);
   totals.countries = new Set(countries.map(({ country }) => resolveCountryName(country) || country.toLowerCase())).size;
 
@@ -35,7 +40,7 @@ export function rhapsodyEndTimeSummary(database = db) {
            COALESCE(SUM(online_participation), 0) AS online_attendance,
            COALESCE(SUM(salvation), 0) AS salvation
     FROM crusades
-    WHERE event_date >= ?
+    WHERE ${VALID_EVENT_DATE_SQL}
     GROUP BY event_type
     ORDER BY crusades DESC, key COLLATE NOCASE
   `).all(RHAPSODY_END_TIME_START_DATE);
@@ -43,7 +48,7 @@ export function rhapsodyEndTimeSummary(database = db) {
   const recent = database.prepare(`
     SELECT id, event_date, event_name, event_type, other_event_type, city, country, zone, network_name
     FROM crusades
-    WHERE event_date >= ?
+    WHERE ${VALID_EVENT_DATE_SQL}
     ORDER BY event_date DESC, id DESC
     LIMIT 6
   `).all(RHAPSODY_END_TIME_START_DATE);
