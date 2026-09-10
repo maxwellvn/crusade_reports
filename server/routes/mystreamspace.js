@@ -14,6 +14,7 @@ import {
   setManualMyStreamSpaceAdjustment,
 } from "../mystreamspaceStats.js";
 import { ApiError, wrap } from "../logger.js";
+import { scheduleReportDashboardRefresh } from "../reportDashboardSnapshot.js";
 
 export const mystreamspace = Router();
 
@@ -25,6 +26,7 @@ mystreamspace.get("/", requireSuperAdmin, (_req, res) => {
 mystreamspace.put("/", requireSuperAdmin, wrap((req, res) => {
   setManualMyStreamSpaceAdjustment(req.body);
   clearDashboardCache();
+  scheduleReportDashboardRefresh({ force: true });
   res.setHeader("Cache-Control", "no-store");
   res.json(getMyStreamSpacePublicStats());
 }));
@@ -62,6 +64,7 @@ mystreamspace.put("/update/:token", wrap((req, res) => {
   requireUpdateToken(req);
   setManualMyStreamSpaceAdjustment(req.body);
   clearDashboardCache();
+  scheduleReportDashboardRefresh({ force: true });
   res.setHeader("Cache-Control", "no-store");
   res.json(getMyStreamSpacePublicStats());
 }));

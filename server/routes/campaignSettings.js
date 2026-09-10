@@ -8,6 +8,7 @@ import { isReportingOpen, setReportingOpen, getDefaultLandingPage, setDefaultLan
   networkDashboardInheritanceSettings, setNetworkDashboardInheritanceEnabled } from "../appSettings.js";
 import { wrap } from "../logger.js";
 import { clearDashboardCache } from "../dashboardCache.js";
+import { scheduleReportDashboardRefresh } from "../reportDashboardSnapshot.js";
 
 export const campaignSettings = Router();
 
@@ -45,4 +46,8 @@ export function updateCampaignSettings(body = {}) {
 }
 
 campaignSettings.get("/", (_req, res) => res.json(getCampaignSettings()));
-campaignSettings.put("/", requireSuperAdmin, wrap((req, res) => res.json(updateCampaignSettings(req.body))));
+campaignSettings.put("/", requireSuperAdmin, wrap((req, res) => {
+  const settings = updateCampaignSettings(req.body);
+  scheduleReportDashboardRefresh({ force: true });
+  res.json(settings);
+}));

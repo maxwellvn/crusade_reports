@@ -925,6 +925,10 @@ db.exec(`
     VALUES (new.id, ${FTS_COLS.map((c) => "new." + c).join(", ")});
   END;
 `);
-// ponytail: unconditional rebuild each boot — the fact table is small; swap for a
-// count check if it ever isn't.
-db.exec(`INSERT INTO crusades_fts(crusades_fts) VALUES ('rebuild')`);
+// Workers open their own database connection. Rebuilding an already synchronized
+// FTS index on every connection becomes costly as report volume grows.
+const crusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades").get().value;
+const indexedCrusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades_fts").get().value;
+if (crusadeCount !== indexedCrusadeCount) {
+  db.exec(`INSERT INTO crusades_fts(crusades_fts) VALUES ('rebuild')`);
+}

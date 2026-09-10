@@ -3,9 +3,9 @@ import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
 import { requirePageAccess } from "../auth.js";
 import { resolveCountryName } from "./countries.js";
-import { cachedDashboardData } from "../dashboardCache.js";
 import { applyMyStreamSpaceAdjustment, getManualMyStreamSpaceAdjustment } from "../mystreamspaceStats.js";
 import { isOrganizationReportCreditEnabled } from "../appSettings.js";
+import { reportDashboardData } from "../reportDashboardSnapshot.js";
 
 export const stats = Router();
 
@@ -234,9 +234,7 @@ export function registrationSummary() {
   `).get();
 }
 
-// GET /api/stats  -> overall totals + breakdowns by category / zone / network / country / month.
-stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
-  const data = cachedDashboardData("stats", () => {
+export function buildReportDashboardData() {
   const totals = db.prepare(`SELECT COUNT(*) AS crusades, SUM(attendance) AS attendance, ${SUMS} FROM crusades`).get();
 
   // attendance = onsite; online_attendance = online_participation. Bars rank by combined reach.
@@ -303,10 +301,14 @@ stats.get("/", requirePageAccess("dashboard"), wrap((_req, res) => {
        GROUP BY r.id ORDER BY r.created_at DESC LIMIT 10`
     ).all(),
   }, getManualMyStreamSpaceAdjustment());
-  });
-  // Revalidate in the browser on every dashboard visit so a value saved from
-  // Settings is visible immediately. The in-process dashboard cache still
-  // protects SQLite from repeated aggregation work and is cleared on updates.
+}
+
+// GET /api/stats -> a persisted dashboard snapshot. Expensive aggregation is
+// refreshed in a worker so opening this page never blocks the HTTP event loop.
+stats.get("/", requirePageAccess("dashboard"), wrap(async (_req, res) => {
+  const data = await reportDashboardData(buildReportDashboardData);
+  // Revalidate in the browser on every visit; the persisted snapshot keeps the
+  // response fast while a worker refreshes changed or five-minute-old figures.
   res.setHeader("Cache-Control", "private, no-cache");
   res.json(data);
 }));

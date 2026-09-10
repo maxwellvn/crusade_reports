@@ -35,6 +35,7 @@ import { databaseProtection } from "./routes/databaseProtection.js";
 import { startDatabaseProtection, stopDatabaseProtection } from "./databaseProtection.js";
 import { renderPageMetadata } from "./pageMeta.js";
 import { scheduleRegistrationDashboardRefresh } from "./registrationDashboardSnapshot.js";
+import { scheduleReportDashboardRefresh } from "./reportDashboardSnapshot.js";
 import { mystreamspace } from "./routes/mystreamspace.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -113,6 +114,7 @@ app.use(errorHandler);
 await startDatabaseProtection();
 const server = app.listen(PORT, () => logger.info(`crusade_reports listening on http://localhost:${PORT}`));
 scheduleRegistrationDashboardRefresh();
+scheduleReportDashboardRefresh();
 
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.once(signal, () => {
