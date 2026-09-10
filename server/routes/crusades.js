@@ -11,6 +11,7 @@ import {
 import { ADMIN_REPORT_ORDER } from "../reportOrdering.js";
 import { cachedDashboardData } from "../dashboardCache.js";
 import { cleanDuplicateReports, deleteCrusadeReportRow, duplicateReportPage } from "../duplicateReports.js";
+import { isRealISODate, isValidHeldDate } from "../validation.js";
 
 export const crusades = Router();
 
@@ -232,6 +233,12 @@ crusades.put("/:id", requirePageAccess("crusades/edit"), withReportPhotoUpload(w
   } catch (error) {
     removeUploadedFiles(files);
     throw error;
+  }
+  if ("event_date" in body && !isValidHeldDate(String(body.event_date || ""))) {
+    removeUploadedFiles(files);
+    throw new ApiError(422, "VALIDATION", isRealISODate(String(body.event_date || ""))
+      ? "Date held cannot be in the future."
+      : "Enter a valid date held in YYYY-MM-DD format.");
   }
   if ("photo_links" in body || "video_links" in body) {
     body.media_links = composeMediaLinks(body.photo_links, body.video_links);

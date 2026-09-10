@@ -14,11 +14,12 @@ const SUMS = METRIC_FIELDS.map((m) => `SUM(${m}) AS ${m}`).join(", ");
 export const RHAPSODY_END_TIME_START_DATE = "2026-09-01";
 const VALID_EVENT_DATE_SQL = `
   event_date >= ?
+  AND event_date <= ?
   AND event_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
   AND date(event_date) IS NOT NULL
 `;
 
-export function rhapsodyEndTimeSummary(database = db) {
+export function rhapsodyEndTimeSummary(database = db, throughDate = new Date().toISOString().slice(0, 10)) {
   const totals = database.prepare(`
     SELECT COUNT(*) AS crusades,
            COALESCE(SUM(attendance), 0) AS attendance,
@@ -26,12 +27,12 @@ export function rhapsodyEndTimeSummary(database = db) {
            COALESCE(SUM(salvation), 0) AS salvation
     FROM crusades
     WHERE ${VALID_EVENT_DATE_SQL}
-  `).get(RHAPSODY_END_TIME_START_DATE);
+  `).get(RHAPSODY_END_TIME_START_DATE, throughDate);
   const countries = database.prepare(`
     SELECT DISTINCT TRIM(country) AS country
     FROM crusades
     WHERE ${VALID_EVENT_DATE_SQL} AND country IS NOT NULL AND TRIM(country) <> ''
-  `).all(RHAPSODY_END_TIME_START_DATE);
+  `).all(RHAPSODY_END_TIME_START_DATE, throughDate);
   totals.countries = new Set(countries.map(({ country }) => resolveCountryName(country) || country.toLowerCase())).size;
 
   const byType = database.prepare(`
@@ -43,7 +44,7 @@ export function rhapsodyEndTimeSummary(database = db) {
     WHERE ${VALID_EVENT_DATE_SQL}
     GROUP BY event_type
     ORDER BY crusades DESC, key COLLATE NOCASE
-  `).all(RHAPSODY_END_TIME_START_DATE);
+  `).all(RHAPSODY_END_TIME_START_DATE, throughDate);
 
   const recent = database.prepare(`
     SELECT id, event_date, event_name, event_type, other_event_type, city, country, zone, network_name
@@ -51,9 +52,9 @@ export function rhapsodyEndTimeSummary(database = db) {
     WHERE ${VALID_EVENT_DATE_SQL}
     ORDER BY event_date DESC, id DESC
     LIMIT 6
-  `).all(RHAPSODY_END_TIME_START_DATE);
+  `).all(RHAPSODY_END_TIME_START_DATE, throughDate);
 
-  return { start_date: RHAPSODY_END_TIME_START_DATE, totals, by_type: byType, recent };
+  return { start_date: RHAPSODY_END_TIME_START_DATE, through_date: throughDate, totals, by_type: byType, recent };
 }
 
 // Registration progress compares planned registrations with held reports.

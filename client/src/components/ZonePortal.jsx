@@ -707,7 +707,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, submissionContex
             <Input value={report.event_name} onChange={(event) => setField("event_name", event.target.value)} />
           </Field>
           <Field label="Date held" required>
-            <Input type="date" value={report.event_date} onChange={(event) => setField("event_date", event.target.value)} />
+            <Input type="date" max={new Date().toISOString().slice(0, 10)} value={report.event_date} onChange={(event) => setField("event_date", event.target.value)} />
           </Field>
           <Field label="Country">
             <Input value={crusade.country || "—"} readOnly aria-readonly="true" className="cursor-not-allowed text-muted-foreground" />

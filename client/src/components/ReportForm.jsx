@@ -652,7 +652,7 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, m
           <Input {...register(p("event_name"))} aria-invalid={!!rowErr.event_name} placeholder="Name this crusade" />
         </Field>
         <Field label="Date" required error={rowErr.event_date?.message} hint="The day the crusade held">
-          <Input type="date" {...register(p("event_date"))} aria-invalid={!!rowErr.event_date} />
+          <Input type="date" max={new Date().toISOString().slice(0, 10)} {...register(p("event_date"))} aria-invalid={!!rowErr.event_date} />
         </Field>
         <Field label="Country" required error={rowErr.country?.message} hint="Where this crusade held">
           <Controller control={control} name={p("country")} render={({ field }) => (

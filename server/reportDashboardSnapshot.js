@@ -2,7 +2,7 @@ import { Worker, isMainThread } from "node:worker_threads";
 import { db } from "./db.js";
 import { logger } from "./logger.js";
 
-export const REPORT_DASHBOARD_SNAPSHOT_KEY = "reports-dashboard-v2";
+export const REPORT_DASHBOARD_SNAPSHOT_KEY = "reports-dashboard-v3";
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 let refreshWorker = null;
 let refreshPromise = null;

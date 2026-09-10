@@ -4,6 +4,15 @@ import { METRIC_KEYS } from "./constants";
 // ponytail: mirrors server/validation.js — separate copy because that one runs in
 // Node and imports server modules. Server is the source of truth; this is UX.
 const nonNegInt = z.coerce.number().int().min(0);
+const isRealISODate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
+const heldDate = z.string()
+  .min(1, "Date is required")
+  .refine(isRealISODate, "Enter a valid date")
+  .refine((value) => value <= new Date().toISOString().slice(0, 10), "Date held cannot be in the future");
 const contactFields = {
   contact_name: z.string().trim().min(2, "Full name is required").max(200),
   contact_email: z.string().trim().email("Enter a valid email address").max(254),
@@ -22,7 +31,7 @@ const crusade = z
     country: z.string().min(1, "Country is required"),
     city: z.string().min(1, "City is required"),
     city_place_id: z.string().optional().default(""),
-    event_date: z.string().min(1, "Date is required"),
+    event_date: heldDate,
     attendance: nonNegInt,
     crusade_expense: z.coerce.number().finite().min(0, "Expense cannot be negative").default(0),
     minister_name: z.string().min(1, "Minister is required"),

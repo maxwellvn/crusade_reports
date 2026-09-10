@@ -111,7 +111,7 @@ export function EditCrusadePage() {
               <Input value={data.event_name || ""} onChange={(e) => set("event_name", e.target.value)} />
             </Field>
             <Field label="Date" required>
-              <Input type="date" value={data.event_date || ""} onChange={(e) => set("event_date", e.target.value)} />
+              <Input type="date" max={new Date().toISOString().slice(0, 10)} value={data.event_date || ""} onChange={(e) => set("event_date", e.target.value)} />
             </Field>
             <Field label="Country" required>
               <Input value={data.country || ""} onChange={(e) => set("country", e.target.value)} />

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { db } from "./db.js";
 import { rhapsodyEndTimeSummary, RHAPSODY_END_TIME_START_DATE } from "./routes/stats.js";
+import { isValidHeldDate } from "./validation.js";
 
 function addCrusade(eventDate, suffix) {
   const reportId = db.prepare(`
@@ -24,8 +25,9 @@ test("Rhapsody End-Time summary starts after 31 August 2026", () => {
     addCrusade("2026-09-01", "RETC 1");
     addCrusade("2026-09-03", "RETC 2");
     addCrusade("September 4, 2026", "Malformed date");
+    addCrusade("2028-11-01", "Future date");
 
-    const after = rhapsodyEndTimeSummary();
+    const after = rhapsodyEndTimeSummary(db, "2026-09-10");
     assert.equal(RHAPSODY_END_TIME_START_DATE, "2026-09-01");
     assert.equal(after.totals.crusades, before.totals.crusades + 2);
     assert.equal(after.totals.attendance, before.totals.attendance + 40);
@@ -34,8 +36,16 @@ test("Rhapsody End-Time summary starts after 31 August 2026", () => {
     assert.equal(after.by_type.find((row) => row.key === "street").crusades >= 2, true);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary NOTC"), false);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary Malformed date"), false);
+    assert.equal(after.recent.some((row) => row.event_name === "Date Boundary Future date"), false);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary RETC 2"), true);
   } finally {
     db.exec("ROLLBACK");
   }
+});
+
+test("held dates must be real dates that are not in the future", () => {
+  assert.equal(isValidHeldDate("2026-09-10", "2026-09-10"), true);
+  assert.equal(isValidHeldDate("2026-02-30", "2026-09-10"), false);
+  assert.equal(isValidHeldDate("2926-09-14", "2026-09-10"), false);
+  assert.equal(isValidHeldDate("8100-08-04", "2026-09-10"), false);
 });

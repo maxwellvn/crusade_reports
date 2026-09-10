@@ -3,6 +3,17 @@ import { METRIC_FIELDS } from "./db.js";
 import { resolveCountryName } from "./routes/countries.js";
 
 const nonNegInt = z.coerce.number().int().min(0);
+export const isRealISODate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
+export const isValidHeldDate = (value, throughDate = new Date().toISOString().slice(0, 10)) =>
+  isRealISODate(value) && value <= throughDate;
+const heldDate = z.string().trim()
+  .min(1, "Event date is required")
+  .refine(isRealISODate, "Enter a valid event date")
+  .refine((value) => !isRealISODate(value) || isValidHeldDate(value), "Date held cannot be in the future");
 const canonicalCountry = z.string().trim().min(1, "Country is required").transform((value, ctx) => {
   const country = resolveCountryName(value);
   if (!country) {
@@ -31,7 +42,7 @@ const crusade = z
     country: canonicalCountry,
     city: z.string().trim().min(1, "City is required"),
     city_place_id: z.string().trim().optional().default(""),
-    event_date: z.string().trim().min(1, "Event date is required"),
+    event_date: heldDate,
     attendance: nonNegInt,
     crusade_expense: z.coerce.number().finite().min(0, "Expense cannot be negative").default(0),
     minister_name: z.string().trim().min(1, "Minister is required"),
