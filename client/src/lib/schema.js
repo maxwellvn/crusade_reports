@@ -252,3 +252,19 @@ export const defaultValues = {
   video_links: "",
   media_links: "",
 };
+
+export const EXPENSE_CATEGORIES = ["Venue", "Publicity & printing", "Sound & equipment", "Transport & logistics", "Refreshments & welfare", "Ministry materials", "Ministers & guests", "Other"];
+export const zoneExpenseReportSchema = z.object({
+  zone_name: z.string().trim().min(2, "Select your zone"),
+  designation: z.enum(["Regional Pastor", "Zonal Director", "Zonal Pastor"], { errorMap: () => ({ message: "Select your designation" }) }), first_name: z.string().trim().min(2, "First name is required"), last_name: z.string().trim().min(2, "Last name is required"),
+  email: z.string().trim().email("Enter a valid email address"), phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"), phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
+  crusade_count: z.coerce.number().int("Enter a whole number").min(1, "Enter how many crusades this covers"),
+  period_from: z.string().min(1, "Enter the start date"), period_to: z.string().min(1, "Enter the end date"),
+  notes: z.string().max(2000).optional().default(""),
+  items: z.array(z.object({
+    category: z.enum(EXPENSE_CATEGORIES, { errorMap: () => ({ message: "Choose a category" }) }),
+    amount_espees: z.coerce.number().min(0.01, "Enter an amount").refine((v) => Math.round(v * 100) === v * 100, "Two decimal places at most"),
+    note: z.string().trim().max(250).optional().default(""),
+  }).refine((item) => item.category !== "Other" || item.note, { message: "Describe this expense", path: ["note"] })).min(1, "Add at least one expense line"),
+}).refine((d) => !d.period_from || !d.period_to || d.period_to >= d.period_from, { message: "End date must be on or after the start", path: ["period_to"] });

@@ -471,6 +471,40 @@ if (/mission_country_code\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(missionSelectionSq
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_mission_selections_assignment ON mission_nation_selections(assigned_country_code)");
 
+// Zonal crusade expense reports: one editable report per zone, itemised in Espees.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS zone_expense_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_code TEXT NOT NULL UNIQUE,
+    zone_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    region TEXT,
+    designation TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone_country_code TEXT NOT NULL,
+    phone_number TEXT NOT NULL,
+    kingschat_username TEXT NOT NULL,
+    crusade_count INTEGER NOT NULL,
+    period_from TEXT NOT NULL,
+    period_to TEXT NOT NULL,
+    total_espees REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS zone_expense_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id INTEGER NOT NULL REFERENCES zone_expense_reports(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    amount_espees REAL NOT NULL,
+    note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_items_report ON zone_expense_items(report_id);
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_reports_updated ON zone_expense_reports(updated_at DESC);
+`);
+
 const resourceColumns = new Set(db.prepare("PRAGMA table_info(resources)").all().map((column) => column.name));
 if (!resourceColumns.has("thumbnail_url")) db.exec("ALTER TABLE resources ADD COLUMN thumbnail_url TEXT");
 

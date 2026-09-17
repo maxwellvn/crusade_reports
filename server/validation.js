@@ -294,3 +294,45 @@ export const manualOrgUpdateSchema = z.object({
   zone: z.string().trim().min(1, "Select a zone from the directory"),
   group_name: z.string().trim().max(200).optional().default(""),
 });
+
+export const EXPENSE_CATEGORIES = [
+  "Venue",
+  "Publicity & printing",
+  "Sound & equipment",
+  "Transport & logistics",
+  "Refreshments & welfare",
+  "Ministry materials",
+  "Ministers & guests",
+  "Other",
+];
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date");
+
+export const EXPENSE_DESIGNATIONS = ["Regional Pastor", "Zonal Director", "Zonal Pastor"];
+
+export const zoneExpenseReportSchema = z.object({
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  designation: z.enum(EXPENSE_DESIGNATIONS, { errorMap: () => ({ message: "Select your designation" }) }),
+  first_name: z.string().trim().min(2, "First name is required").max(100),
+  last_name: z.string().trim().min(2, "Last name is required").max(100),
+  email: z.string().trim().email("Enter a valid email address").max(254),
+  phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"),
+  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
+  crusade_count: z.coerce.number().int("Enter a whole number").min(1, "Enter how many crusades this covers").max(100000),
+  period_from: isoDate,
+  period_to: isoDate,
+  notes: z.string().trim().max(2000).optional().default(""),
+  items: z.array(z.object({
+    category: z.enum(EXPENSE_CATEGORIES, { errorMap: () => ({ message: "Choose a category" }) }),
+    amount_espees: z.coerce.number().min(0.01, "Enter an amount in Espees").max(1e9, "Amount is too large")
+      .refine((v) => Math.round(v * 100) === v * 100, "Use at most two decimal places"),
+    note: z.string().trim().max(250).optional().default(""),
+  })).min(1, "Add at least one expense line").max(200),
+}).refine((data) => data.period_to >= data.period_from, { message: "Period end must be on or after the start", path: ["period_to"] })
+  .refine((data) => data.items.every((item) => item.category !== "Other" || item.note), { message: "Describe the expense when the category is Other", path: ["items"] });
+
+export const zoneExpenseLookupSchema = z.object({
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
+});
