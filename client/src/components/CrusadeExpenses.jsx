@@ -100,8 +100,10 @@ function CrusadeCard({ part, index, count, register, control, setValue, errors, 
   const err = errors?.[part]?.[index] || {};
   const code = crusade?.currency_code || "";
   const local = localSum(crusade, part);
-  return <li className="border-t border-black/10 py-8 first:border-t-0"><div className="flex items-start justify-between gap-4"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{part === "sponsored" ? "Crusade" : "Mega crusade"}{count > 1 ? ` ${index + 1}` : ""}</p>{onRemove && <Button type="button" variant="ghost" size="sm" className="text-slate-500 hover:text-red-700" onClick={onRemove}><Trash2 /> Remove</Button>}</div>
-    <div className="mt-5 grid gap-5 sm:grid-cols-2">
+  // Part A is a single crusade, so it reads as one plain form — no row label,
+  // nothing to remove. Part B repeats, so its rows keep both.
+  return <li className="border-t border-black/10 py-8 first:border-t-0">{part === "own" && <div className="flex items-start justify-between gap-4"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mega crusade{count > 1 ? ` ${index + 1}` : ""}</p>{onRemove && <Button type="button" variant="ghost" size="sm" className="text-slate-500 hover:text-red-700" onClick={onRemove}><Trash2 /> Remove</Button>}</div>}
+    <div className={`grid gap-5 sm:grid-cols-2 ${part === "own" ? "mt-5" : ""}`}>
       <Field label="Crusade name" required error={err.crusade_name?.message}><Input {...register(`${part}.${index}.crusade_name`)} placeholder="Name of the crusade" /></Field>
       <Field label="Nation" required error={err.nation?.message}><Controller control={control} name={`${part}.${index}.nation`} render={({ field }) => (
         <Combobox value={field.value} invalid={Boolean(err.nation)} placeholder="Select or search country" searchPlaceholder="Scroll or type a country…"
