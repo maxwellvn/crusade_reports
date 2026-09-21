@@ -320,7 +320,7 @@ const sponsoredCrusadeSchema = z.object({
   ...crusadeBase,
   pastor_flight: money("Pastor's flight"),
   accompanying_count: z.coerce.number().int().min(0).max(100).default(0),
-  accompanying_flight: money("Accompanying flights"),
+  accompanying_flight: money("Accompanying person's expenses"),
   sponsorship_given: money("Sponsorship already given"),
   other_cost_note: z.string().trim().max(250).optional().default(""),
   other_cost_amount: money("Other costs"),

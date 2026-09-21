@@ -294,7 +294,7 @@ export const zoneExpenseReportSchema = z.object({
     ...crusadeBase,
     pastor_flight: money("the pastor's flight"),
     accompanying_count: z.coerce.number().int().min(0).optional().default(0),
-    accompanying_flight: money("the accompanying flights"),
+    accompanying_flight: money("the accompanying person's expenses"),
     sponsorship_given: money("the sponsorship already given"),
     other_cost_note: z.string().trim().optional().default(""),
     other_cost_amount: money("the other costs"),

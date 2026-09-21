@@ -122,7 +122,7 @@ function CrusadeCard({ part, index, count, register, control, setValue, errors, 
       {part === "sponsored" ? <>
         <AmountField label="Pastor's flight" code={code} error={err.pastor_flight?.message} register={register} name={`${part}.${index}.pastor_flight`} />
         <Field label="Accompanying person(s)" hint="How many travelled with the pastor" error={err.accompanying_count?.message}><Input type="number" inputMode="numeric" min="0" step="1" className="tabular-nums" {...register(`${part}.${index}.accompanying_count`)} /></Field>
-        <AmountField label="Accompanying flights" code={code} error={err.accompanying_flight?.message} register={register} name={`${part}.${index}.accompanying_flight`} />
+        <AmountField label="Accompanying person's expenses" code={code} error={err.accompanying_flight?.message} register={register} name={`${part}.${index}.accompanying_flight`} />
         <AmountField label="Already given for sponsorship" code={code} error={err.sponsorship_given?.message} register={register} name={`${part}.${index}.sponsorship_given`} />
         <AmountField label="Other costs" code={code} error={err.other_cost_amount?.message} register={register} name={`${part}.${index}.other_cost_amount`} />
         <Field label="What were the other costs?" error={err.other_cost_note?.message}><Input {...register(`${part}.${index}.other_cost_note`)} placeholder="Describe them" /></Field>
