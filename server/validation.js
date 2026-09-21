@@ -307,7 +307,7 @@ const crusadeBase = {
   nation: z.string().trim().min(2, "Enter the nation").max(150),
   city: z.string().trim().max(150).optional().default(""),
   event_date: isoDate,
-  // Mega crusades only — cellular outreaches are reported elsewhere.
+  // Mega crusades only.
   attendance: z.coerce.number().int("Enter attendance as a whole number").min(MEGA_CRUSADE_MINIMUM, `Only mega crusades with ${MEGA_CRUSADE_MINIMUM} or more in attendance are reported here`).max(10_000_000),
   currency_code: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, "Select the currency"),
   espees_equivalent: money("Espees equivalent").refine((v) => v > 0, "Enter the Espees equivalent"),

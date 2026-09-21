@@ -222,7 +222,7 @@ const lineColumns = [
   { header: "Region", value: (r) => r.region },
   { header: "Pastor", value: (r) => `${r.designation} ${r.first_name} ${r.last_name}` },
   { header: "KingsChat", value: (r) => `@${r.kingschat_username}` },
-  { header: "Part", value: (r) => r.part === "sponsored" ? "A — Sent by NOTC" : "B — Zone's own" },
+  { header: "Part", value: (r) => r.part === "sponsored" ? "A — Invited" : "B — Zone's own" },
   { header: "Crusade", value: (r) => r.crusade_name },
   { header: "Nation", value: (r) => r.nation },
   { header: "City", value: (r) => r.city },
