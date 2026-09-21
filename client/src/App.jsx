@@ -1,55 +1,62 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
-import { ReportForm } from "@/components/ReportForm";
-import { FindCrusadeReport } from "@/components/FindCrusadeReport";
-import { Dashboard } from "@/components/Dashboard";
-import { CollectiveReport } from "@/components/CollectiveReport";
-import { WidgetDetail } from "@/components/WidgetDetail";
-import { CrusadesTable } from "@/components/CrusadesTable";
-import { EditCrusadePage } from "@/components/EditCrusadePage";
-import { RegistrationsLive } from "@/components/RegistrationsLive";
-import { CrusadeAnalysis } from "@/components/CrusadeAnalysis";
-import { BlwCampusDashboard } from "@/components/BlwCampusDashboard";
-import { RegistrationsTable } from "@/components/RegistrationsTable";
-import { ZoneLinks } from "@/components/ZoneLinks";
-import { ZonePortal } from "@/components/ZonePortal";
 import { Landing } from "@/components/Landing";
 import { NotFound } from "@/components/NotFound";
 import { AdminGate, useAdmin } from "@/components/AdminGate";
-import { RegistrationForm } from "@/components/RegistrationForm";
-import { RegistrationBulkUpload } from "@/components/RegistrationBulkUpload";
-import { BlueEliteLanding } from "@/components/BlueEliteLanding";
-import { BlueEliteRegistrationForm } from "@/components/BlueEliteRegistrationForm";
-import { BlueEliteAvatar } from "@/components/BlueEliteAvatar";
-import { BlueEliteDashboard } from "@/components/BlueEliteDashboard";
-import { BlueEliteRegistrationsTable } from "@/components/BlueEliteRegistrationsTable";
-import { Settings } from "@/components/Settings";
-import { ResourcesLibrary } from "@/components/ResourcesLibrary";
-import { ResourcesAdmin } from "@/components/ResourcesAdmin";
-import { MissionNationSelection } from "@/components/MissionNationSelection";
-import { MissionNationAdmin } from "@/components/MissionNationAdmin";
-import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistration";
-import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
-import { MediaReports } from "@/components/MediaReports";
-import { MissionTripRegistration } from "@/components/MissionTripRegistration";
-import { MissionTripAdmin } from "@/components/MissionTripAdmin";
-import { UpcomingCrusades } from "@/components/UpcomingCrusades";
-import { UpcomingCrusadesAdmin } from "@/components/UpcomingCrusadesAdmin";
-import { AvatarFrame } from "@/components/AvatarFrame";
-import { PrivacyPolicy, TermsOfService } from "@/components/LegalPage";
 import { PublicTranslator } from "@/components/PublicTranslator";
-import { CrusadeCoverage } from "@/components/CrusadeCoverage";
-import { CountryCoverage } from "@/components/CountryCoverage";
-import { PastoralChecklist } from "@/components/PastoralChecklist";
-import { DatabaseProtection } from "@/components/DatabaseProtection";
-import { DuplicateReports } from "@/components/DuplicateReports";
-import { ManualOrganizations } from "@/components/ManualOrganizations";
-import { ApiDocumentation } from "@/components/ApiDocumentation";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { installKeyboardViewportManager } from "@/lib/keyboardViewport";
-import { MyStreamSpaceUpdateForm } from "@/components/MyStreamSpaceUpdateForm";
+
+// Every page loads as its own chunk so the first paint does not wait for the
+// whole admin suite, ExcelJS-sized dashboards or animation libraries.
+const page = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })));
+const ReportForm = page(() => import("@/components/ReportForm"), "ReportForm");
+const FindCrusadeReport = page(() => import("@/components/FindCrusadeReport"), "FindCrusadeReport");
+const Dashboard = page(() => import("@/components/Dashboard"), "Dashboard");
+const CollectiveReport = page(() => import("@/components/CollectiveReport"), "CollectiveReport");
+const WidgetDetail = page(() => import("@/components/WidgetDetail"), "WidgetDetail");
+const CrusadesTable = page(() => import("@/components/CrusadesTable"), "CrusadesTable");
+const EditCrusadePage = page(() => import("@/components/EditCrusadePage"), "EditCrusadePage");
+const RegistrationsLive = page(() => import("@/components/RegistrationsLive"), "RegistrationsLive");
+const CrusadeAnalysis = page(() => import("@/components/CrusadeAnalysis"), "CrusadeAnalysis");
+const BlwCampusDashboard = page(() => import("@/components/BlwCampusDashboard"), "BlwCampusDashboard");
+const RegistrationsTable = page(() => import("@/components/RegistrationsTable"), "RegistrationsTable");
+const ZoneLinks = page(() => import("@/components/ZoneLinks"), "ZoneLinks");
+const ZonePortal = page(() => import("@/components/ZonePortal"), "ZonePortal");
+const RegistrationForm = page(() => import("@/components/RegistrationForm"), "RegistrationForm");
+const RegistrationBulkUpload = page(() => import("@/components/RegistrationBulkUpload"), "RegistrationBulkUpload");
+const BlueEliteLanding = page(() => import("@/components/BlueEliteLanding"), "BlueEliteLanding");
+const BlueEliteRegistrationForm = page(() => import("@/components/BlueEliteRegistrationForm"), "BlueEliteRegistrationForm");
+const BlueEliteAvatar = page(() => import("@/components/BlueEliteAvatar"), "BlueEliteAvatar");
+const BlueEliteDashboard = page(() => import("@/components/BlueEliteDashboard"), "BlueEliteDashboard");
+const BlueEliteRegistrationsTable = page(() => import("@/components/BlueEliteRegistrationsTable"), "BlueEliteRegistrationsTable");
+const Settings = page(() => import("@/components/Settings"), "Settings");
+const ResourcesLibrary = page(() => import("@/components/ResourcesLibrary"), "ResourcesLibrary");
+const ResourcesAdmin = page(() => import("@/components/ResourcesAdmin"), "ResourcesAdmin");
+const MissionNationSelection = page(() => import("@/components/MissionNationSelection"), "MissionNationSelection");
+const MissionNationAdmin = page(() => import("@/components/MissionNationAdmin"), "MissionNationAdmin");
+const MediaTrainingRegistration = page(() => import("@/components/MediaTrainingRegistration"), "MediaTrainingRegistration");
+const MediaTrainingAdmin = page(() => import("@/components/MediaTrainingAdmin"), "MediaTrainingAdmin");
+const MediaReports = page(() => import("@/components/MediaReports"), "MediaReports");
+const MissionTripRegistration = page(() => import("@/components/MissionTripRegistration"), "MissionTripRegistration");
+const MissionTripAdmin = page(() => import("@/components/MissionTripAdmin"), "MissionTripAdmin");
+const CrusadeExpenses = page(() => import("@/components/CrusadeExpenses"), "CrusadeExpenses");
+const CrusadeExpensesAdmin = page(() => import("@/components/CrusadeExpensesAdmin"), "CrusadeExpensesAdmin");
+const UpcomingCrusades = page(() => import("@/components/UpcomingCrusades"), "UpcomingCrusades");
+const UpcomingCrusadesAdmin = page(() => import("@/components/UpcomingCrusadesAdmin"), "UpcomingCrusadesAdmin");
+const AvatarFrame = page(() => import("@/components/AvatarFrame"), "AvatarFrame");
+const PrivacyPolicy = page(() => import("@/components/LegalPage"), "PrivacyPolicy");
+const TermsOfService = page(() => import("@/components/LegalPage"), "TermsOfService");
+const CrusadeCoverage = page(() => import("@/components/CrusadeCoverage"), "CrusadeCoverage");
+const CountryCoverage = page(() => import("@/components/CountryCoverage"), "CountryCoverage");
+const PastoralChecklist = page(() => import("@/components/PastoralChecklist"), "PastoralChecklist");
+const DatabaseProtection = page(() => import("@/components/DatabaseProtection"), "DatabaseProtection");
+const DuplicateReports = page(() => import("@/components/DuplicateReports"), "DuplicateReports");
+const ManualOrganizations = page(() => import("@/components/ManualOrganizations"), "ManualOrganizations");
+const ApiDocumentation = page(() => import("@/components/ApiDocumentation"), "ApiDocumentation");
+const MyStreamSpaceUpdateForm = page(() => import("@/components/MyStreamSpaceUpdateForm"), "MyStreamSpaceUpdateForm");
 
 const BRAND = "Rhapsody End-Time Teaching Crusades";
 const DEFAULT_DESCRIPTION = "Join A Night of a Thousand Crusades, register crusades, access approved resources, and take part in global mission initiatives.";
@@ -68,6 +75,7 @@ const PAGE_META = [
   [/^\/resources$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) Approved Resources Hub", "Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.", true, "/resources"],
   [/^\/select-nation$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) – NATIONAL MISSIONS LEADERSHIP INITIATIVE", "Ministers can select a preferred mission nation and propose a commitment of at least 1,000 crusades.", true, "/select-nation", "/national-missions-leadership.png"],
   [/^\/media-training$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MEDIA TRAINING MOBILISATION", "Intensive training for media personnel, presenters, aspiring presenters, creatives, and volunteers serving the global evangelistic vision.", true, "/media-training", "/media-training-mobilisation.png"],
+  [/^\/crusade-expenses$/, "Zonal Crusade Expense Report", "Zonal pastors record what their zone invested in its crusades, in Espees, for the NOTC administration.", true, "/crusade-expenses"],
   [/^\/mission-trips$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) GLOBAL MISSIONS TRIP VOLUNTEER MOBILISATION", "Volunteer for a global missions trip if you have independent travel access, availability, and a desire to serve in another nation.", true, "/mission-trips", "/global-missions-trip-volunteer.png"],
   [/^\/upcoming-crusades$/, "UPCOMING NIGHT OF A THOUSAND CRUSADES", "Participants can select one planned international crusade they would like to attend and review the relevant travel details.", true, "/upcoming-crusades"],
   [/^\/avatar$/, "NIGHT OF A THOUSAND CRUSADES (NOTC) CAMPAIGN AVATAR", "Add your photo to the Night of a Thousand Crusades campaign avatar and share your participation ahead of Friday, August 28, 2026.", true, "/avatar", "/notc-avatar-frame.jpg"],
@@ -232,6 +240,7 @@ export default function App() {
       <TitleManager />
       <KeyboardViewportManager />
       <PublicTranslator />
+      <Suspense fallback={<div className="min-h-screen" aria-busy="true" />}>
       <Routes>
         {/* Public campaign surface — self-contained pages, no app chrome */}
         <Route path="/" element={<Landing />} />
@@ -256,6 +265,7 @@ export default function App() {
         <Route path="/select-nation" element={<MissionNationSelection />} />
         <Route path="/media-training" element={<MediaTrainingRegistration />} />
         <Route path="/mission-trips" element={<MissionTripRegistration />} />
+        <Route path="/crusade-expenses" element={<CrusadeExpenses />} />
         <Route path="/upcoming-crusades" element={<UpcomingCrusades />} />
         <Route path="/avatar" element={<AvatarFrame />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
@@ -272,7 +282,7 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/dashboard/blw-campus", "BLW Campus"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/dashboard/collective-report", "Collective report"], ["/crusades", "Reports"], ["/dashboard/duplicate-reports", "Duplicates", false, true], ["/dashboard/media-reports", "Media reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-checklist", "Zone checklist"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/dashboard/blw-campus", "BLW Campus"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/dashboard/collective-report", "Collective report"], ["/crusades", "Reports"], ["/dashboard/duplicate-reports", "Duplicates", false, true], ["/dashboard/media-reports", "Media reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-checklist", "Zone checklist"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/crusade-expenses", "Crusade expenses"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
           <Route path="/dashboard/collective-report" element={<PageGuard pageKey="dashboard/collective-report"><CollectiveReport /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
@@ -296,6 +306,7 @@ export default function App() {
           <Route path="/dashboard/mission-nations" element={<PageGuard pageKey="dashboard/mission-nations"><MissionNationAdmin /></PageGuard>} />
           <Route path="/dashboard/media-training" element={<PageGuard pageKey="dashboard/media-training"><MediaTrainingAdmin /></PageGuard>} />
           <Route path="/dashboard/mission-trips" element={<PageGuard pageKey="dashboard/mission-trips"><MissionTripAdmin /></PageGuard>} />
+          <Route path="/dashboard/crusade-expenses" element={<PageGuard pageKey="dashboard/crusade-expenses"><CrusadeExpensesAdmin /></PageGuard>} />
           <Route path="/dashboard/upcoming-crusades" element={<PageGuard pageKey="dashboard/upcoming-crusades"><UpcomingCrusadesAdmin /></PageGuard>} />
           <Route path="/dashboard/blue-elite" element={<PageGuard pageKey="dashboard/blue-elite"><BlueEliteDashboard /></PageGuard>} />
           <Route path="/registrations/blue-elite" element={<PageGuard pageKey="registrations/blue-elite"><BlueEliteRegistrationsTable /></PageGuard>} />
@@ -303,6 +314,7 @@ export default function App() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
       <Toaster />
     </BrowserRouter>
   );

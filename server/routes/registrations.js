@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { tmpdir } from "node:os";
 import { unlink } from "node:fs/promises";
-import { db, METRIC_FIELDS } from "../db.js";
+import { db, registrationSearchIndexEnabled, METRIC_FIELDS } from "../db.js";
 import { backupDatabase } from "../databaseProtection.js";
 import { registrationCrusadeEditSchema, registrationSchema, manualOrgUpdateSchema } from "../validation.js";
 import { wrap, ApiError, logger } from "../logger.js";
@@ -908,8 +908,16 @@ export function registrationFilters(query) {
     where.push("i.expected_attendance >= @min_attendance"); params.min_attendance = minAttendance;
   }
   // Free-text search: every word must match some field of the registration or its items.
+  // Words of three or more characters hit the trigram FTS indexes; shorter ones
+  // (and databases without trigram support) fall back to the LIKE scan.
   String(query.q || "").trim().split(/\s+/).filter(Boolean).slice(0, 8).forEach((tok, n) => {
     const p = `q${n}`;
+    if (registrationSearchIndexEnabled && tok.length >= 3) {
+      params[p] = `"${tok.replaceAll('"', '""')}"`;
+      where.push(`(i.id IN (SELECT rowid FROM registration_items_fts WHERE registration_items_fts MATCH @${p})
+        OR r.id IN (SELECT rowid FROM registrations_fts WHERE registrations_fts MATCH @${p}))`);
+      return;
+    }
     where.push(`(r.zone LIKE @${p} OR r.group_name LIKE @${p} OR r.church_name LIKE @${p} OR r.network_name LIKE @${p} OR r.country LIKE @${p}
       OR r.contact_name LIKE @${p} OR r.contact_email LIKE @${p} OR r.phone_country_code || r.phone_number LIKE @${p}
       OR r.kingschat_username LIKE @${p}

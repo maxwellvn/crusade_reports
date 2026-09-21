@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { resolveRegistrationDatabasePath } from "./databasePaths.js";
+import { logger } from "./logger.js";
+import { registrationSearchSchema, indexedRowCount, REGISTRATION_SEARCH_TABLES } from "./searchIndex.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
@@ -55,6 +57,16 @@ if (existsSync(pendingRestore) || (pendingRegistrationRestore && existsSync(pend
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL"); // crash-safe; survives power loss mid-write
 db.pragma("foreign_keys = ON");
+// WAL + NORMAL: commits skip the per-transaction fsync but stay consistent after
+// a crash or power loss (the WAL is fsynced at checkpoint). Bulk imports of tens
+// of thousands of rows are several times faster than the FULL default.
+db.pragma("synchronous = NORMAL");
+// Dashboard workers, hourly backups and the request thread share this file.
+// Wait for a writer to finish instead of surfacing SQLITE_BUSY to the user.
+db.pragma("busy_timeout = 5000");
+db.pragma("cache_size = -65536"); // 64 MB page cache per connection
+db.pragma("mmap_size = 268435456"); // 256 MB memory-mapped reads
+db.pragma("temp_store = MEMORY"); // sort/group scratch space in RAM
 if (splitDatabaseEnabled) {
   const embeddedRegistrationTable = db.prepare(`
     SELECT name FROM main.sqlite_master
@@ -67,6 +79,9 @@ if (splitDatabaseEnabled) {
   mkdirSync(dirname(REGISTRATION_DB_PATH), { recursive: true });
   db.prepare(`ATTACH DATABASE ? AS ${REGISTRATION_DB_SCHEMA}`).run(REGISTRATION_DB_PATH);
   db.pragma(`${REGISTRATION_DB_SCHEMA}.journal_mode = WAL`);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.synchronous = NORMAL`);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.cache_size = -65536`);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.mmap_size = 268435456`);
 }
 
 export const METRIC_FIELDS = [
@@ -156,6 +171,7 @@ let startupSchema = `
   CREATE INDEX IF NOT EXISTS idx_crusades_country ON crusades(country);
   CREATE INDEX IF NOT EXISTS idx_crusades_date    ON crusades(event_date);
   CREATE INDEX IF NOT EXISTS idx_crusades_place   ON crusades(city_place_id);
+  CREATE INDEX IF NOT EXISTS idx_reports_created  ON reports(created_at DESC, id DESC);
 
   CREATE TABLE IF NOT EXISTS networks (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -390,7 +406,7 @@ if (splitDatabaseEnabled) {
     .replace("CREATE TABLE IF NOT EXISTS registration_items (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_items (`)
     .replace("CREATE TABLE IF NOT EXISTS registration_dashboard_snapshots (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_dashboard_snapshots (`)
     .replaceAll("CREATE INDEX IF NOT EXISTS idx_reg_items_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_reg_items_`)
-    .replaceAll("CREATE INDEX IF NOT EXISTS idx_registrations_lookup_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_registrations_lookup_`);
+    .replaceAll("CREATE INDEX IF NOT EXISTS idx_registrations_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_registrations_`);
 }
 db.exec(startupSchema);
 if (splitDatabaseEnabled) {
@@ -470,6 +486,90 @@ if (/mission_country_code\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(missionSelectionSq
   }
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_mission_selections_assignment ON mission_nation_selections(assigned_country_code)");
+
+// The first cut of this feature stored a flat category/amount list keyed to a
+// pastor's email. Replace that shape before creating the current tables; a
+// legacy table holding rows is renamed aside rather than dropped.
+{
+  const legacyColumns = db.prepare("PRAGMA table_info(zone_expense_reports)").all().map((column) => column.name);
+  if (legacyColumns.length && legacyColumns.includes("email")) {
+    const rows = db.prepare("SELECT COUNT(*) AS value FROM zone_expense_reports").get().value;
+    const stamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+    db.exec(rows
+      ? `ALTER TABLE zone_expense_reports RENAME TO zone_expense_reports_legacy_${stamp};
+         ALTER TABLE zone_expense_items RENAME TO zone_expense_items_legacy_${stamp};`
+      : "DROP TABLE IF EXISTS zone_expense_items; DROP TABLE IF EXISTS zone_expense_reports;");
+  }
+}
+
+// Zonal crusade expense reports: one editable report per zone. Part A covers
+// crusades NOTC sent the zone to, Part B the mega crusades the zone held on its
+// own. Both are mega only (1000+ attendance); costs are entered in the local
+// currency with the Espees equivalent supplied by the pastor.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS zone_expense_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_code TEXT NOT NULL UNIQUE,
+    zone_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    region TEXT,
+    designation TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    kingschat_username TEXT NOT NULL,
+    notes TEXT,
+    total_espees REAL NOT NULL DEFAULT 0,
+    sponsored_espees REAL NOT NULL DEFAULT 0,
+    own_espees REAL NOT NULL DEFAULT 0,
+    espees_already_given REAL NOT NULL DEFAULT 0,
+    crusade_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS zone_expense_crusades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id INTEGER NOT NULL REFERENCES zone_expense_reports(id) ON DELETE CASCADE,
+    part TEXT NOT NULL CHECK (part IN ('sponsored', 'own')),
+    position INTEGER NOT NULL,
+    crusade_name TEXT NOT NULL,
+    nation TEXT NOT NULL,
+    city TEXT,
+    event_date TEXT NOT NULL,
+    attendance INTEGER NOT NULL,
+    currency_code TEXT NOT NULL,
+    pastor_flight REAL NOT NULL DEFAULT 0,
+    accompanying_count INTEGER NOT NULL DEFAULT 0,
+    accompanying_flight REAL NOT NULL DEFAULT 0,
+    sponsorship_given REAL NOT NULL DEFAULT 0,
+    other_cost_note TEXT,
+    other_cost_amount REAL NOT NULL DEFAULT 0,
+    venue_cost REAL NOT NULL DEFAULT 0,
+    transport_cost REAL NOT NULL DEFAULT 0,
+    local_total REAL NOT NULL DEFAULT 0,
+    espees_equivalent REAL NOT NULL DEFAULT 0,
+    espees_already_given REAL NOT NULL DEFAULT 0,
+    note TEXT
+  );
+  CREATE TABLE IF NOT EXISTS zone_expense_companions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    crusade_id INTEGER NOT NULL REFERENCES zone_expense_crusades(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    name TEXT,
+    flight_cost REAL NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS zone_expense_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    crusade_id INTEGER NOT NULL REFERENCES zone_expense_crusades(id) ON DELETE CASCADE,
+    stored_name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_crusades_report ON zone_expense_crusades(report_id);
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_companions_crusade ON zone_expense_companions(crusade_id);
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_evidence_crusade ON zone_expense_evidence(crusade_id);
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_reports_updated ON zone_expense_reports(updated_at DESC);
+`);
 
 const resourceColumns = new Set(db.prepare("PRAGMA table_info(resources)").all().map((column) => column.name));
 if (!resourceColumns.has("thumbnail_url")) db.exec("ALTER TABLE resources ADD COLUMN thumbnail_url TEXT");
@@ -928,7 +1028,38 @@ db.exec(`
 // Workers open their own database connection. Rebuilding an already synchronized
 // FTS index on every connection becomes costly as report volume grows.
 const crusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades").get().value;
-const indexedCrusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades_fts").get().value;
+const indexedCrusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades_fts_docsize").get().value;
 if (crusadeCount !== indexedCrusadeCount) {
   db.exec(`INSERT INTO crusades_fts(crusades_fts) VALUES ('rebuild')`);
 }
+
+// Indexes on columns that older databases gain through the ALTER migrations
+// above, so they are created only once every column exists.
+const registrationSchemaPrefix = splitDatabaseEnabled ? `${REGISTRATION_DB_SCHEMA}.` : "";
+db.exec(`
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_readiness ON registration_items(readiness_status);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_event_date ON registration_items(event_date);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_program ON registration_items(program);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_registrations_created ON registrations(created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_registrations_program ON registrations(program);
+`);
+
+// Registration search index — see server/searchIndex.js. Schema only here:
+// building the index over millions of rows is done in batches by
+// scripts/build-search-index.mjs so boot never blocks on it. Search uses the
+// index once it holds rows; until then it keeps the LIKE scan.
+export let registrationSearchIndexEnabled = false;
+try {
+  db.exec(registrationSearchSchema(registrationSchemaPrefix));
+  registrationSearchIndexEnabled = REGISTRATION_SEARCH_TABLES.every(([table, fts]) =>
+    indexedRowCount(db, fts) > 0 || db.prepare(`SELECT COUNT(*) AS value FROM ${table}`).get().value === 0);
+  if (!registrationSearchIndexEnabled) {
+    logger.warn("registration search index is empty; run: node scripts/build-search-index.mjs <registrations.sqlite>");
+  }
+} catch (error) {
+  // ponytail: older SQLite without the trigram tokenizer keeps the LIKE scan.
+  logger.warn({ err: error }, "registration search index unavailable, falling back to LIKE");
+}
+
+// Refresh planner statistics so the new indexes are chosen. Cheap on every boot.
+db.pragma("optimize");

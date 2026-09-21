@@ -136,6 +136,14 @@ const INITIATIVES = [
     tone: "rose",
   },
   {
+    to: "/crusade-expenses",
+    title: "Zonal Crusade Expense Report",
+    copy: "Zonal pastors record what their zone invested in its crusades, line by line in Espees, so the administration sees the full cost of the mobilisation.",
+    action: "Report zone expenses",
+    image: "/assets/globe.webp",
+    tone: "gold",
+  },
+  {
     to: "/avatar",
     title: "Campaign Avatar",
     copy: "Add your photo to the Night of a Thousand Crusades avatar frame and announce that you have registered a Rhapsody End-Time Crusade.",
@@ -577,6 +585,7 @@ export function Landing() {
               <Link to="/select-nation" onClick={closeNav}>Select a Nation</Link>
               <Link to="/media-training" onClick={closeNav}>Media Training</Link>
               <Link to="/mission-trips" onClick={closeNav}>Mission Trips</Link>
+              <Link to="/crusade-expenses" onClick={closeNav}>Zone Expenses</Link>
               <Link to="/upcoming-crusades" onClick={closeNav}>Upcoming Crusades</Link>
               <Link to="/avatar" onClick={closeNav}>Campaign Avatar</Link>
             </div>

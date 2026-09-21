@@ -7,7 +7,7 @@ import { db } from "../db.js";
 import { registrationSchema } from "../validation.js";
 import { validateRegistrationOrganization, insertRegistration } from "./registrations.js";
 import { isManualZonesEnabled, isManualGroupsEnabled } from "../appSettings.js";
-import { loadWorkbook } from "../xlsxSanitize.js";
+import { parseWorkbookOffThread } from "../xlsxParse.js";
 import { resolveCity } from "../cityResolve.js";
 import { resolveCountryName } from "./countries.js";
 import { applyPortalScope } from "../portalScope.js";
@@ -123,13 +123,8 @@ registrationImporter.get("/template", wrap(async (_req, res) => {
 registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   if (!req.file) throw new ApiError(400, "NO_FILE", "No spreadsheet uploaded");
 
-  const wb = new ExcelJS.Workbook();
-  try {
-    // Retry without comment parts if exceljs can't reconcile the file (see xlsxSanitize.js).
-    await loadWorkbook(wb, req.file.buffer);
-  } catch {
-    throw new ApiError(422, "BAD_FILE", "Could not read that file — use the .xlsx template");
-  }
+  // Parsed in a worker thread so a large upload never stalls other requests.
+  const wb = await parseWorkbookOffThread(req.file.buffer);
   const ws = wb.getWorksheet("Crusades");
   if (!ws) throw new ApiError(422, "NO_SHEET", "The file has no 'Crusades' sheet — use the template");
 

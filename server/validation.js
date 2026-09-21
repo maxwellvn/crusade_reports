@@ -294,3 +294,73 @@ export const manualOrgUpdateSchema = z.object({
   zone: z.string().trim().min(1, "Select a zone from the directory"),
   group_name: z.string().trim().max(200).optional().default(""),
 });
+
+export const EXPENSE_DESIGNATIONS = ["Regional Pastor", "Zonal Director", "Zonal Pastor"];
+export const MEGA_CRUSADE_MINIMUM = 1000;
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date");
+const money = (label) => z.coerce.number().min(0, `${label} cannot be negative`).max(1e12, `${label} is too large`)
+  .refine((v) => Math.round(v * 100) === v * 100, `${label} can have at most two decimal places`).default(0);
+
+const crusadeBase = {
+  crusade_name: z.string().trim().min(2, "Enter the crusade name").max(250),
+  nation: z.string().trim().min(2, "Enter the nation").max(150),
+  city: z.string().trim().max(150).optional().default(""),
+  event_date: isoDate,
+  currency_code: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, "Select the currency"),
+  espees_equivalent: money("Espees equivalent").refine((v) => v > 0, "Enter the Espees equivalent"),
+  note: z.string().trim().max(500).optional().default(""),
+  // Evidence ids the pastor kept while editing; anything omitted is deleted.
+  keep_evidence: z.array(z.coerce.number().int().positive()).max(60).optional().default([]),
+};
+
+// Part A: crusades the Rhapsody department invited the zone to. No attendance
+// here — the department already holds that figure for its own crusades.
+const sponsoredCrusadeSchema = z.object({
+  ...crusadeBase,
+  pastor_flight: money("Pastor's flight"),
+  // One row per accompanying person, so a zone can quote each flight rather
+  // than a single lump sum.
+  companions: z.array(z.object({
+    name: z.string().trim().max(150).optional().default(""),
+    flight_cost: money("The accompanying person's flight"),
+  })).max(50).optional().default([]),
+  sponsorship_given: money("Amount already given for crusade sponsorship"),
+  other_cost_note: z.string().trim().max(250).optional().default(""),
+  other_cost_amount: money("Other costs"),
+  espees_already_given: money("Espees already given"),
+}).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] });
+
+// Part B: mega crusades the zone held on its own.
+const ownCrusadeSchema = z.object({
+  ...crusadeBase,
+  // Mega crusades only.
+  attendance: z.coerce.number().int("Enter attendance as a whole number").min(MEGA_CRUSADE_MINIMUM, `Only mega crusades with ${MEGA_CRUSADE_MINIMUM} or more in attendance are reported here`).max(10_000_000),
+  venue_cost: money("Venue cost"),
+  transport_cost: money("Transportation cost"),
+}).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] });
+
+// The form offers a blank Part A row by default; a zone with nothing to report
+// there should not have to delete it before submitting.
+const CRUSADE_KEYS = ["crusade_name", "nation", "city", "event_date", "attendance", "currency_code", "note",
+  "pastor_flight", "sponsorship_given",
+  "other_cost_note", "other_cost_amount", "espees_equivalent", "espees_already_given", "venue_cost", "transport_cost"];
+const isBlankCrusade = (row) => !row || typeof row !== "object"
+  || CRUSADE_KEYS.every((key) => row[key] === undefined || row[key] === null || row[key] === "" || row[key] === 0);
+const withoutBlanks = (schema) => z.preprocess((rows) => Array.isArray(rows) ? rows.filter((row) => !isBlankCrusade(row)) : rows, schema);
+
+export const zoneExpenseReportSchema = z.object({
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  designation: z.enum(EXPENSE_DESIGNATIONS, { errorMap: () => ({ message: "Select your designation" }) }),
+  first_name: z.string().trim().min(2, "First name is required").max(100),
+  last_name: z.string().trim().min(2, "Last name is required").max(100),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
+  notes: z.string().trim().max(2000).optional().default(""),
+  sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
+  own: withoutBlanks(z.array(ownCrusadeSchema).max(100)).optional().default([]),
+}).refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
+
+export const zoneExpenseLookupSchema = z.object({
+  zone_name: z.string().trim().min(2, "Select your zone").max(250),
+  kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
+});
