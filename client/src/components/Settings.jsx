@@ -31,6 +31,7 @@ const NETWORK_INHERITANCE_OPTIONS = [
 const ASSIGNABLE_PAGES = [
   { key: "dashboard", label: "Reports dashboard" },
   { key: "dashboard/collective-report", label: "Collective report" },
+  { key: "dashboard/rhapsody-distributed", label: "Rhapsody Distributed" },
   { key: "crusades", label: "Reports" },
   { key: "dashboard/media-reports", label: "Media reports" },
   { key: "registrations", label: "Registered crusades" },

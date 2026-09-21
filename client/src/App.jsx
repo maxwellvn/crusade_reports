@@ -16,6 +16,7 @@ const ReportForm = page(() => import("@/components/ReportForm"), "ReportForm");
 const FindCrusadeReport = page(() => import("@/components/FindCrusadeReport"), "FindCrusadeReport");
 const Dashboard = page(() => import("@/components/Dashboard"), "Dashboard");
 const CollectiveReport = page(() => import("@/components/CollectiveReport"), "CollectiveReport");
+const RhapsodyDistributed = page(() => import("@/components/RhapsodyDistributed"), "RhapsodyDistributed");
 const WidgetDetail = page(() => import("@/components/WidgetDetail"), "WidgetDetail");
 const CrusadesTable = page(() => import("@/components/CrusadesTable"), "CrusadesTable");
 const EditCrusadePage = page(() => import("@/components/EditCrusadePage"), "EditCrusadePage");
@@ -148,7 +149,8 @@ function Shell({ subtitle, links }) {
     if (!admin?.is_super_admin && to !== "/") {
       const pageKey = to.replace(/^\//, "");
       const allowed = admin?.permissions?.includes(pageKey)
-        || (to === "/crusades" && admin?.permissions?.includes("crusades/edit"));
+        || (to === "/crusades" && admin?.permissions?.includes("crusades/edit"))
+        || (to === "/dashboard/rhapsody-distributed" && admin?.permissions?.includes("dashboard"));
       if (admin?.permissions && !allowed) return false;
     }
     return true;
@@ -282,8 +284,9 @@ export default function App() {
 
         {/* Admin surface — everything inside requires an approved KingsChat account */}
         <Route element={<AdminGate><Shell subtitle="Crusade analytics and records."
-          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/dashboard/blw-campus", "BLW Campus"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/dashboard/collective-report", "Collective report"], ["/crusades", "Reports"], ["/dashboard/duplicate-reports", "Duplicates", false, true], ["/dashboard/media-reports", "Media reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-checklist", "Zone checklist"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/crusade-expenses", "Crusade expenses"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
+          links={[["/", "Home", true], ["/registrations/live", "Live"], ["/dashboard/crusade-analysis", "Crusade analysis"], ["/dashboard/blw-campus", "BLW Campus"], ["/registrations", "Registrations", true], ["/dashboard", "Reports dashboard", true], ["/dashboard/rhapsody-distributed", "Rhapsody Distributed"], ["/dashboard/collective-report", "Collective report"], ["/crusades", "Reports"], ["/dashboard/duplicate-reports", "Duplicates", false, true], ["/dashboard/media-reports", "Media reports"], ["/dashboard/coverage", "Coverage"], ["/dashboard/country-coverage", "Country coverage"], ["/dashboard/zone-checklist", "Zone checklist"], ["/dashboard/zone-links", "Zone links"], ["/registrations/manual-organizations", "Manual organisations"], ["/dashboard/mission-nations", "Mission nations"], ["/dashboard/upcoming-crusades", "Upcoming crusades"], ["/dashboard/media-training", "Media training"], ["/dashboard/mission-trips", "Mission trips"], ["/dashboard/crusade-expenses", "Crusade expenses"], ["/dashboard/resources", "Resources"], ["/dashboard/blue-elite", "Blue Elite"], ["/registrations/blue-elite", "Blue Elite reg."], ["/dashboard/database-protection", "Backups"], ["/dashboard/settings", "Settings", false, true]]} /></AdminGate>}>
           <Route path="/dashboard" element={<PageGuard pageKey="dashboard"><Dashboard /></PageGuard>} />
+          <Route path="/dashboard/rhapsody-distributed" element={<PageGuard pageKey="dashboard/rhapsody-distributed" alternatePageKeys={["dashboard"]}><RhapsodyDistributed /></PageGuard>} />
           <Route path="/dashboard/collective-report" element={<PageGuard pageKey="dashboard/collective-report"><CollectiveReport /></PageGuard>} />
           <Route path="/dashboard/widget/:id" element={<PageGuard pageKey="dashboard"><WidgetDetail /></PageGuard>} />
           <Route path="/crusades" element={<PageGuard pageKey="crusades" alternatePageKeys={["crusades/edit"]}><CrusadesTable /></PageGuard>} />

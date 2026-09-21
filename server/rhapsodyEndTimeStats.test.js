@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { db } from "./db.js";
-import { rhapsodyEndTimeSummary, rorDistributedByFormat, RHAPSODY_END_TIME_START_DATE } from "./routes/stats.js";
+import { rhapsodyEndTimeSummary, rorDistributedByFormat, rhapsodyDistributedReport, RHAPSODY_END_TIME_START_DATE } from "./routes/stats.js";
 import { isValidHeldDate } from "./validation.js";
 
 function addCrusade(eventDate, suffix, { format = "physical", rorDistributed = 0 } = {}) {
@@ -62,6 +62,39 @@ test("Rhapsody distributed splits physical and online by crusade format", () => 
     assert.equal(afterAll.physical, beforeAll.physical + 400 + 999);
     assert.equal(afterAll.online, beforeAll.online + 150);
     assert.equal(afterAll.total, beforeAll.total + 400 + 150 + 999);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("filtered Rhapsody distributed report scopes by zone and format", () => {
+  db.exec("BEGIN");
+  try {
+    addCrusade("2026-09-05", "Zone A physical", { format: "physical", rorDistributed: 200 });
+    addCrusade("2026-09-05", "Zone A online", { format: "online", rorDistributed: 80 });
+    const reportId = db.prepare(`
+      INSERT INTO reports (organization_type, zone, country, contact_name)
+      VALUES ('zone', 'Other Zone', 'Nigeria', 'Other')
+    `).run().lastInsertRowid;
+    db.prepare(`
+      INSERT INTO crusades
+        (report_id, organization_type, zone, country, event_type, event_name, city, event_date, format,
+         attendance, online_participation, salvation, ror_distributed)
+      VALUES (?, 'zone', 'Other Zone', 'Nigeria', 'street', 'Other Zone Crusade', 'Lagos', '2026-09-05', 'physical', 10, 0, 1, 500)
+    `).run(reportId);
+
+    const zoneOnline = rhapsodyDistributedReport({
+      zone: "Date Boundary Zone Zone A online",
+      format: "online",
+    });
+    assert.equal(zoneOnline.summary.online, 80);
+    assert.equal(zoneOnline.summary.physical, 0);
+    assert.equal(zoneOnline.summary.total, 80);
+
+    const allInZoneFamily = rhapsodyDistributedReport({ zone: "Date Boundary Zone Zone A physical" });
+    assert.equal(allInZoneFamily.summary.physical, 200);
+    assert.equal(allInZoneFamily.summary.online, 0);
+    assert.ok(allInZoneFamily.by_zone.some((row) => row.key === "Date Boundary Zone Zone A physical"));
   } finally {
     db.exec("ROLLBACK");
   }

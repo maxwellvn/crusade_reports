@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { GripVertical, X, Plus, Maximize2, Minimize2, RotateCcw, Search, Printer } from "lucide-react";
+import { GripVertical, X, Plus, Maximize2, Minimize2, RotateCcw, Search, Printer, ArrowRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton, LoadingRows } from "@/components/ui/skeleton";
@@ -232,14 +232,20 @@ export function Dashboard() {
 }
 
 function RhapsodyDistributedSection({ data }) {
+  const navigate = useNavigate();
   const physical = Number(data?.physical || 0);
   const online = Number(data?.online || 0);
   const total = Number(data?.total ?? physical + online);
   return (
     <section aria-labelledby="rhapsody-distributed-heading" className="border-y border-orange-200 bg-white">
-      <div className="border-b border-orange-100 bg-orange-50/60 px-5 py-4">
-        <h3 id="rhapsody-distributed-heading" className="text-base font-semibold text-slate-950">Rhapsody Distributed</h3>
-        <p className="mt-1 text-xs text-slate-600">Physical copies from onsite crusades · Online copies from online crusades</p>
+      <div className="flex flex-col gap-3 border-b border-orange-100 bg-orange-50/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 id="rhapsody-distributed-heading" className="text-base font-semibold text-slate-950">Rhapsody Distributed</h3>
+          <p className="mt-1 text-xs text-slate-600">Physical copies from onsite crusades · Online copies from online crusades</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" className="self-start bg-white sm:self-auto" onClick={() => navigate("/dashboard/rhapsody-distributed")}>
+          View full breakdown <ArrowRight className="size-3.5" />
+        </Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3">
         {[
@@ -247,10 +253,15 @@ function RhapsodyDistributedSection({ data }) {
           ["Online copies", online, "text-cyan-700"],
           ["Total distributed", total, "text-orange-700"],
         ].map(([label, value, tone], index) => (
-          <div key={label} className={`min-h-24 p-4 ${index ? "border-t sm:border-t-0 sm:border-l border-slate-200" : ""}`}>
+          <button
+            key={label}
+            type="button"
+            onClick={() => navigate("/dashboard/rhapsody-distributed")}
+            className={`min-h-24 p-4 text-left transition-colors hover:bg-orange-50/50 ${index ? "border-t sm:border-t-0 sm:border-l border-slate-200" : ""}`}
+          >
             <p className="text-xs text-slate-500">{label}</p>
             <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{nfull.format(value)}</p>
-          </div>
+          </button>
         ))}
       </div>
     </section>

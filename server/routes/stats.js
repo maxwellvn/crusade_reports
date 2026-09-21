@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, METRIC_FIELDS } from "../db.js";
 import { wrap } from "../logger.js";
-import { requirePageAccess } from "../auth.js";
+import { requireAnyPageAccess, requirePageAccess } from "../auth.js";
 import { resolveCountryName } from "./countries.js";
 import { applyMyStreamSpaceAdjustment, getManualMyStreamSpaceAdjustment } from "../mystreamspaceStats.js";
 import { isOrganizationReportCreditEnabled } from "../appSettings.js";
@@ -31,6 +31,96 @@ export function rorDistributedByFormat(database = db, whereSql = "", params = []
     FROM crusades
     ${whereSql}
   `).get(...params);
+}
+
+/** Named-parameter summary used by the filtered Rhapsody Distributed tab. */
+export function rorDistributedSummary(database = db, whereSql = "", params = {}) {
+  return database.prepare(`
+    SELECT COUNT(*) AS crusades, ${ROR_BY_FORMAT_SQL}
+    FROM crusades
+    ${whereSql}
+  `).get(params);
+}
+
+const ROR_FILTER_COLS = ["organization_type", "zone", "group_name", "church_name", "network_name", "country", "city", "event_type", "format"];
+const ROR_BREAKDOWN_DIMS = [
+  ["zone", "by_zone"],
+  ["network_name", "by_network"],
+  ["country", "by_country"],
+  ["event_type", "by_event_type"],
+  ["organization_type", "by_organization_type"],
+  ["city", "by_city"],
+];
+
+export function rhapsodyDistributedFilters(query = {}) {
+  const where = [];
+  const params = {};
+  for (const col of ROR_FILTER_COLS) {
+    const value = query[col];
+    if (value) {
+      where.push(`${col} = @${col}`);
+      params[col] = String(value);
+    }
+  }
+  if (query.date_from) {
+    where.push("event_date >= @date_from");
+    params.date_from = String(query.date_from);
+  }
+  if (query.date_to) {
+    where.push("event_date <= @date_to");
+    params.date_to = String(query.date_to);
+  }
+  return {
+    clause: where.length ? `WHERE ${where.join(" AND ")}` : "",
+    params,
+  };
+}
+
+function distinctFilterValues(column) {
+  return db.prepare(
+    `SELECT DISTINCT TRIM(${column}) AS value
+     FROM crusades
+     WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''
+     ORDER BY value COLLATE NOCASE LIMIT 500`
+  ).all().map((row) => row.value);
+}
+
+export function rhapsodyDistributedReport(query = {}, database = db) {
+  const { clause, params } = rhapsodyDistributedFilters(query);
+  const summary = rorDistributedSummary(database, clause, params);
+  const breakdowns = {};
+  for (const [column, key] of ROR_BREAKDOWN_DIMS) {
+    breakdowns[key] = database.prepare(`
+      SELECT TRIM(${column}) AS key,
+             COUNT(*) AS crusades,
+             ${ROR_BY_FORMAT_SQL}
+      FROM crusades
+      ${clause ? `${clause} AND` : "WHERE"} ${column} IS NOT NULL AND TRIM(${column}) <> ''
+      GROUP BY TRIM(${column})
+      ORDER BY total DESC, key COLLATE NOCASE
+      LIMIT 500
+    `).all(params);
+  }
+  return {
+    summary: {
+      crusades: Number(summary?.crusades || 0),
+      physical: Number(summary?.physical || 0),
+      online: Number(summary?.online || 0),
+      total: Number(summary?.total || 0),
+    },
+    ...breakdowns,
+    filters: {
+      zones: distinctFilterValues("zone"),
+      networks: distinctFilterValues("network_name"),
+      countries: distinctFilterValues("country"),
+      cities: distinctFilterValues("city"),
+      groups: distinctFilterValues("group_name"),
+      churches: distinctFilterValues("church_name"),
+      organization_types: distinctFilterValues("organization_type"),
+      event_types: distinctFilterValues("event_type"),
+      formats: ["physical", "online"],
+    },
+  };
 }
 
 export function rhapsodyEndTimeSummary(database = db, throughDate = new Date().toISOString().slice(0, 10)) {
@@ -333,4 +423,10 @@ stats.get("/", requirePageAccess("dashboard"), wrap(async (_req, res) => {
   // response fast while a worker refreshes changed or five-minute-old figures.
   res.setHeader("Cache-Control", "private, no-cache");
   res.json(data);
+}));
+
+// Filtered Rhapsody distribution breakdown for the dedicated admin tab.
+stats.get("/rhapsody-distributed", requireAnyPageAccess(["dashboard/rhapsody-distributed", "dashboard"]), wrap((req, res) => {
+  res.setHeader("Cache-Control", "private, no-cache");
+  res.json(rhapsodyDistributedReport(req.query));
 }));
