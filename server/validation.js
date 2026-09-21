@@ -307,8 +307,6 @@ const crusadeBase = {
   nation: z.string().trim().min(2, "Enter the nation").max(150),
   city: z.string().trim().max(150).optional().default(""),
   event_date: isoDate,
-  // Mega crusades only.
-  attendance: z.coerce.number().int("Enter attendance as a whole number").min(MEGA_CRUSADE_MINIMUM, `Only mega crusades with ${MEGA_CRUSADE_MINIMUM} or more in attendance are reported here`).max(10_000_000),
   currency_code: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, "Select the currency"),
   espees_equivalent: money("Espees equivalent").refine((v) => v > 0, "Enter the Espees equivalent"),
   note: z.string().trim().max(500).optional().default(""),
@@ -316,7 +314,8 @@ const crusadeBase = {
   keep_evidence: z.array(z.coerce.number().int().positive()).max(60).optional().default([]),
 };
 
-// Part A: crusades NOTC sent the zone to.
+// Part A: crusades the Rhapsody department invited the zone to. No attendance
+// here — the department already holds that figure for its own crusades.
 const sponsoredCrusadeSchema = z.object({
   ...crusadeBase,
   pastor_flight: money("Pastor's flight"),
@@ -331,9 +330,20 @@ const sponsoredCrusadeSchema = z.object({
 // Part B: mega crusades the zone held on its own.
 const ownCrusadeSchema = z.object({
   ...crusadeBase,
+  // Mega crusades only.
+  attendance: z.coerce.number().int("Enter attendance as a whole number").min(MEGA_CRUSADE_MINIMUM, `Only mega crusades with ${MEGA_CRUSADE_MINIMUM} or more in attendance are reported here`).max(10_000_000),
   venue_cost: money("Venue cost"),
   transport_cost: money("Transportation cost"),
 }).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] });
+
+// The form offers a blank Part A row by default; a zone with nothing to report
+// there should not have to delete it before submitting.
+const CRUSADE_KEYS = ["crusade_name", "nation", "city", "event_date", "attendance", "currency_code", "note",
+  "pastor_flight", "accompanying_count", "accompanying_flight", "sponsorship_given",
+  "other_cost_note", "other_cost_amount", "espees_equivalent", "espees_already_given", "venue_cost", "transport_cost"];
+const isBlankCrusade = (row) => !row || typeof row !== "object"
+  || CRUSADE_KEYS.every((key) => row[key] === undefined || row[key] === null || row[key] === "" || row[key] === 0);
+const withoutBlanks = (schema) => z.preprocess((rows) => Array.isArray(rows) ? rows.filter((row) => !isBlankCrusade(row)) : rows, schema);
 
 export const zoneExpenseReportSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone").max(250),
@@ -342,8 +352,8 @@ export const zoneExpenseReportSchema = z.object({
   last_name: z.string().trim().min(2, "Last name is required").max(100),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
   notes: z.string().trim().max(2000).optional().default(""),
-  sponsored: z.array(sponsoredCrusadeSchema).max(100).optional().default([]),
-  own: z.array(ownCrusadeSchema).max(100).optional().default([]),
+  sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(100)).optional().default([]),
+  own: withoutBlanks(z.array(ownCrusadeSchema).max(100)).optional().default([]),
 }).refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
 
 export const zoneExpenseLookupSchema = z.object({
