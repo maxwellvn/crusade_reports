@@ -11,7 +11,7 @@ import { deleteJSON, getJSON } from "@/lib/api";
 import { nfull } from "@/lib/dashboardWidgets";
 
 const espees = new Intl.NumberFormat("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const ES = (value) => `ES ${espees.format(Number(value) || 0)}`;
+const ES = (value) => `E ${espees.format(Number(value) || 0)}`;
 const local = (value, code) => `${code} ${espees.format(Number(value) || 0)}`;
 
 function CrusadeRows({ title, crusades, part }) {
