@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { resolveRegistrationDatabasePath } from "./databasePaths.js";
+import { logger } from "./logger.js";
+import { registrationSearchSchema, indexedRowCount, REGISTRATION_SEARCH_TABLES } from "./searchIndex.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
@@ -55,6 +57,16 @@ if (existsSync(pendingRestore) || (pendingRegistrationRestore && existsSync(pend
 export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL"); // crash-safe; survives power loss mid-write
 db.pragma("foreign_keys = ON");
+// WAL + NORMAL: commits skip the per-transaction fsync but stay consistent after
+// a crash or power loss (the WAL is fsynced at checkpoint). Bulk imports of tens
+// of thousands of rows are several times faster than the FULL default.
+db.pragma("synchronous = NORMAL");
+// Dashboard workers, hourly backups and the request thread share this file.
+// Wait for a writer to finish instead of surfacing SQLITE_BUSY to the user.
+db.pragma("busy_timeout = 5000");
+db.pragma("cache_size = -65536"); // 64 MB page cache per connection
+db.pragma("mmap_size = 268435456"); // 256 MB memory-mapped reads
+db.pragma("temp_store = MEMORY"); // sort/group scratch space in RAM
 if (splitDatabaseEnabled) {
   const embeddedRegistrationTable = db.prepare(`
     SELECT name FROM main.sqlite_master
@@ -67,6 +79,9 @@ if (splitDatabaseEnabled) {
   mkdirSync(dirname(REGISTRATION_DB_PATH), { recursive: true });
   db.prepare(`ATTACH DATABASE ? AS ${REGISTRATION_DB_SCHEMA}`).run(REGISTRATION_DB_PATH);
   db.pragma(`${REGISTRATION_DB_SCHEMA}.journal_mode = WAL`);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.synchronous = NORMAL`);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.cache_size = -65536`);
+  db.pragma(`${REGISTRATION_DB_SCHEMA}.mmap_size = 268435456`);
 }
 
 export const METRIC_FIELDS = [
@@ -156,6 +171,7 @@ let startupSchema = `
   CREATE INDEX IF NOT EXISTS idx_crusades_country ON crusades(country);
   CREATE INDEX IF NOT EXISTS idx_crusades_date    ON crusades(event_date);
   CREATE INDEX IF NOT EXISTS idx_crusades_place   ON crusades(city_place_id);
+  CREATE INDEX IF NOT EXISTS idx_reports_created  ON reports(created_at DESC, id DESC);
 
   CREATE TABLE IF NOT EXISTS networks (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -390,7 +406,7 @@ if (splitDatabaseEnabled) {
     .replace("CREATE TABLE IF NOT EXISTS registration_items (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_items (`)
     .replace("CREATE TABLE IF NOT EXISTS registration_dashboard_snapshots (", `CREATE TABLE IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.registration_dashboard_snapshots (`)
     .replaceAll("CREATE INDEX IF NOT EXISTS idx_reg_items_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_reg_items_`)
-    .replaceAll("CREATE INDEX IF NOT EXISTS idx_registrations_lookup_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_registrations_lookup_`);
+    .replaceAll("CREATE INDEX IF NOT EXISTS idx_registrations_", `CREATE INDEX IF NOT EXISTS ${REGISTRATION_DB_SCHEMA}.idx_registrations_`);
 }
 db.exec(startupSchema);
 if (splitDatabaseEnabled) {
@@ -962,7 +978,38 @@ db.exec(`
 // Workers open their own database connection. Rebuilding an already synchronized
 // FTS index on every connection becomes costly as report volume grows.
 const crusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades").get().value;
-const indexedCrusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades_fts").get().value;
+const indexedCrusadeCount = db.prepare("SELECT COUNT(*) AS value FROM crusades_fts_docsize").get().value;
 if (crusadeCount !== indexedCrusadeCount) {
   db.exec(`INSERT INTO crusades_fts(crusades_fts) VALUES ('rebuild')`);
 }
+
+// Indexes on columns that older databases gain through the ALTER migrations
+// above, so they are created only once every column exists.
+const registrationSchemaPrefix = splitDatabaseEnabled ? `${REGISTRATION_DB_SCHEMA}.` : "";
+db.exec(`
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_readiness ON registration_items(readiness_status);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_event_date ON registration_items(event_date);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_program ON registration_items(program);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_registrations_created ON registrations(created_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_registrations_program ON registrations(program);
+`);
+
+// Registration search index — see server/searchIndex.js. Schema only here:
+// building the index over millions of rows is done in batches by
+// scripts/build-search-index.mjs so boot never blocks on it. Search uses the
+// index once it holds rows; until then it keeps the LIKE scan.
+export let registrationSearchIndexEnabled = false;
+try {
+  db.exec(registrationSearchSchema(registrationSchemaPrefix));
+  registrationSearchIndexEnabled = REGISTRATION_SEARCH_TABLES.every(([table, fts]) =>
+    indexedRowCount(db, fts) > 0 || db.prepare(`SELECT COUNT(*) AS value FROM ${table}`).get().value === 0);
+  if (!registrationSearchIndexEnabled) {
+    logger.warn("registration search index is empty; run: node scripts/build-search-index.mjs <registrations.sqlite>");
+  }
+} catch (error) {
+  // ponytail: older SQLite without the trigram tokenizer keeps the LIKE scan.
+  logger.warn({ err: error }, "registration search index unavailable, falling back to LIKE");
+}
+
+// Refresh planner statistics so the new indexes are chosen. Cheap on every boot.
+db.pragma("optimize");

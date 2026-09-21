@@ -1,57 +1,62 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
-import { ReportForm } from "@/components/ReportForm";
-import { FindCrusadeReport } from "@/components/FindCrusadeReport";
-import { Dashboard } from "@/components/Dashboard";
-import { CollectiveReport } from "@/components/CollectiveReport";
-import { WidgetDetail } from "@/components/WidgetDetail";
-import { CrusadesTable } from "@/components/CrusadesTable";
-import { EditCrusadePage } from "@/components/EditCrusadePage";
-import { RegistrationsLive } from "@/components/RegistrationsLive";
-import { CrusadeAnalysis } from "@/components/CrusadeAnalysis";
-import { BlwCampusDashboard } from "@/components/BlwCampusDashboard";
-import { RegistrationsTable } from "@/components/RegistrationsTable";
-import { ZoneLinks } from "@/components/ZoneLinks";
-import { ZonePortal } from "@/components/ZonePortal";
 import { Landing } from "@/components/Landing";
 import { NotFound } from "@/components/NotFound";
 import { AdminGate, useAdmin } from "@/components/AdminGate";
-import { RegistrationForm } from "@/components/RegistrationForm";
-import { RegistrationBulkUpload } from "@/components/RegistrationBulkUpload";
-import { BlueEliteLanding } from "@/components/BlueEliteLanding";
-import { BlueEliteRegistrationForm } from "@/components/BlueEliteRegistrationForm";
-import { BlueEliteAvatar } from "@/components/BlueEliteAvatar";
-import { BlueEliteDashboard } from "@/components/BlueEliteDashboard";
-import { BlueEliteRegistrationsTable } from "@/components/BlueEliteRegistrationsTable";
-import { Settings } from "@/components/Settings";
-import { ResourcesLibrary } from "@/components/ResourcesLibrary";
-import { ResourcesAdmin } from "@/components/ResourcesAdmin";
-import { MissionNationSelection } from "@/components/MissionNationSelection";
-import { MissionNationAdmin } from "@/components/MissionNationAdmin";
-import { MediaTrainingRegistration } from "@/components/MediaTrainingRegistration";
-import { MediaTrainingAdmin } from "@/components/MediaTrainingAdmin";
-import { MediaReports } from "@/components/MediaReports";
-import { MissionTripRegistration } from "@/components/MissionTripRegistration";
-import { MissionTripAdmin } from "@/components/MissionTripAdmin";
-import { CrusadeExpenses } from "@/components/CrusadeExpenses";
-import { CrusadeExpensesAdmin } from "@/components/CrusadeExpensesAdmin";
-import { UpcomingCrusades } from "@/components/UpcomingCrusades";
-import { UpcomingCrusadesAdmin } from "@/components/UpcomingCrusadesAdmin";
-import { AvatarFrame } from "@/components/AvatarFrame";
-import { PrivacyPolicy, TermsOfService } from "@/components/LegalPage";
 import { PublicTranslator } from "@/components/PublicTranslator";
-import { CrusadeCoverage } from "@/components/CrusadeCoverage";
-import { CountryCoverage } from "@/components/CountryCoverage";
-import { PastoralChecklist } from "@/components/PastoralChecklist";
-import { DatabaseProtection } from "@/components/DatabaseProtection";
-import { DuplicateReports } from "@/components/DuplicateReports";
-import { ManualOrganizations } from "@/components/ManualOrganizations";
-import { ApiDocumentation } from "@/components/ApiDocumentation";
 import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { installKeyboardViewportManager } from "@/lib/keyboardViewport";
-import { MyStreamSpaceUpdateForm } from "@/components/MyStreamSpaceUpdateForm";
+
+// Every page loads as its own chunk so the first paint does not wait for the
+// whole admin suite, ExcelJS-sized dashboards or animation libraries.
+const page = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })));
+const ReportForm = page(() => import("@/components/ReportForm"), "ReportForm");
+const FindCrusadeReport = page(() => import("@/components/FindCrusadeReport"), "FindCrusadeReport");
+const Dashboard = page(() => import("@/components/Dashboard"), "Dashboard");
+const CollectiveReport = page(() => import("@/components/CollectiveReport"), "CollectiveReport");
+const WidgetDetail = page(() => import("@/components/WidgetDetail"), "WidgetDetail");
+const CrusadesTable = page(() => import("@/components/CrusadesTable"), "CrusadesTable");
+const EditCrusadePage = page(() => import("@/components/EditCrusadePage"), "EditCrusadePage");
+const RegistrationsLive = page(() => import("@/components/RegistrationsLive"), "RegistrationsLive");
+const CrusadeAnalysis = page(() => import("@/components/CrusadeAnalysis"), "CrusadeAnalysis");
+const BlwCampusDashboard = page(() => import("@/components/BlwCampusDashboard"), "BlwCampusDashboard");
+const RegistrationsTable = page(() => import("@/components/RegistrationsTable"), "RegistrationsTable");
+const ZoneLinks = page(() => import("@/components/ZoneLinks"), "ZoneLinks");
+const ZonePortal = page(() => import("@/components/ZonePortal"), "ZonePortal");
+const RegistrationForm = page(() => import("@/components/RegistrationForm"), "RegistrationForm");
+const RegistrationBulkUpload = page(() => import("@/components/RegistrationBulkUpload"), "RegistrationBulkUpload");
+const BlueEliteLanding = page(() => import("@/components/BlueEliteLanding"), "BlueEliteLanding");
+const BlueEliteRegistrationForm = page(() => import("@/components/BlueEliteRegistrationForm"), "BlueEliteRegistrationForm");
+const BlueEliteAvatar = page(() => import("@/components/BlueEliteAvatar"), "BlueEliteAvatar");
+const BlueEliteDashboard = page(() => import("@/components/BlueEliteDashboard"), "BlueEliteDashboard");
+const BlueEliteRegistrationsTable = page(() => import("@/components/BlueEliteRegistrationsTable"), "BlueEliteRegistrationsTable");
+const Settings = page(() => import("@/components/Settings"), "Settings");
+const ResourcesLibrary = page(() => import("@/components/ResourcesLibrary"), "ResourcesLibrary");
+const ResourcesAdmin = page(() => import("@/components/ResourcesAdmin"), "ResourcesAdmin");
+const MissionNationSelection = page(() => import("@/components/MissionNationSelection"), "MissionNationSelection");
+const MissionNationAdmin = page(() => import("@/components/MissionNationAdmin"), "MissionNationAdmin");
+const MediaTrainingRegistration = page(() => import("@/components/MediaTrainingRegistration"), "MediaTrainingRegistration");
+const MediaTrainingAdmin = page(() => import("@/components/MediaTrainingAdmin"), "MediaTrainingAdmin");
+const MediaReports = page(() => import("@/components/MediaReports"), "MediaReports");
+const MissionTripRegistration = page(() => import("@/components/MissionTripRegistration"), "MissionTripRegistration");
+const MissionTripAdmin = page(() => import("@/components/MissionTripAdmin"), "MissionTripAdmin");
+const CrusadeExpenses = page(() => import("@/components/CrusadeExpenses"), "CrusadeExpenses");
+const CrusadeExpensesAdmin = page(() => import("@/components/CrusadeExpensesAdmin"), "CrusadeExpensesAdmin");
+const UpcomingCrusades = page(() => import("@/components/UpcomingCrusades"), "UpcomingCrusades");
+const UpcomingCrusadesAdmin = page(() => import("@/components/UpcomingCrusadesAdmin"), "UpcomingCrusadesAdmin");
+const AvatarFrame = page(() => import("@/components/AvatarFrame"), "AvatarFrame");
+const PrivacyPolicy = page(() => import("@/components/LegalPage"), "PrivacyPolicy");
+const TermsOfService = page(() => import("@/components/LegalPage"), "TermsOfService");
+const CrusadeCoverage = page(() => import("@/components/CrusadeCoverage"), "CrusadeCoverage");
+const CountryCoverage = page(() => import("@/components/CountryCoverage"), "CountryCoverage");
+const PastoralChecklist = page(() => import("@/components/PastoralChecklist"), "PastoralChecklist");
+const DatabaseProtection = page(() => import("@/components/DatabaseProtection"), "DatabaseProtection");
+const DuplicateReports = page(() => import("@/components/DuplicateReports"), "DuplicateReports");
+const ManualOrganizations = page(() => import("@/components/ManualOrganizations"), "ManualOrganizations");
+const ApiDocumentation = page(() => import("@/components/ApiDocumentation"), "ApiDocumentation");
+const MyStreamSpaceUpdateForm = page(() => import("@/components/MyStreamSpaceUpdateForm"), "MyStreamSpaceUpdateForm");
 
 const BRAND = "Rhapsody End-Time Teaching Crusades";
 const DEFAULT_DESCRIPTION = "Join A Night of a Thousand Crusades, register crusades, access approved resources, and take part in global mission initiatives.";
@@ -235,6 +240,7 @@ export default function App() {
       <TitleManager />
       <KeyboardViewportManager />
       <PublicTranslator />
+      <Suspense fallback={<div className="min-h-screen" aria-busy="true" />}>
       <Routes>
         {/* Public campaign surface — self-contained pages, no app chrome */}
         <Route path="/" element={<Landing />} />
@@ -308,6 +314,7 @@ export default function App() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
       <Toaster />
     </BrowserRouter>
   );

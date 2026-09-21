@@ -41,7 +41,7 @@ export function redactLogValue(value, key = "", seen = new WeakSet()) {
   return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, redactLogValue(childValue, childKey, seen)]));
 }
 
-function redactUrl(value) {
+export function redactUrl(value) {
   try {
     const url = new URL(String(value || ""), "http://local");
     for (const key of url.searchParams.keys()) if (SENSITIVE_KEY.test(key)) url.searchParams.set(key, "[REDACTED]");

@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { logger, wrap, ApiError } from "../logger.js";
-import { loadWorkbook } from "../xlsxSanitize.js";
+import { parseWorkbookOffThread } from "../xlsxParse.js";
 import { resolveCity } from "../cityResolve.js";
 import { loadZones } from "./zones.js";
 import { resolveCountryName } from "./countries.js";
@@ -112,13 +112,8 @@ importer.get("/template", wrap(async (_req, res) => {
 importer.post("/", upload.single("file"), wrap(async (req, res) => {
   if (!req.file) throw new ApiError(400, "NO_FILE", "No spreadsheet uploaded");
 
-  const wb = new ExcelJS.Workbook();
-  try {
-    // Retry without comment parts if exceljs can't reconcile the file (see xlsxSanitize.js).
-    await loadWorkbook(wb, req.file.buffer);
-  } catch {
-    throw new ApiError(422, "BAD_FILE", "Could not read that file — use the .xlsx template");
-  }
+  // Parsed in a worker thread so a large upload never stalls other requests.
+  const wb = await parseWorkbookOffThread(req.file.buffer);
   const ws = wb.getWorksheet("Crusades");
   if (!ws) {
     // Wrong-door detection: the zone portal template has its own sheet and
