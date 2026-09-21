@@ -352,7 +352,7 @@ export const zoneExpenseReportSchema = z.object({
   last_name: z.string().trim().min(2, "Last name is required").max(100),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
   notes: z.string().trim().max(2000).optional().default(""),
-  sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(100)).optional().default([]),
+  sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
   own: withoutBlanks(z.array(ownCrusadeSchema).max(100)).optional().default([]),
 }).refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
 

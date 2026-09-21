@@ -299,7 +299,7 @@ export const zoneExpenseReportSchema = z.object({
     other_cost_note: z.string().trim().optional().default(""),
     other_cost_amount: money("the other costs"),
     espees_already_given: money("the Espees already given"),
-  }).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] }))).optional().default([]),
+  }).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] })).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
   own: withoutBlanks(z.array(z.object({
     ...crusadeBase,
     attendance: z.coerce.number({ invalid_type_error: "Enter the attendance" }).int("Whole number").min(MEGA_CRUSADE_MINIMUM, `Mega crusades only — ${MEGA_CRUSADE_MINIMUM.toLocaleString()} and above`),

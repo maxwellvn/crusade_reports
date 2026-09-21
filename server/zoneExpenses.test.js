@@ -42,3 +42,8 @@ test("Part B needs a venue or transport cost; Part A other-costs need a descript
   assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, own: [{ ...own, venue_cost: 0, transport_cost: 0 }] }), /venue or transportation/);
   assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, sponsored: [{ ...sponsored, other_cost_amount: 80 }] }), /Describe the other costs/);
 });
+
+test("Part A holds a single invited crusade", () => {
+  assert.equal(zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored] }).sponsored.length, 1);
+  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored, { ...sponsored, crusade_name: "Second Crusade" }] }), /Only one invited crusade/);
+});
