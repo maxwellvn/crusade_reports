@@ -1,20 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { db } from "./db.js";
-import { rhapsodyEndTimeSummary, RHAPSODY_END_TIME_START_DATE } from "./routes/stats.js";
+import { rhapsodyEndTimeSummary, rorDistributedByFormat, RHAPSODY_END_TIME_START_DATE } from "./routes/stats.js";
 import { isValidHeldDate } from "./validation.js";
 
-function addCrusade(eventDate, suffix) {
+function addCrusade(eventDate, suffix, { format = "physical", rorDistributed = 0 } = {}) {
   const reportId = db.prepare(`
     INSERT INTO reports (organization_type, zone, country, contact_name)
     VALUES ('zone', ?, 'Nigeria', 'Date Boundary Test')
   `).run(`Date Boundary Zone ${suffix}`).lastInsertRowid;
   db.prepare(`
     INSERT INTO crusades
-      (report_id, organization_type, zone, country, event_type, event_name, city, event_date,
-       attendance, online_participation, salvation)
-    VALUES (?, 'zone', ?, 'Nigeria', 'street', ?, 'Lagos', ?, 20, 5, 3)
-  `).run(reportId, `Date Boundary Zone ${suffix}`, `Date Boundary ${suffix}`, eventDate);
+      (report_id, organization_type, zone, country, event_type, event_name, city, event_date, format,
+       attendance, online_participation, salvation, ror_distributed)
+    VALUES (?, 'zone', ?, 'Nigeria', 'street', ?, 'Lagos', ?, ?, 20, 5, 3, ?)
+  `).run(reportId, `Date Boundary Zone ${suffix}`, `Date Boundary ${suffix}`, eventDate, format, rorDistributed);
 }
 
 test("Rhapsody End-Time summary starts after 31 August 2026", () => {
@@ -38,6 +38,30 @@ test("Rhapsody End-Time summary starts after 31 August 2026", () => {
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary Malformed date"), false);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary Future date"), false);
     assert.equal(after.recent.some((row) => row.event_name === "Date Boundary RETC 2"), true);
+  } finally {
+    db.exec("ROLLBACK");
+  }
+});
+
+test("Rhapsody distributed splits physical and online by crusade format", () => {
+  db.exec("BEGIN");
+  try {
+    const beforeEndTime = rhapsodyEndTimeSummary(db, "2026-09-10");
+    const beforeAll = rorDistributedByFormat(db);
+
+    addCrusade("2026-09-02", "Physical ROR", { format: "physical", rorDistributed: 400 });
+    addCrusade("2026-09-02", "Online ROR", { format: "online", rorDistributed: 150 });
+    addCrusade("2026-08-20", "Before window", { format: "physical", rorDistributed: 999 });
+
+    const afterEndTime = rhapsodyEndTimeSummary(db, "2026-09-10");
+    assert.equal(afterEndTime.totals.physical, beforeEndTime.totals.physical + 400);
+    assert.equal(afterEndTime.totals.online, beforeEndTime.totals.online + 150);
+    assert.equal(afterEndTime.totals.total, beforeEndTime.totals.total + 550);
+
+    const afterAll = rorDistributedByFormat(db);
+    assert.equal(afterAll.physical, beforeAll.physical + 400 + 999);
+    assert.equal(afterAll.online, beforeAll.online + 150);
+    assert.equal(afterAll.total, beforeAll.total + 400 + 150 + 999);
   } finally {
     db.exec("ROLLBACK");
   }

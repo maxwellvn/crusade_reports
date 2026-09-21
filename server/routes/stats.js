@@ -18,13 +18,28 @@ const VALID_EVENT_DATE_SQL = `
   AND event_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
   AND date(event_date) IS NOT NULL
 `;
+// Physical crusades distribute Rhapsody copies physically; online crusades distribute online.
+const ROR_BY_FORMAT_SQL = `
+  COALESCE(SUM(CASE WHEN format = 'online' THEN ror_distributed ELSE 0 END), 0) AS online,
+  COALESCE(SUM(CASE WHEN format IS NULL OR format <> 'online' THEN ror_distributed ELSE 0 END), 0) AS physical,
+  COALESCE(SUM(ror_distributed), 0) AS total
+`;
+
+export function rorDistributedByFormat(database = db, whereSql = "", params = []) {
+  return database.prepare(`
+    SELECT ${ROR_BY_FORMAT_SQL}
+    FROM crusades
+    ${whereSql}
+  `).get(...params);
+}
 
 export function rhapsodyEndTimeSummary(database = db, throughDate = new Date().toISOString().slice(0, 10)) {
   const totals = database.prepare(`
     SELECT COUNT(*) AS crusades,
            COALESCE(SUM(attendance), 0) AS attendance,
            COALESCE(SUM(online_participation), 0) AS online_attendance,
-           COALESCE(SUM(salvation), 0) AS salvation
+           COALESCE(SUM(salvation), 0) AS salvation,
+           ${ROR_BY_FORMAT_SQL}
     FROM crusades
     WHERE ${VALID_EVENT_DATE_SQL}
   `).get(RHAPSODY_END_TIME_START_DATE, throughDate);
@@ -261,6 +276,7 @@ export function buildReportDashboardData() {
 
   return applyMyStreamSpaceAdjustment({
     totals: { ...totals, countries: canonicalCountryCount },
+    ror_distributed_by_format: rorDistributedByFormat(),
     by_format: by("format"),
     reports: db.prepare("SELECT COUNT(*) AS n FROM reports").get().n,
     by_category: by("event_type"),

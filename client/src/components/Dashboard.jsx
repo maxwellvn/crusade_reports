@@ -177,6 +177,8 @@ export function Dashboard() {
         </section>
       )}
 
+      <RhapsodyDistributedSection data={stats.ror_distributed_by_format} />
+
       <RhapsodyEndTimeSection data={stats.rhapsody_end_time} onOpen={goToRhapsodyEndTime} />
 
       <section aria-labelledby="breakdowns-heading" className="space-y-4">
@@ -229,6 +231,32 @@ export function Dashboard() {
   );
 }
 
+function RhapsodyDistributedSection({ data }) {
+  const physical = Number(data?.physical || 0);
+  const online = Number(data?.online || 0);
+  const total = Number(data?.total ?? physical + online);
+  return (
+    <section aria-labelledby="rhapsody-distributed-heading" className="border-y border-orange-200 bg-white">
+      <div className="border-b border-orange-100 bg-orange-50/60 px-5 py-4">
+        <h3 id="rhapsody-distributed-heading" className="text-base font-semibold text-slate-950">Rhapsody Distributed</h3>
+        <p className="mt-1 text-xs text-slate-600">Physical copies from onsite crusades · Online copies from online crusades</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3">
+        {[
+          ["Physical copies", physical, "text-sky-700"],
+          ["Online copies", online, "text-cyan-700"],
+          ["Total distributed", total, "text-orange-700"],
+        ].map(([label, value, tone], index) => (
+          <div key={label} className={`min-h-24 p-4 ${index ? "border-t sm:border-t-0 sm:border-l border-slate-200" : ""}`}>
+            <p className="text-xs text-slate-500">{label}</p>
+            <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone}`}>{nfull.format(value)}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function RhapsodyEndTimeSection({ data, onOpen }) {
   if (!data) return null;
   const totals = data.totals || {};
@@ -238,6 +266,9 @@ function RhapsodyEndTimeSection({ data, onOpen }) {
   };
   const dateLabel = formatDate(data.start_date, { dateStyle: "long" }, "1 September 2026");
   const shortDate = (value) => formatDate(value, { day: "numeric", month: "short", year: "numeric" }, value || "Date unavailable");
+  const rorPhysical = Number(totals.physical || 0);
+  const rorOnline = Number(totals.online || 0);
+  const rorTotal = Number(totals.total ?? rorPhysical + rorOnline);
 
   return (
     <section aria-labelledby="rhapsody-end-time-heading" className="border-y border-emerald-200 bg-white">
@@ -261,6 +292,19 @@ function RhapsodyEndTimeSection({ data, onOpen }) {
           <div key={label} className={`min-h-24 p-4 ${index % 2 ? "border-l" : ""} ${index >= 2 ? "border-t lg:border-t-0" : ""} ${index % 4 ? "lg:border-l" : "lg:border-l-0"}`}>
             <p className="text-xs text-slate-500">{label}</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{nfull.format(value || 0)}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 border-b border-slate-200 sm:grid-cols-3">
+        {[
+          ["Physical Rhapsody copies", rorPhysical],
+          ["Online Rhapsody copies", rorOnline],
+          ["Total Rhapsody copies", rorTotal],
+        ].map(([label, value], index) => (
+          <div key={label} className={`min-h-24 p-4 ${index ? "border-t sm:border-t-0 sm:border-l border-slate-200" : ""}`}>
+            <p className="text-xs text-slate-500">{label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-orange-700">{nfull.format(value)}</p>
           </div>
         ))}
       </div>
