@@ -549,6 +549,13 @@ db.exec(`
     espees_already_given REAL NOT NULL DEFAULT 0,
     note TEXT
   );
+  CREATE TABLE IF NOT EXISTS zone_expense_companions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    crusade_id INTEGER NOT NULL REFERENCES zone_expense_crusades(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    name TEXT,
+    flight_cost REAL NOT NULL DEFAULT 0
+  );
   CREATE TABLE IF NOT EXISTS zone_expense_evidence (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     crusade_id INTEGER NOT NULL REFERENCES zone_expense_crusades(id) ON DELETE CASCADE,
@@ -559,6 +566,7 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_zone_expense_crusades_report ON zone_expense_crusades(report_id);
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_companions_crusade ON zone_expense_companions(crusade_id);
   CREATE INDEX IF NOT EXISTS idx_zone_expense_evidence_crusade ON zone_expense_evidence(crusade_id);
   CREATE INDEX IF NOT EXISTS idx_zone_expense_reports_updated ON zone_expense_reports(updated_at DESC);
 `);

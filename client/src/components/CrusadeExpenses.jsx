@@ -1,7 +1,7 @@
 /* THESIS: A zonal crusade ledger in two parts, not a generic claim form. OWN-WORLD: campaign navy, paper white, partnership gold. STORY: who you are → the crusades we sent you to → the ones you held yourself → what each cost, with proof. */
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Coins, FileText, MapPin, Paperclip, Plane, Plus, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
@@ -30,7 +30,7 @@ const searchCurrencies = async (query) => {
 };
 const money = (value) => espees.format(Number(value) || 0);
 
-const emptySponsored = () => ({ crusade_name: "", nation: "", city: "", event_date: "", attendance: "", currency_code: "", pastor_flight: "", accompanying_count: "", accompanying_flight: "", sponsorship_given: "", other_cost_note: "", other_cost_amount: "", espees_equivalent: "", espees_already_given: "", note: "", keep_evidence: [], evidence: [] });
+const emptySponsored = () => ({ crusade_name: "", nation: "", city: "", event_date: "", attendance: "", currency_code: "", pastor_flight: "", companions: [], sponsorship_given: "", other_cost_note: "", other_cost_amount: "", espees_equivalent: "", espees_already_given: "", note: "", keep_evidence: [], evidence: [] });
 const emptyOwn = () => ({ crusade_name: "", nation: "", city: "", event_date: "", attendance: "", currency_code: "", venue_cost: "", transport_cost: "", espees_equivalent: "", note: "", keep_evidence: [], evidence: [] });
 // Part A opens with one empty crusade because most zones were invited to
 // exactly one. A zone with none should not have to delete it, so untouched
@@ -41,8 +41,9 @@ const blankTolerantResolver = (values, context, options) => validate(stripBlankC
 const defaults = { zone_name: "", designation: "", first_name: "", last_name: "", kingschat_username: "", notes: "", sponsored: [emptySponsored()], own: [] };
 
 const num = (value) => Number(value) || 0;
+const companionSum = (crusade) => (crusade?.companions || []).reduce((total, person) => total + num(person?.flight_cost), 0);
 const localSum = (crusade, part) => part === "sponsored"
-  ? num(crusade?.pastor_flight) + num(crusade?.accompanying_flight) + num(crusade?.sponsorship_given) + num(crusade?.other_cost_amount)
+  ? num(crusade?.pastor_flight) + companionSum(crusade) + num(crusade?.sponsorship_given) + num(crusade?.other_cost_amount)
   : num(crusade?.venue_cost) + num(crusade?.transport_cost);
 const espeesSum = (rows = []) => rows.reduce((total, row) => total + num(row?.espees_equivalent), 0);
 
@@ -52,7 +53,7 @@ const toFormValues = (report) => ({
   ...defaults,
   zone_name: report.zone_name, designation: report.designation, first_name: report.first_name,
   last_name: report.last_name, kingschat_username: report.kingschat_username, notes: report.notes || "",
-  sponsored: (report.sponsored.length ? report.sponsored.slice(0, 1) : [{}]).map((c) => ({ ...emptySponsored(), ...c, city: c.city || "", other_cost_note: c.other_cost_note || "", note: c.note || "", keep_evidence: (c.evidence || []).map((f) => f.id), evidence: c.evidence || [] })),
+  sponsored: (report.sponsored.length ? report.sponsored.slice(0, 1) : [{}]).map((c) => ({ ...emptySponsored(), ...c, city: c.city || "", other_cost_note: c.other_cost_note || "", note: c.note || "", companions: (c.companions || []).map((p) => ({ name: p.name || "", flight_cost: p.flight_cost })), keep_evidence: (c.evidence || []).map((f) => f.id), evidence: c.evidence || [] })),
   own: report.own.map((c) => ({ ...emptyOwn(), ...c, city: c.city || "", note: c.note || "", keep_evidence: c.evidence.map((f) => f.id), evidence: c.evidence })),
 });
 
@@ -94,7 +95,28 @@ function EvidencePicker({ part, index, saved, kept, onKeptChange, picked, onPick
 
 // React 18 strips `ref` from props spread across a component boundary, so the
 // field registers itself here rather than receiving register()'s result.
-const AmountField = ({ label, required, error, code, register, name }) => <Field label={label} required={required} error={error}><div className="relative"><span title={code ? currencyName(code) || code : "Select a currency first"} className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs font-semibold text-slate-500">{code || "—"}</span><Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="pl-12 tabular-nums" {...register(name)} /></div></Field>;
+const AmountField = ({ label, required, error, code, register, name }) => <Field label={label || undefined} required={required} error={error}><div className="relative"><span title={code ? currencyName(code) || code : "Select a currency first"} className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs font-semibold text-slate-500">{code || "—"}</span><Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00" className="pl-12 tabular-nums" {...register(name)} /></div></Field>;
+
+
+// Each accompanying person is quoted separately — a zone may send several and
+// their flights rarely cost the same.
+function CompanionList({ part, index, control, register, errors, code }) {
+  const { fields, append, remove } = useFieldArray({ control, name: `${part}.${index}.companions` });
+  const rows = useWatch({ control, name: `${part}.${index}.companions` }) || [];
+  const total = rows.reduce((sum, person) => sum + num(person?.flight_cost), 0);
+  return <div className="sm:col-span-2">
+    <div className="flex flex-wrap items-baseline justify-between gap-3"><p className="text-sm font-medium text-slate-700">Accompanying persons</p><p className="text-xs text-slate-500">Add each person who travelled with the pastor and what their flight cost.</p></div>
+    {fields.length > 0 && <ul className="mt-3 space-y-3">{fields.map((row, personIndex) => <li key={row.id} className="grid gap-3 sm:grid-cols-[1fr_12rem_2.5rem] sm:items-start">
+      <Field error={errors?.[part]?.[index]?.companions?.[personIndex]?.name?.message}><Input placeholder="Name of person" aria-label={`Accompanying person ${personIndex + 1} name`} {...register(`${part}.${index}.companions.${personIndex}.name`)} /></Field>
+      <AmountField label="" code={code} error={errors?.[part]?.[index]?.companions?.[personIndex]?.flight_cost?.message} register={register} name={`${part}.${index}.companions.${personIndex}.flight_cost`} />
+      <Button type="button" variant="ghost" size="icon" className="text-slate-500 hover:text-red-700" onClick={() => remove(personIndex)} aria-label={`Remove accompanying person ${personIndex + 1}`}><Trash2 /></Button>
+    </li>)}</ul>}
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <Button type="button" variant="outline" size="sm" className="rounded-full transition-[transform,background-color] duration-150 active:scale-[0.96]" onClick={() => append({ name: "", flight_cost: "" })}><Plus /> Add accompanying person</Button>
+      {fields.length > 0 && <p className="text-xs text-slate-500">{fields.length} {fields.length === 1 ? "person" : "people"} · <span className="font-semibold tabular-nums text-slate-950">{code ? `${code} ` : ""}{money(total)}</span></p>}
+    </div>
+  </div>;
+}
 
 function CrusadeCard({ part, index, count, register, control, setValue, errors, crusade, onRemove, files, setFiles, fetchCountries, cityFetcherFor }) {
   const err = errors?.[part]?.[index] || {};
@@ -121,8 +143,7 @@ function CrusadeCard({ part, index, count, register, control, setValue, errors, 
 
       {part === "sponsored" ? <>
         <AmountField label="Pastor's flight" code={code} error={err.pastor_flight?.message} register={register} name={`${part}.${index}.pastor_flight`} />
-        <Field label="Accompanying person(s)" hint="How many travelled with the pastor" error={err.accompanying_count?.message}><Input type="number" inputMode="numeric" min="0" step="1" className="tabular-nums" {...register(`${part}.${index}.accompanying_count`)} /></Field>
-        <AmountField label="Accompanying persons' flights, etc." code={code} error={err.accompanying_flight?.message} register={register} name={`${part}.${index}.accompanying_flight`} />
+        <CompanionList part={part} index={index} control={control} register={register} errors={errors} code={code} />
         <AmountField label="Amount already given for crusade sponsorship" code={code} error={err.sponsorship_given?.message} register={register} name={`${part}.${index}.sponsorship_given`} />
         <AmountField label="Other costs" code={code} error={err.other_cost_amount?.message} register={register} name={`${part}.${index}.other_cost_amount`} />
         <Field label="What were the other costs?" error={err.other_cost_note?.message}><Input {...register(`${part}.${index}.other_cost_note`)} placeholder="Describe them" /></Field>

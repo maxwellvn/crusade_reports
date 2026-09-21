@@ -273,7 +273,7 @@ const crusadeBase = {
 
 // Part A starts with one blank crusade; drop it if nothing was entered.
 const CRUSADE_KEYS = ["crusade_name", "nation", "city", "event_date", "attendance", "currency_code", "note",
-  "pastor_flight", "accompanying_count", "accompanying_flight", "sponsorship_given",
+  "pastor_flight", "sponsorship_given",
   "other_cost_note", "other_cost_amount", "espees_equivalent", "espees_already_given", "venue_cost", "transport_cost"];
 export const isBlankCrusade = (row) => !row || CRUSADE_KEYS.every((key) => row[key] === undefined || row[key] === null || row[key] === "" || row[key] === 0);
 export const stripBlankCrusades = (values) => ({
@@ -293,8 +293,10 @@ export const zoneExpenseReportSchema = z.object({
   sponsored: withoutBlanks(z.array(z.object({
     ...crusadeBase,
     pastor_flight: money("the pastor's flight"),
-    accompanying_count: z.coerce.number().int().min(0).optional().default(0),
-    accompanying_flight: money("the accompanying persons' flights"),
+    companions: z.array(z.object({
+      name: z.string().trim().max(150).optional().default(""),
+      flight_cost: money("this flight"),
+    })).optional().default([]),
     sponsorship_given: money("the amount already given for crusade sponsorship"),
     other_cost_note: z.string().trim().optional().default(""),
     other_cost_amount: money("the other costs"),

@@ -319,8 +319,12 @@ const crusadeBase = {
 const sponsoredCrusadeSchema = z.object({
   ...crusadeBase,
   pastor_flight: money("Pastor's flight"),
-  accompanying_count: z.coerce.number().int().min(0).max(100).default(0),
-  accompanying_flight: money("Accompanying persons' flights"),
+  // One row per accompanying person, so a zone can quote each flight rather
+  // than a single lump sum.
+  companions: z.array(z.object({
+    name: z.string().trim().max(150).optional().default(""),
+    flight_cost: money("The accompanying person's flight"),
+  })).max(50).optional().default([]),
   sponsorship_given: money("Amount already given for crusade sponsorship"),
   other_cost_note: z.string().trim().max(250).optional().default(""),
   other_cost_amount: money("Other costs"),
@@ -339,7 +343,7 @@ const ownCrusadeSchema = z.object({
 // The form offers a blank Part A row by default; a zone with nothing to report
 // there should not have to delete it before submitting.
 const CRUSADE_KEYS = ["crusade_name", "nation", "city", "event_date", "attendance", "currency_code", "note",
-  "pastor_flight", "accompanying_count", "accompanying_flight", "sponsorship_given",
+  "pastor_flight", "sponsorship_given",
   "other_cost_note", "other_cost_amount", "espees_equivalent", "espees_already_given", "venue_cost", "transport_cost"];
 const isBlankCrusade = (row) => !row || typeof row !== "object"
   || CRUSADE_KEYS.every((key) => row[key] === undefined || row[key] === null || row[key] === "" || row[key] === 0);

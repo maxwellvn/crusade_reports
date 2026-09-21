@@ -4,7 +4,7 @@ import { MEGA_CRUSADE_MINIMUM, zoneExpenseReportSchema } from "./validation.js";
 
 const pastor = { zone_name: "BENIN ZONE 1", designation: "Zonal Pastor", first_name: "Ngozi", last_name: "Eze", kingschat_username: "@NgoziEze" };
 const crusade = { crusade_name: "City Mega Crusade", nation: "Benin", event_date: "2026-08-01", currency_code: "ngn", espees_equivalent: 400 };
-const sponsored = { ...crusade, pastor_flight: 250, accompanying_count: 2, accompanying_flight: 300, sponsorship_given: 100, espees_already_given: 50 };
+const sponsored = { ...crusade, pastor_flight: 250, companions: [{ name: "Bro A", flight_cost: 180 }, { name: "Sis B", flight_cost: 120 }], sponsorship_given: 100, espees_already_given: 50 };
 const own = { ...crusade, attendance: 1200, venue_cost: 500, transport_cost: 120 };
 
 test("accepts a report with both parts and upper-cases the currency", () => {
@@ -46,4 +46,10 @@ test("Part B needs a venue or transport cost; Part A other-costs need a descript
 test("Part A holds a single invited crusade", () => {
   assert.equal(zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored] }).sponsored.length, 1);
   assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored, { ...sponsored, crusade_name: "Second Crusade" }] }), /Only one invited crusade/);
+});
+
+test("each accompanying person is quoted separately", () => {
+  const parsed = zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored] }).sponsored[0];
+  assert.deepEqual(parsed.companions.map((p) => p.flight_cost), [180, 120]);
+  assert.equal(zoneExpenseReportSchema.parse({ ...pastor, sponsored: [{ ...sponsored, companions: [] }] }).sponsored[0].companions.length, 0);
 });

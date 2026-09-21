@@ -27,13 +27,16 @@ function throttleLookup(ip) {
   lookupHits.set(ip, hits);
 }
 
+const companionTotal = (crusade) => (crusade.companions || []).reduce((sum, person) => sum + Number(person.flight_cost || 0), 0);
 const localTotal = (crusade, part) => round2(part === "sponsored"
-  ? Number(crusade.pastor_flight || 0) + Number(crusade.accompanying_flight || 0) + Number(crusade.sponsorship_given || 0) + Number(crusade.other_cost_amount || 0)
+  ? Number(crusade.pastor_flight || 0) + companionTotal(crusade) + Number(crusade.sponsorship_given || 0) + Number(crusade.other_cost_amount || 0)
   : Number(crusade.venue_cost || 0) + Number(crusade.transport_cost || 0));
+
+const companionsFor = (crusadeId) => db.prepare("SELECT id, name, flight_cost FROM zone_expense_companions WHERE crusade_id = ? ORDER BY position, id").all(crusadeId);
 
 function crusadesFor(reportId) {
   const rows = db.prepare("SELECT * FROM zone_expense_crusades WHERE report_id = ? ORDER BY part, position, id").all(reportId)
-    .map((row) => ({ ...row, evidence: evidenceFor(row.id) }));
+    .map((row) => ({ ...row, companions: companionsFor(row.id), evidence: evidenceFor(row.id) }));
   return { sponsored: rows.filter((r) => r.part === "sponsored"), own: rows.filter((r) => r.part === "own") };
 }
 
@@ -76,6 +79,8 @@ const insertCrusade = db.prepare(`
     @venue_cost, @transport_cost, @local_total, @espees_equivalent, @espees_already_given, @note)
 `);
 
+const insertCompanion = db.prepare("INSERT INTO zone_expense_companions (crusade_id, position, name, flight_cost) VALUES (?, ?, ?, ?)");
+
 // Replaces every crusade line and re-attaches evidence. `keep` lists evidence
 // ids the pastor did not remove while editing.
 const saveCrusades = db.transaction((reportId, data, uploads, keep) => {
@@ -95,14 +100,17 @@ const saveCrusades = db.transaction((reportId, data, uploads, keep) => {
         report_id: reportId, part, position: index,
         crusade_name: crusade.crusade_name, nation: crusade.nation, city: crusade.city || null,
         event_date: crusade.event_date, attendance: crusade.attendance ?? 0, currency_code: crusade.currency_code,
-        pastor_flight: round2(crusade.pastor_flight || 0), accompanying_count: crusade.accompanying_count || 0,
-        accompanying_flight: round2(crusade.accompanying_flight || 0), sponsorship_given: round2(crusade.sponsorship_given || 0),
+        pastor_flight: round2(crusade.pastor_flight || 0), accompanying_count: (crusade.companions || []).length,
+        accompanying_flight: round2(companionTotal(crusade)), sponsorship_given: round2(crusade.sponsorship_given || 0),
         other_cost_note: crusade.other_cost_note || null, other_cost_amount: round2(crusade.other_cost_amount || 0),
         venue_cost: round2(crusade.venue_cost || 0), transport_cost: round2(crusade.transport_cost || 0),
         local_total: localTotal(crusade, part), espees_equivalent: round2(crusade.espees_equivalent),
         espees_already_given: round2(crusade.espees_already_given || 0), note: crusade.note || null,
       });
       const crusadeId = row.lastInsertRowid;
+      (crusade.companions || []).forEach((person, personIndex) => {
+        insertCompanion.run(crusadeId, personIndex, person.name || null, round2(person.flight_cost || 0));
+      });
       if (part === "sponsored") { sponsoredEspees += crusade.espees_equivalent; alreadyGiven += Number(crusade.espees_already_given || 0); }
       else ownEspees += crusade.espees_equivalent;
       saveEvidence(crusadeId, uploads[`evidence_${part}_${index}`] || []);
@@ -232,6 +240,7 @@ const lineColumns = [
   { header: "Pastor flight", value: (r) => r.pastor_flight },
   { header: "Accompanying persons", value: (r) => r.accompanying_count },
   { header: "Accompanying persons' flights", value: (r) => r.accompanying_flight },
+  { header: "Accompanying persons detail", value: (r) => (r.companions || []).map((p) => `${p.name || "Unnamed"}: ${p.flight_cost}`).join("; ") },
   { header: "Amount already given for crusade sponsorship", value: (r) => r.sponsorship_given },
   { header: "Other costs", value: (r) => r.other_cost_amount },
   { header: "Other costs detail", value: (r) => r.other_cost_note },
