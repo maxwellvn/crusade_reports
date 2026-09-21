@@ -57,7 +57,7 @@ const toFormValues = (report) => ({
 });
 
 function Section({ icon: Icon, title, copy, children }) {
-  return <section className="mt-12"><div className="flex gap-3"><Icon className="mt-1 size-5 text-amber-600" /><div><h3 className="text-2xl font-medium tracking-[-0.02em]">{title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{copy}</p></div></div><div className="mt-6 grid gap-5 border-y border-black/15 py-8 sm:grid-cols-2">{children}</div></section>;
+  return <section className="mt-12"><div className="flex gap-3"><Icon className="mt-1 size-5 text-amber-600" /><div><h3 className="text-2xl font-medium tracking-[-0.02em]">{title}</h3>{copy && <p className="mt-1 text-sm leading-6 text-slate-600">{copy}</p>}</div></div><div className="mt-6 grid gap-5 border-y border-black/15 py-8 sm:grid-cols-2">{children}</div></section>;
 }
 
 function Confirmation({ result, editing }) {
@@ -122,8 +122,8 @@ function CrusadeCard({ part, index, count, register, control, setValue, errors, 
       {part === "sponsored" ? <>
         <AmountField label="Pastor's flight" code={code} error={err.pastor_flight?.message} register={register} name={`${part}.${index}.pastor_flight`} />
         <Field label="Accompanying person(s)" hint="How many travelled with the pastor" error={err.accompanying_count?.message}><Input type="number" inputMode="numeric" min="0" step="1" className="tabular-nums" {...register(`${part}.${index}.accompanying_count`)} /></Field>
-        <AmountField label="Accompanying person's expenses" code={code} error={err.accompanying_flight?.message} register={register} name={`${part}.${index}.accompanying_flight`} />
-        <AmountField label="Already given for sponsorship" code={code} error={err.sponsorship_given?.message} register={register} name={`${part}.${index}.sponsorship_given`} />
+        <AmountField label="Accompanying persons' flights, etc." code={code} error={err.accompanying_flight?.message} register={register} name={`${part}.${index}.accompanying_flight`} />
+        <AmountField label="Amount already given for crusade sponsorship" code={code} error={err.sponsorship_given?.message} register={register} name={`${part}.${index}.sponsorship_given`} />
         <AmountField label="Other costs" code={code} error={err.other_cost_amount?.message} register={register} name={`${part}.${index}.other_cost_amount`} />
         <Field label="What were the other costs?" error={err.other_cost_note?.message}><Input {...register(`${part}.${index}.other_cost_note`)} placeholder="Describe them" /></Field>
       </> : <>
@@ -195,7 +195,7 @@ export function CrusadeExpenses() {
         : lookingUp ? null : <p className="mt-5 max-w-2xl border-l-2 border-amber-500 pl-5 text-sm leading-6 text-slate-700">Already submitted for your zone? <button type="button" onClick={() => setLookingUp(true)} className="font-semibold underline underline-offset-2">Open your zone&rsquo;s report</button> to add crusades or update it. Otherwise fill in the form below.</p>}
       {lookingUp && !editing && <LookupPanel fetchZones={fetchZones} onFound={loadReport} />}
 
-      <Section icon={MapPin} title="Zone" copy="The zone this report belongs to. One report is kept per zone."><Field label="Zone" required error={errors.zone_name?.message} className="sm:col-span-2"><Controller control={control} name="zone_name" render={({ field }) => <Combobox value={field.value} fetcher={fetchZones} onSelect={(o) => field.onChange(o.value)} disabled={Boolean(editing)} placeholder="Select your zone" caps invalid={Boolean(errors.zone_name)} />} /></Field></Section>
+      <Section icon={MapPin} title="Zone"><Field label="Zone" required error={errors.zone_name?.message} className="sm:col-span-2"><Controller control={control} name="zone_name" render={({ field }) => <Combobox value={field.value} fetcher={fetchZones} onSelect={(o) => field.onChange(o.value)} disabled={Boolean(editing)} placeholder="Select your zone" caps invalid={Boolean(errors.zone_name)} />} /></Field></Section>
 
       <Section icon={UserRound} title="Your details" copy="Your KingsChat username is how you reopen this report later."><Field label="Designation" required error={errors.designation?.message} className="sm:col-span-2"><Select {...register("designation")}><option value="">Select designation</option>{EXPENSE_DESIGNATIONS.map((v) => <option key={v}>{v}</option>)}</Select></Field><Field label="First name" required error={errors.first_name?.message}><Input {...register("first_name")} autoComplete="given-name" /></Field><Field label="Last name" required error={errors.last_name?.message}><Input {...register("last_name")} autoComplete="family-name" /></Field><Field label="KingsChat username" required hint={editing ? "Must match the username used to submit" : "You will need this to reopen the report"} error={errors.kingschat_username?.message} className="sm:col-span-2"><Input {...register("kingschat_username")} placeholder="@username" autoComplete="off" /></Field></Section>
 
