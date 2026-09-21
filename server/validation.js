@@ -295,42 +295,56 @@ export const manualOrgUpdateSchema = z.object({
   group_name: z.string().trim().max(200).optional().default(""),
 });
 
-export const EXPENSE_CATEGORIES = [
-  "Venue",
-  "Publicity & printing",
-  "Sound & equipment",
-  "Transport & logistics",
-  "Refreshments & welfare",
-  "Ministry materials",
-  "Ministers & guests",
-  "Other",
-];
+export const EXPENSE_DESIGNATIONS = ["Regional Pastor", "Zonal Director", "Zonal Pastor"];
+export const MEGA_CRUSADE_MINIMUM = 1000;
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date");
+const money = (label) => z.coerce.number().min(0, `${label} cannot be negative`).max(1e12, `${label} is too large`)
+  .refine((v) => Math.round(v * 100) === v * 100, `${label} can have at most two decimal places`).default(0);
 
-export const EXPENSE_DESIGNATIONS = ["Regional Pastor", "Zonal Director", "Zonal Pastor"];
+const crusadeBase = {
+  crusade_name: z.string().trim().min(2, "Enter the crusade name").max(250),
+  nation: z.string().trim().min(2, "Enter the nation").max(150),
+  city: z.string().trim().max(150).optional().default(""),
+  event_date: isoDate,
+  // Mega crusades only — cellular outreaches are reported elsewhere.
+  attendance: z.coerce.number().int("Enter attendance as a whole number").min(MEGA_CRUSADE_MINIMUM, `Only mega crusades with ${MEGA_CRUSADE_MINIMUM} or more in attendance are reported here`).max(10_000_000),
+  currency_code: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, "Select the currency"),
+  espees_equivalent: money("Espees equivalent").refine((v) => v > 0, "Enter the Espees equivalent"),
+  note: z.string().trim().max(500).optional().default(""),
+  // Evidence ids the pastor kept while editing; anything omitted is deleted.
+  keep_evidence: z.array(z.coerce.number().int().positive()).max(60).optional().default([]),
+};
+
+// Part A: crusades NOTC sent the zone to.
+const sponsoredCrusadeSchema = z.object({
+  ...crusadeBase,
+  pastor_flight: money("Pastor's flight"),
+  accompanying_count: z.coerce.number().int().min(0).max(100).default(0),
+  accompanying_flight: money("Accompanying flights"),
+  sponsorship_given: money("Sponsorship already given"),
+  other_cost_note: z.string().trim().max(250).optional().default(""),
+  other_cost_amount: money("Other costs"),
+  espees_already_given: money("Espees already given"),
+}).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] });
+
+// Part B: mega crusades the zone held on its own.
+const ownCrusadeSchema = z.object({
+  ...crusadeBase,
+  venue_cost: money("Venue cost"),
+  transport_cost: money("Transportation cost"),
+}).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] });
 
 export const zoneExpenseReportSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone").max(250),
   designation: z.enum(EXPENSE_DESIGNATIONS, { errorMap: () => ({ message: "Select your designation" }) }),
   first_name: z.string().trim().min(2, "First name is required").max(100),
   last_name: z.string().trim().min(2, "Last name is required").max(100),
-  email: z.string().trim().email("Enter a valid email address").max(254),
-  phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"),
-  phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
-  crusade_count: z.coerce.number().int("Enter a whole number").min(1, "Enter how many crusades this covers").max(100000),
-  period_from: isoDate,
-  period_to: isoDate,
   notes: z.string().trim().max(2000).optional().default(""),
-  items: z.array(z.object({
-    category: z.enum(EXPENSE_CATEGORIES, { errorMap: () => ({ message: "Choose a category" }) }),
-    amount_espees: z.coerce.number().min(0.01, "Enter an amount in Espees").max(1e9, "Amount is too large")
-      .refine((v) => Math.round(v * 100) === v * 100, "Use at most two decimal places"),
-    note: z.string().trim().max(250).optional().default(""),
-  })).min(1, "Add at least one expense line").max(200),
-}).refine((data) => data.period_to >= data.period_from, { message: "Period end must be on or after the start", path: ["period_to"] })
-  .refine((data) => data.items.every((item) => item.category !== "Other" || item.note), { message: "Describe the expense when the category is Other", path: ["items"] });
+  sponsored: z.array(sponsoredCrusadeSchema).max(100).optional().default([]),
+  own: z.array(ownCrusadeSchema).max(100).optional().default([]),
+}).refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
 
 export const zoneExpenseLookupSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone").max(250),

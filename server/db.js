@@ -487,7 +487,25 @@ if (/mission_country_code\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(missionSelectionSq
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_mission_selections_assignment ON mission_nation_selections(assigned_country_code)");
 
-// Zonal crusade expense reports: one editable report per zone, itemised in Espees.
+// The first cut of this feature stored a flat category/amount list keyed to a
+// pastor's email. Replace that shape before creating the current tables; a
+// legacy table holding rows is renamed aside rather than dropped.
+{
+  const legacyColumns = db.prepare("PRAGMA table_info(zone_expense_reports)").all().map((column) => column.name);
+  if (legacyColumns.length && legacyColumns.includes("email")) {
+    const rows = db.prepare("SELECT COUNT(*) AS value FROM zone_expense_reports").get().value;
+    const stamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+    db.exec(rows
+      ? `ALTER TABLE zone_expense_reports RENAME TO zone_expense_reports_legacy_${stamp};
+         ALTER TABLE zone_expense_items RENAME TO zone_expense_items_legacy_${stamp};`
+      : "DROP TABLE IF EXISTS zone_expense_items; DROP TABLE IF EXISTS zone_expense_reports;");
+  }
+}
+
+// Zonal crusade expense reports: one editable report per zone. Part A covers
+// crusades NOTC sent the zone to, Part B the mega crusades the zone held on its
+// own. Both are mega only (1000+ attendance); costs are entered in the local
+// currency with the Espees equivalent supplied by the pastor.
 db.exec(`
   CREATE TABLE IF NOT EXISTS zone_expense_reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -497,27 +515,51 @@ db.exec(`
     designation TEXT NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    phone_country_code TEXT NOT NULL,
-    phone_number TEXT NOT NULL,
     kingschat_username TEXT NOT NULL,
-    crusade_count INTEGER NOT NULL,
-    period_from TEXT NOT NULL,
-    period_to TEXT NOT NULL,
-    total_espees REAL NOT NULL DEFAULT 0,
     notes TEXT,
+    total_espees REAL NOT NULL DEFAULT 0,
+    sponsored_espees REAL NOT NULL DEFAULT 0,
+    own_espees REAL NOT NULL DEFAULT 0,
+    espees_already_given REAL NOT NULL DEFAULT 0,
+    crusade_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-  CREATE TABLE IF NOT EXISTS zone_expense_items (
+  CREATE TABLE IF NOT EXISTS zone_expense_crusades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     report_id INTEGER NOT NULL REFERENCES zone_expense_reports(id) ON DELETE CASCADE,
+    part TEXT NOT NULL CHECK (part IN ('sponsored', 'own')),
     position INTEGER NOT NULL,
-    category TEXT NOT NULL,
-    amount_espees REAL NOT NULL,
+    crusade_name TEXT NOT NULL,
+    nation TEXT NOT NULL,
+    city TEXT,
+    event_date TEXT NOT NULL,
+    attendance INTEGER NOT NULL,
+    currency_code TEXT NOT NULL,
+    pastor_flight REAL NOT NULL DEFAULT 0,
+    accompanying_count INTEGER NOT NULL DEFAULT 0,
+    accompanying_flight REAL NOT NULL DEFAULT 0,
+    sponsorship_given REAL NOT NULL DEFAULT 0,
+    other_cost_note TEXT,
+    other_cost_amount REAL NOT NULL DEFAULT 0,
+    venue_cost REAL NOT NULL DEFAULT 0,
+    transport_cost REAL NOT NULL DEFAULT 0,
+    local_total REAL NOT NULL DEFAULT 0,
+    espees_equivalent REAL NOT NULL DEFAULT 0,
+    espees_already_given REAL NOT NULL DEFAULT 0,
     note TEXT
   );
-  CREATE INDEX IF NOT EXISTS idx_zone_expense_items_report ON zone_expense_items(report_id);
+  CREATE TABLE IF NOT EXISTS zone_expense_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    crusade_id INTEGER NOT NULL REFERENCES zone_expense_crusades(id) ON DELETE CASCADE,
+    stored_name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_crusades_report ON zone_expense_crusades(report_id);
+  CREATE INDEX IF NOT EXISTS idx_zone_expense_evidence_crusade ON zone_expense_evidence(crusade_id);
   CREATE INDEX IF NOT EXISTS idx_zone_expense_reports_updated ON zone_expense_reports(updated_at DESC);
 `);
 

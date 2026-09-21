@@ -253,18 +253,45 @@ export const defaultValues = {
   media_links: "",
 };
 
-export const EXPENSE_CATEGORIES = ["Venue", "Publicity & printing", "Sound & equipment", "Transport & logistics", "Refreshments & welfare", "Ministry materials", "Ministers & guests", "Other"];
+export const EXPENSE_DESIGNATIONS = ["Regional Pastor", "Zonal Director", "Zonal Pastor"];
+export const MEGA_CRUSADE_MINIMUM = 1000;
+
+const money = (label) => z.coerce.number({ invalid_type_error: `Enter ${label}` }).min(0, `${label} cannot be negative`)
+  .refine((v) => Math.round(v * 100) === v * 100, "Two decimal places at most").optional().default(0);
+
+const crusadeBase = {
+  crusade_name: z.string().trim().min(2, "Enter the crusade name"),
+  nation: z.string().trim().min(2, "Enter the nation"),
+  city: z.string().trim().optional().default(""),
+  event_date: z.string().min(1, "Enter the date held"),
+  attendance: z.coerce.number({ invalid_type_error: "Enter the attendance" }).int("Whole number").min(MEGA_CRUSADE_MINIMUM, `Mega crusades only — ${MEGA_CRUSADE_MINIMUM.toLocaleString()} and above`),
+  currency_code: z.string().trim().min(3, "Select the currency"),
+  espees_equivalent: z.coerce.number({ invalid_type_error: "Enter the Espees equivalent" }).min(0.01, "Enter the Espees equivalent"),
+  note: z.string().trim().max(500).optional().default(""),
+  keep_evidence: z.array(z.coerce.number()).optional().default([]),
+  evidence: z.array(z.any()).optional().default([]),
+};
+
 export const zoneExpenseReportSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone"),
-  designation: z.enum(["Regional Pastor", "Zonal Director", "Zonal Pastor"], { errorMap: () => ({ message: "Select your designation" }) }), first_name: z.string().trim().min(2, "First name is required"), last_name: z.string().trim().min(2, "Last name is required"),
-  email: z.string().trim().email("Enter a valid email address"), phone_country_code: z.string().regex(/^\+\d{1,4}$/, "Select a country code"), phone_number: z.string().trim().regex(/^[\d ()-]{6,24}$/, "Enter a valid phone number"),
+  designation: z.enum(EXPENSE_DESIGNATIONS, { errorMap: () => ({ message: "Select your designation" }) }),
+  first_name: z.string().trim().min(2, "First name is required"),
+  last_name: z.string().trim().min(2, "Last name is required"),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
-  crusade_count: z.coerce.number().int("Enter a whole number").min(1, "Enter how many crusades this covers"),
-  period_from: z.string().min(1, "Enter the start date"), period_to: z.string().min(1, "Enter the end date"),
   notes: z.string().max(2000).optional().default(""),
-  items: z.array(z.object({
-    category: z.enum(EXPENSE_CATEGORIES, { errorMap: () => ({ message: "Choose a category" }) }),
-    amount_espees: z.coerce.number().min(0.01, "Enter an amount").refine((v) => Math.round(v * 100) === v * 100, "Two decimal places at most"),
-    note: z.string().trim().max(250).optional().default(""),
-  }).refine((item) => item.category !== "Other" || item.note, { message: "Describe this expense", path: ["note"] })).min(1, "Add at least one expense line"),
-}).refine((d) => !d.period_from || !d.period_to || d.period_to >= d.period_from, { message: "End date must be on or after the start", path: ["period_to"] });
+  sponsored: z.array(z.object({
+    ...crusadeBase,
+    pastor_flight: money("the pastor's flight"),
+    accompanying_count: z.coerce.number().int().min(0).optional().default(0),
+    accompanying_flight: money("the accompanying flights"),
+    sponsorship_given: money("the sponsorship already given"),
+    other_cost_note: z.string().trim().optional().default(""),
+    other_cost_amount: money("the other costs"),
+    espees_already_given: money("the Espees already given"),
+  }).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] })).optional().default([]),
+  own: z.array(z.object({
+    ...crusadeBase,
+    venue_cost: money("the venue cost"),
+    transport_cost: money("the transportation cost"),
+  }).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] })).optional().default([]),
+}).refine((d) => d.sponsored.length + d.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });

@@ -1,28 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { zoneExpenseReportSchema } from "./validation.js";
+import { MEGA_CRUSADE_MINIMUM, zoneExpenseReportSchema } from "./validation.js";
 
-const valid = {
-  zone_name: "BENIN ZONE 1", designation: "Zonal Pastor", first_name: "Ngozi", last_name: "Eze", email: "ngozi@example.com",
-  phone_country_code: "+234", phone_number: "8098765432", kingschat_username: "@NgoziEze",
-  crusade_count: "8", period_from: "2026-08-01", period_to: "2026-08-31",
-  items: [{ category: "Venue", amount_espees: "2500" }, { category: "Other", amount_espees: 150.25, note: "Chairs hire" }],
-};
+const pastor = { zone_name: "BENIN ZONE 1", designation: "Zonal Pastor", first_name: "Ngozi", last_name: "Eze", kingschat_username: "@NgoziEze" };
+const crusade = { crusade_name: "City Mega Crusade", nation: "Benin", event_date: "2026-08-01", attendance: 1200, currency_code: "ngn", espees_equivalent: 400 };
+const sponsored = { ...crusade, pastor_flight: 250, accompanying_count: 2, accompanying_flight: 300, sponsorship_given: 100, espees_already_given: 50 };
+const own = { ...crusade, venue_cost: 500, transport_cost: 120 };
 
-test("accepts a complete zonal expense report and coerces numbers", () => {
-  const parsed = zoneExpenseReportSchema.parse(valid);
-  assert.equal(parsed.crusade_count, 8);
-  assert.equal(parsed.items[0].amount_espees, 2500);
+test("accepts a report with both parts and upper-cases the currency", () => {
+  const parsed = zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored], own: [own] });
+  assert.equal(parsed.sponsored[0].currency_code, "NGN");
+  assert.equal(parsed.own[0].venue_cost, 500);
 });
 
-test("rejects Other without a note, sub-cent amounts, and inverted periods", () => {
-  assert.throws(() => zoneExpenseReportSchema.parse({ ...valid, items: [{ category: "Other", amount_espees: 5 }] }), /Describe the expense/);
-  assert.throws(() => zoneExpenseReportSchema.parse({ ...valid, items: [{ category: "Venue", amount_espees: 1.005 }] }), /two decimal/);
-  assert.throws(() => zoneExpenseReportSchema.parse({ ...valid, period_to: "2026-07-01" }), /on or after/);
-  assert.throws(() => zoneExpenseReportSchema.parse({ ...valid, items: [] }), /at least one/);
+test("either part alone is enough, but not neither", () => {
+  assert.equal(zoneExpenseReportSchema.parse({ ...pastor, own: [own] }).sponsored.length, 0);
+  assert.equal(zoneExpenseReportSchema.parse({ ...pastor, sponsored: [sponsored] }).own.length, 0);
+  assert.throws(() => zoneExpenseReportSchema.parse(pastor), /at least one crusade/);
 });
 
-test("only regional pastors, zonal directors and zonal pastors can submit", () => {
-  assert.throws(() => zoneExpenseReportSchema.parse({ ...valid, designation: "Group Pastor" }), /Select your designation/);
-  assert.equal(zoneExpenseReportSchema.parse({ ...valid, designation: "Regional Pastor" }).designation, "Regional Pastor");
+test("rejects cellular-sized attendance in either part", () => {
+  for (const part of ["sponsored", "own"]) {
+    const line = part === "sponsored" ? sponsored : own;
+    assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, [part]: [{ ...line, attendance: MEGA_CRUSADE_MINIMUM - 1 }] }), /Only mega crusades/);
+  }
+});
+
+test("rejects unsupported designations, bad currencies and missing Espees equivalents", () => {
+  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, designation: "Group Pastor", own: [own] }), /Select your designation/);
+  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, own: [{ ...own, currency_code: "NAIRA" }] }), /Select the currency/);
+  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, own: [{ ...own, espees_equivalent: 0 }] }), /Espees equivalent/);
+});
+
+test("Part B needs a venue or transport cost; Part A other-costs need a description", () => {
+  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, own: [{ ...own, venue_cost: 0, transport_cost: 0 }] }), /venue or transportation/);
+  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, sponsored: [{ ...sponsored, other_cost_amount: 80 }] }), /Describe the other costs/);
 });
