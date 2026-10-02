@@ -291,7 +291,7 @@ export const zoneExpenseReportSchema = z.object({
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
   notes: z.string().max(2000).optional().default(""),
   espees_already_given: money("the Espees given for the crusade sponsorship"),
-  sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Say whether the crusade sponsorship was paid successfully" }) }),
+  sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Kindly say whether the crusade sponsorship was paid successfully" }) }),
   sponsored: withoutBlanks(z.array(z.object({
     ...crusadeBase,
     pastor_flight: money("the pastor's flight"),
@@ -310,5 +310,5 @@ export const zoneExpenseReportSchema = z.object({
     transport_cost: money("the transportation cost"),
   }).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] }))).optional().default([]),
 })
-  .refine((d) => d.sponsorship_paid !== "yes" || d.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
+  .refine((d) => d.sponsorship_paid !== "yes" || d.espees_already_given > 0, { message: "Kindly enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
   .refine((d) => d.sponsored.length + d.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });

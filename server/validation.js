@@ -359,11 +359,11 @@ export const zoneExpenseReportSchema = z.object({
   // it was paid successfully. The claim is recorded, not enforced: the NOTC team
   // checks it on its own side, so a zone can report either way.
   espees_already_given: money("Espees given for the crusade sponsorship"),
-  sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Say whether the crusade sponsorship was paid successfully" }) }),
+  sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Kindly say whether the crusade sponsorship was paid successfully" }) }),
   sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
   own: withoutBlanks(z.array(ownCrusadeSchema).max(100)).optional().default([]),
 })
-  .refine((data) => data.sponsorship_paid !== "yes" || data.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
+  .refine((data) => data.sponsorship_paid !== "yes" || data.espees_already_given > 0, { message: "Kindly enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
   .refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
 
 export const zoneExpenseLookupSchema = z.object({
