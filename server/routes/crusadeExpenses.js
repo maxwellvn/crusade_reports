@@ -93,7 +93,7 @@ const saveCrusades = db.transaction((reportId, data, uploads, keep) => {
     : [];
   db.prepare("DELETE FROM zone_expense_crusades WHERE report_id = ?").run(reportId);
 
-  let sponsoredEspees = 0; let ownEspees = 0; let alreadyGiven = 0;
+  let sponsoredEspees = 0; let ownEspees = 0;
   for (const part of ["sponsored", "own"]) {
     data[part].forEach((crusade, index) => {
       const row = insertCrusade.run({
@@ -105,13 +105,14 @@ const saveCrusades = db.transaction((reportId, data, uploads, keep) => {
         other_cost_note: crusade.other_cost_note || null, other_cost_amount: round2(crusade.other_cost_amount || 0),
         venue_cost: round2(crusade.venue_cost || 0), transport_cost: round2(crusade.transport_cost || 0),
         local_total: localTotal(crusade, part), espees_equivalent: round2(crusade.espees_equivalent),
-        espees_already_given: round2(crusade.espees_already_given || 0), note: crusade.note || null,
+        // Given once for the zone; carried on the invited crusade so exports keep it.
+        espees_already_given: part === "sponsored" ? round2(data.espees_already_given) : 0, note: crusade.note || null,
       });
       const crusadeId = row.lastInsertRowid;
       (crusade.companions || []).forEach((person, personIndex) => {
         insertCompanion.run(crusadeId, personIndex, person.name || null, round2(person.flight_cost || 0));
       });
-      if (part === "sponsored") { sponsoredEspees += crusade.espees_equivalent; alreadyGiven += Number(crusade.espees_already_given || 0); }
+      if (part === "sponsored") sponsoredEspees += crusade.espees_equivalent;
       else ownEspees += crusade.espees_equivalent;
       saveEvidence(crusadeId, uploads[`evidence_${part}_${index}`] || []);
       for (const row of retained.filter((r) => (crusade.keep_evidence || []).includes(r.id))) {
@@ -121,7 +122,7 @@ const saveCrusades = db.transaction((reportId, data, uploads, keep) => {
     });
   }
   db.prepare(`UPDATE zone_expense_reports SET sponsored_espees = ?, own_espees = ?, total_espees = ?, espees_already_given = ?, crusade_count = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(round2(sponsoredEspees), round2(ownEspees), round2(sponsoredEspees + ownEspees), round2(alreadyGiven), data.sponsored.length + data.own.length, reportId);
+    .run(round2(sponsoredEspees), round2(ownEspees), round2(sponsoredEspees + ownEspees), round2(data.espees_already_given), data.sponsored.length + data.own.length, reportId);
   return orphaned;
 });
 
@@ -129,6 +130,7 @@ const reportFields = (data, region) => ({
   zone_name: data.zone_name, region, designation: data.designation,
   first_name: data.first_name, last_name: data.last_name,
   kingschat_username: normalizeHandle(data.kingschat_username), notes: data.notes || null,
+  sponsorship_paid: data.sponsorship_paid === "yes" ? 1 : 0,
 });
 
 const keptIds = (data) => new Set([...data.sponsored, ...data.own].flatMap((c) => c.keep_evidence || []));
@@ -229,6 +231,7 @@ const lineColumns = [
   { header: "Zone", value: (r) => r.zone_name },
   { header: "Region", value: (r) => r.region },
   { header: "Pastor", value: (r) => `${r.designation} ${r.first_name} ${r.last_name}` },
+  { header: "Sponsorship paid", value: (r) => r.sponsorship_paid ? "Yes" : "No" },
   { header: "KingsChat", value: (r) => `@${r.kingschat_username}` },
   { header: "Part", value: (r) => r.part === "sponsored" ? "A — Invited by Rhapsody" : "B — Zone's own" },
   { header: "Crusade", value: (r) => r.crusade_name },

@@ -274,7 +274,7 @@ const crusadeBase = {
 // Part A starts with one blank crusade; drop it if nothing was entered.
 const CRUSADE_KEYS = ["crusade_name", "nation", "city", "event_date", "attendance", "currency_code", "note",
   "pastor_flight", "sponsorship_given",
-  "other_cost_note", "other_cost_amount", "espees_equivalent", "espees_already_given", "venue_cost", "transport_cost"];
+  "other_cost_note", "other_cost_amount", "espees_equivalent", "venue_cost", "transport_cost"];
 export const isBlankCrusade = (row) => !row || CRUSADE_KEYS.every((key) => row[key] === undefined || row[key] === null || row[key] === "" || row[key] === 0);
 export const stripBlankCrusades = (values) => ({
   ...values,
@@ -290,6 +290,8 @@ export const zoneExpenseReportSchema = z.object({
   last_name: z.string().trim().min(2, "Last name is required"),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
   notes: z.string().max(2000).optional().default(""),
+  espees_already_given: money("the Espees given for the crusade sponsorship"),
+  sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Say whether the crusade sponsorship was paid successfully" }) }),
   sponsored: withoutBlanks(z.array(z.object({
     ...crusadeBase,
     pastor_flight: money("the pastor's flight"),
@@ -300,7 +302,6 @@ export const zoneExpenseReportSchema = z.object({
     sponsorship_given: money("the amount already given for crusade sponsorship"),
     other_cost_note: z.string().trim().optional().default(""),
     other_cost_amount: money("the other costs"),
-    espees_already_given: money("the Espees already given"),
   }).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] })).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
   own: withoutBlanks(z.array(z.object({
     ...crusadeBase,
@@ -308,4 +309,7 @@ export const zoneExpenseReportSchema = z.object({
     venue_cost: money("the venue cost"),
     transport_cost: money("the transportation cost"),
   }).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] }))).optional().default([]),
-}).refine((d) => d.sponsored.length + d.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
+})
+  .refine((d) => d.sponsorship_paid === "yes", { message: "Expenses can be added once the crusade sponsorship has been paid", path: ["sponsorship_paid"] })
+  .refine((d) => d.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
+  .refine((d) => d.sponsored.length + d.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });

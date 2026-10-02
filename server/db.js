@@ -571,6 +571,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_zone_expense_reports_updated ON zone_expense_reports(updated_at DESC);
 `);
 
+// The zone's own claim that its crusade sponsorship was paid in full; expenses
+// are only accepted once it is set. Reports filed before this existed stay 0.
+const zoneExpenseReportColumns = new Set(db.prepare("PRAGMA table_info(zone_expense_reports)").all().map((column) => column.name));
+if (!zoneExpenseReportColumns.has("sponsorship_paid")) db.exec("ALTER TABLE zone_expense_reports ADD COLUMN sponsorship_paid INTEGER NOT NULL DEFAULT 0");
+
 const resourceColumns = new Set(db.prepare("PRAGMA table_info(resources)").all().map((column) => column.name));
 if (!resourceColumns.has("thumbnail_url")) db.exec("ALTER TABLE resources ADD COLUMN thumbnail_url TEXT");
 

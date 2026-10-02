@@ -328,7 +328,6 @@ const sponsoredCrusadeSchema = z.object({
   sponsorship_given: money("Amount already given for crusade sponsorship"),
   other_cost_note: z.string().trim().max(250).optional().default(""),
   other_cost_amount: money("Other costs"),
-  espees_already_given: money("Espees already given"),
 }).refine((c) => !c.other_cost_amount || c.other_cost_note, { message: "Describe the other costs", path: ["other_cost_note"] });
 
 // Part B: mega crusades the zone held on its own.
@@ -344,7 +343,7 @@ const ownCrusadeSchema = z.object({
 // there should not have to delete it before submitting.
 const CRUSADE_KEYS = ["crusade_name", "nation", "city", "event_date", "attendance", "currency_code", "note",
   "pastor_flight", "sponsorship_given",
-  "other_cost_note", "other_cost_amount", "espees_equivalent", "espees_already_given", "venue_cost", "transport_cost"];
+  "other_cost_note", "other_cost_amount", "espees_equivalent", "venue_cost", "transport_cost"];
 const isBlankCrusade = (row) => !row || typeof row !== "object"
   || CRUSADE_KEYS.every((key) => row[key] === undefined || row[key] === null || row[key] === "" || row[key] === 0);
 const withoutBlanks = (schema) => z.preprocess((rows) => Array.isArray(rows) ? rows.filter((row) => !isBlankCrusade(row)) : rows, schema);
@@ -356,9 +355,16 @@ export const zoneExpenseReportSchema = z.object({
   last_name: z.string().trim().min(2, "Last name is required").max(100),
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
   notes: z.string().trim().max(2000).optional().default(""),
+  // The sponsorship comes first: how much was given, and the zone's claim that
+  // it was paid successfully. Expenses are only taken once that is settled.
+  espees_already_given: money("Espees given for the crusade sponsorship"),
+  sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Say whether the crusade sponsorship was paid successfully" }) }),
   sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
   own: withoutBlanks(z.array(ownCrusadeSchema).max(100)).optional().default([]),
-}).refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
+})
+  .refine((data) => data.sponsorship_paid === "yes", { message: "Expenses can be added once the crusade sponsorship has been paid", path: ["sponsorship_paid"] })
+  .refine((data) => data.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
+  .refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
 
 export const zoneExpenseLookupSchema = z.object({
   zone_name: z.string().trim().min(2, "Select your zone").max(250),
