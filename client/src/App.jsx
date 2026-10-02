@@ -11,7 +11,22 @@ import { installKeyboardViewportManager } from "@/lib/keyboardViewport";
 
 // Every page loads as its own chunk so the first paint does not wait for the
 // whole admin suite, ExcelJS-sized dashboards or animation libraries.
-const page = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })));
+// A tab opened before a deploy still points at chunk files the new build has
+// replaced, so the import fails. Reload once to pick up the new build; the
+// timestamp stops a genuinely broken chunk from reloading in a loop.
+const RELOAD_KEY = "chunk-reload-at";
+const reloadForNewBuild = () => {
+  try {
+    if (Date.now() - Number(sessionStorage.getItem(RELOAD_KEY) || 0) < 30_000) return false;
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  } catch { return false; }
+  window.location.reload();
+  return true;
+};
+const page = (load, name) => lazy(() => load().then((m) => ({ default: m[name] }), (error) => {
+  if (reloadForNewBuild()) return new Promise(() => {});
+  throw error;
+}));
 const ReportForm = page(() => import("@/components/ReportForm"), "ReportForm");
 const FindCrusadeReport = page(() => import("@/components/FindCrusadeReport"), "FindCrusadeReport");
 const Dashboard = page(() => import("@/components/Dashboard"), "Dashboard");
