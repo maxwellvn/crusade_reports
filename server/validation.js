@@ -356,14 +356,14 @@ export const zoneExpenseReportSchema = z.object({
   kingschat_username: z.string().trim().regex(/^@?[A-Za-z0-9._-]{2,100}$/, "Enter your KingsChat username"),
   notes: z.string().trim().max(2000).optional().default(""),
   // The sponsorship comes first: how much was given, and the zone's claim that
-  // it was paid successfully. Expenses are only taken once that is settled.
+  // it was paid successfully. The claim is recorded, not enforced: the NOTC team
+  // checks it on its own side, so a zone can report either way.
   espees_already_given: money("Espees given for the crusade sponsorship"),
   sponsorship_paid: z.enum(["yes", "no"], { errorMap: () => ({ message: "Say whether the crusade sponsorship was paid successfully" }) }),
   sponsored: withoutBlanks(z.array(sponsoredCrusadeSchema).max(1, "Only one invited crusade is recorded per zone")).optional().default([]),
   own: withoutBlanks(z.array(ownCrusadeSchema).max(100)).optional().default([]),
 })
-  .refine((data) => data.sponsorship_paid === "yes", { message: "Expenses can be added once the crusade sponsorship has been paid", path: ["sponsorship_paid"] })
-  .refine((data) => data.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
+  .refine((data) => data.sponsorship_paid !== "yes" || data.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
   .refine((data) => data.sponsored.length + data.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });
 
 export const zoneExpenseLookupSchema = z.object({

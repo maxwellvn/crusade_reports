@@ -310,6 +310,5 @@ export const zoneExpenseReportSchema = z.object({
     transport_cost: money("the transportation cost"),
   }).refine((c) => c.venue_cost > 0 || c.transport_cost > 0, { message: "Enter the venue or transportation cost", path: ["venue_cost"] }))).optional().default([]),
 })
-  .refine((d) => d.sponsorship_paid === "yes", { message: "Expenses can be added once the crusade sponsorship has been paid", path: ["sponsorship_paid"] })
-  .refine((d) => d.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
+  .refine((d) => d.sponsorship_paid !== "yes" || d.espees_already_given > 0, { message: "Enter the Espees given for the crusade sponsorship", path: ["espees_already_given"] })
   .refine((d) => d.sponsored.length + d.own.length > 0, { message: "Add at least one crusade in Part A or Part B", path: ["sponsored"] });

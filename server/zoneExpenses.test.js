@@ -54,8 +54,9 @@ test("each accompanying person is quoted separately", () => {
   assert.equal(zoneExpenseReportSchema.parse({ ...pastor, sponsored: [{ ...sponsored, companions: [] }] }).sponsored[0].companions.length, 0);
 });
 
-test("expenses are only accepted once the sponsorship is claimed as paid, with the Espees given", () => {
-  assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, sponsorship_paid: "no", own: [own] }), /once the crusade sponsorship has been paid/);
+test("the paid claim is recorded either way; Espees given is only demanded when it was paid", () => {
+  const unpaid = zoneExpenseReportSchema.parse({ ...pastor, sponsorship_paid: "no", espees_already_given: 0, own: [own] });
+  assert.equal(unpaid.sponsorship_paid, "no");
   const { sponsorship_paid, ...unanswered } = pastor;
   assert.throws(() => zoneExpenseReportSchema.parse({ ...unanswered, own: [own] }), /paid successfully/);
   assert.throws(() => zoneExpenseReportSchema.parse({ ...pastor, espees_already_given: 0, own: [own] }), /Espees given for the crusade sponsorship/);
