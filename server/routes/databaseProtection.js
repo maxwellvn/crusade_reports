@@ -2,7 +2,9 @@ import { Router } from "express";
 import multer from "multer";
 import { unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { pipeline } from "node:stream/promises";
 import { requireSuperAdmin } from "../auth.js";
+import { backupArchiveFilename, createBackupArchive } from "../backupDownload.js";
 import { backupDatabase, databaseProtectionStatus, stageDatabaseRestore } from "../databaseProtection.js";
 import { ApiError, wrap } from "../logger.js";
 
@@ -18,7 +20,13 @@ databaseProtection.post("/backup", requireSuperAdmin, wrap(async (_req, res) => 
 
 databaseProtection.get("/download", requireSuperAdmin, wrap(async (_req, res) => {
   const result = await backupDatabase("manual-download");
-  res.download(result.path, result.name);
+  if (!result.registration_path) {
+    res.download(result.path, result.name);
+    return;
+  }
+
+  res.attachment(backupArchiveFilename(result));
+  await pipeline(createBackupArchive(result), res);
 }));
 
 databaseProtection.post("/restore", requireSuperAdmin, upload.fields([

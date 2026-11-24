@@ -64,8 +64,9 @@ export function DatabaseProtection() {
           <p className="mt-2 text-sm leading-6 text-slate-600">Backups are consistency-checked before they are retained. Download regularly to keep a copy outside this server.</p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button onClick={backup} disabled={busy}><DatabaseBackup />{busy ? "Working…" : "Back up now"}</Button>
-            {!status?.split_database && <Button asChild variant="outline"><a href="/api/admin/database-protection/download"><Download />Create & download</a></Button>}
+            <Button asChild variant="outline"><a href="/api/admin/database-protection/download"><Download />{status?.split_database ? "Create & download backup pair" : "Create & download"}</a></Button>
           </div>
+          {status?.split_database && <p className="mt-3 text-xs leading-5 text-slate-500">Downloads one ZIP containing the matching reports and registrations SQLite backups.</p>}
           <p className="mt-4 text-xs leading-5 text-slate-500">Automatic policy: 48 recent, 30 daily, and 12 weekly recovery points.</p>
         </div>
 
