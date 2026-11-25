@@ -5,6 +5,7 @@ import { wrap } from "../logger.js";
 import { loadZones } from "./zones.js";
 import { sendExport, sendTextDownload } from "./exporter.js";
 import { buildCoverageRows } from "../coverage.js";
+import { DEFAULT_CAMPAIGN, assertCampaign } from "../campaigns.js";
 
 export const coverage = Router();
 
@@ -21,25 +22,25 @@ const exportColumns = (type) => type === "groups" ? [
   { header: "Crusades registered", value: (row) => row.crusades },
 ];
 
-export async function coverageData() {
+export async function coverageData(campaign = DEFAULT_CAMPAIGN) {
   const directory = await loadZones();
   const reported = db.prepare(`
     SELECT zone, group_name, COALESCE(SUM(planned_count), 0) AS crusades, 0 AS attendance
     FROM registration_items
-    WHERE zone IS NOT NULL AND TRIM(zone) <> ''
+    WHERE campaign = ? AND zone IS NOT NULL AND TRIM(zone) <> ''
       AND (program = 'public' OR program IS NULL)
     GROUP BY zone COLLATE NOCASE, group_name COLLATE NOCASE
-  `).all();
+  `).all(assertCampaign(campaign));
   return buildCoverageRows(directory, reported);
 }
 
-coverage.get("/", requirePageAccess("dashboard/coverage"), wrap(async (_req, res) => res.json(await coverageData())));
+coverage.get("/", requirePageAccess("dashboard/coverage"), wrap(async (req, res) => res.json(await coverageData(req.campaign))));
 
 coverage.get("/export", requirePageAccess("dashboard/coverage"), wrap(async (req, res) => {
   const type = req.query.type === "groups" ? "groups" : "zones";
   const status = ["registered", "not_registered"].includes(req.query.status) ? req.query.status : "";
   const query = String(req.query.q || "").trim().toLowerCase();
-  const data = await coverageData();
+  const data = await coverageData(req.campaign);
   const rows = data[type].filter((row) => (!status || row.status === status)
     && (!query || [row.name, row.zone, row.region].some((value) => String(value || "").toLowerCase().includes(query))));
   const format = ["xlsx", "pdf"].includes(req.query.format) ? req.query.format : "csv";
@@ -47,7 +48,7 @@ coverage.get("/export", requirePageAccess("dashboard/coverage"), wrap(async (req
 }));
 
 coverage.get("/unregistered-zones/export", requirePageAccess("dashboard/coverage"), wrap(async (req, res) => {
-  const data = await coverageData();
+  const data = await coverageData(req.campaign);
   const rows = data.zones.filter((row) => row.status === "not_registered")
     .map((row, index) => ({ ...row, number: index + 1 }));
   const baseName = "zones-without-registered-crusades";

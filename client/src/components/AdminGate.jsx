@@ -1,5 +1,6 @@
 import * as React from "react";
 import { getJSON, postJSON } from "@/lib/api";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 import "../admin-gate.css";
 
 const AdminContext = React.createContext(null);
@@ -10,6 +11,8 @@ export const useAdmin = () => React.useContext(AdminContext);
 // photography). Styles live in admin-gate.css, scoped to .admin-gate so they
 // do not leak into the admin dashboard it protects.
 export function AdminGate({ children }) {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const [state, setState] = React.useState("checking");
   const [message, setMessage] = React.useState("");
   const [admin, setAdmin] = React.useState(null);
@@ -48,20 +51,20 @@ export function AdminGate({ children }) {
           <div className="gate-glow" aria-hidden="true" />
           <img src="/assets/globe.webp" className="gate-globe" alt="" aria-hidden="true" />
           <div className="gate-visual-copy">
-            <span className="gate-eyebrow">NOTC Administration</span>
-            <h1>A Night of a Thousand Crusades</h1>
-            <p>Registrations, reports, mission nations, and operations — one protected workspace.</p>
+            <span className="gate-eyebrow">{campaign.short_name} Administration</span>
+            <h1>{campaign.name}</h1>
+            <p>{aac ? "December registrations, reports, resources and campaign operations — one protected workspace." : "Registrations, reports, mission nations, and operations — one protected workspace."}</p>
           </div>
         </section>
 
         <section className="gate-panel">
           <header className="gate-panel-head">
-            <a href="/" aria-label="A Night of a Thousand Crusades home"><img src="/logo.png" alt="" /></a>
+            <a href="/" aria-label={`${campaign.name} home`}><img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt="" /></a>
             <a href="/" className="gate-home-link">Return home</a>
           </header>
           <div className="gate-form">
             <h2>{forbidden ? "Access required" : "Sign in"}</h2>
-            <p>{forbidden ? "Your KingsChat account is not approved for this dashboard." : "Use the KingsChat account approved for NOTC administration."}</p>
+            <p>{forbidden ? "Your KingsChat account is not approved for this dashboard." : `Use the KingsChat account approved for ${campaign.short_name} administration.`}</p>
             {message && (
               <div role="alert" className="gate-error">
                 <p className="gate-error-title">Sign-in could not continue</p>
@@ -82,7 +85,7 @@ export function AdminGate({ children }) {
                 <img src="/assets/icon-arrow.svg" alt="" className="gate-cta-arrow" />
               </a>
             )}
-            <p className="gate-helper">{forbidden ? "Contact the NOTC administrator to request access." : "Not approved yet? Contact the NOTC administrator."}</p>
+            <p className="gate-helper">{forbidden ? `Contact the ${campaign.short_name} administrator to request access.` : `Not approved yet? Contact the ${campaign.short_name} administrator.`}</p>
           </div>
         </section>
       </div>

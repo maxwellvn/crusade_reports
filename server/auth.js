@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { db } from "./db.js";
 import { ApiError, wrap } from "./logger.js";
 import { getDefaultLandingPage } from "./appSettings.js";
+import { DEFAULT_CAMPAIGN, assertCampaign } from "./campaigns.js";
 
 export const auth = Router();
 const KINGSCHAT_COOKIE = "kc_access_token";
@@ -10,7 +11,7 @@ const SESSION_COOKIE = "dashboard_session";
 export const DASHBOARD_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const profileCache = new Map();
 export const SUPER_ADMIN_USERNAME = "maxwellvn";
-const EXTERNAL_API_KEY_PREFIX = "notc_live_";
+const externalApiKeyPrefix = (campaign) => `${assertCampaign(campaign)}_live_`;
 const externalApiUsage = new Map();
 const EXTERNAL_API_WINDOW_MS = 60_000;
 const EXTERNAL_API_LIMIT = 120;
@@ -57,19 +58,50 @@ export const DEFAULT_PAGE_KEYS = [
   "dashboard/pastoral-checklist",
 ];
 
-function getUserPermissions(username) {
+// NOTC admins live in dashboard_accounts / dashboard_permissions; every other
+// campaign has its own rows in the campaign_dashboard_* tables, so editing one
+// campaign's admins never touches another's.
+function adminStore(campaign) {
+  if (assertCampaign(campaign) === DEFAULT_CAMPAIGN) {
+    return { accounts: "dashboard_accounts", permissions: "dashboard_permissions", where: "", cols: "", vals: "", params: [] };
+  }
+  return {
+    accounts: "campaign_dashboard_accounts",
+    permissions: "campaign_dashboard_permissions",
+    where: "campaign = ? AND ",
+    cols: "campaign, ",
+    vals: "?, ",
+    params: [campaign],
+  };
+}
+
+function hasDashboardAccount(campaign, username) {
+  const s = adminStore(campaign);
+  return Boolean(db.prepare(`SELECT 1 FROM ${s.accounts} WHERE ${s.where}username = ? COLLATE NOCASE`).get(...s.params, username));
+}
+
+function addDashboardAccount(campaign, username, createdBy) {
+  const s = adminStore(campaign);
+  db.prepare(`INSERT OR IGNORE INTO ${s.accounts} (${s.cols}username, created_by) VALUES (${s.vals}?, ?)`).run(...s.params, username, createdBy);
+  const permStmt = db.prepare(`INSERT OR IGNORE INTO ${s.permissions} (${s.cols}username, page_key) VALUES (${s.vals}?, ?)`);
+  for (const key of DEFAULT_PAGE_KEYS) permStmt.run(...s.params, username, key);
+}
+
+function getUserPermissions(campaign, username) {
   if (isSuperAdminUsername(username)) return ASSIGNABLE_PAGES.map((p) => p.key);
+  const s = adminStore(campaign);
   const validKeys = new Set(ASSIGNABLE_PAGES.map((page) => page.key));
-  const rows = db.prepare("SELECT page_key FROM dashboard_permissions WHERE username = ? COLLATE NOCASE ORDER BY page_key").all(username)
+  const rows = db.prepare(`SELECT page_key FROM ${s.permissions} WHERE ${s.where}username = ? COLLATE NOCASE ORDER BY page_key`).all(...s.params, username)
     .map((row) => row.page_key).filter((key) => validKeys.has(key));
-  const account = db.prepare("SELECT permissions_configured FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(username);
+  const account = db.prepare(`SELECT permissions_configured FROM ${s.accounts} WHERE ${s.where}username = ? COLLATE NOCASE`).get(...s.params, username);
   return rows.length || account?.permissions_configured ? rows : [...DEFAULT_PAGE_KEYS];
 }
 
+// `user.permissions` is resolved for the request's campaign by authorizedUser.
 export function canAccessPage(user, pageKey) {
   if (!user) return false;
   if (user.is_super_admin) return true;
-  return getUserPermissions(user.username).includes(pageKey);
+  return (user.permissions ?? getUserPermissions(user.campaign || DEFAULT_CAMPAIGN, user.username)).includes(pageKey);
 }
 
 export const normalizeKingsChatUsername = (value) => String(value || "").trim().replace(/^@/, "").toLowerCase();
@@ -93,7 +125,7 @@ function suppliedExternalApiKey(req) {
   if (header) return header;
   const bearer = String(req.get("authorization") || "");
   const token = bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : "";
-  return token.startsWith(EXTERNAL_API_KEY_PREFIX) ? token : "";
+  return token.startsWith(externalApiKeyPrefix(req.campaign)) ? token : "";
 }
 
 export function hasSuppliedExternalApiKey(req) {
@@ -115,12 +147,13 @@ function consumeExternalApiLimit(keyHash) {
 export async function requireExternalApiKey(req, res, next) {
   try {
     const rawKey = suppliedExternalApiKey(req);
-    if (!rawKey || !rawKey.startsWith(EXTERNAL_API_KEY_PREFIX) || rawKey.length < 40) {
+    const expectedPrefix = externalApiKeyPrefix(req.campaign);
+    if (!rawKey || !rawKey.startsWith(expectedPrefix) || rawKey.length < 40) {
       throw new ApiError(401, "EXTERNAL_API_UNAUTHORIZED", "A valid API key is required.");
     }
     const keyHash = externalApiKeyHash(rawKey);
     const key = db.prepare(`SELECT id, key_prefix FROM external_api_keys
-      WHERE key_hash = ? AND revoked_at IS NULL`).get(keyHash);
+      WHERE campaign = ? AND key_hash = ? AND revoked_at IS NULL`).get(req.campaign, keyHash);
     if (!key) throw new ApiError(401, "EXTERNAL_API_UNAUTHORIZED", "A valid API key is required.");
     const usage = consumeExternalApiLimit(keyHash);
     res.setHeader("X-RateLimit-Limit", String(EXTERNAL_API_LIMIT));
@@ -266,12 +299,12 @@ async function authorizedUser(req) {
     if (!token) throw new ApiError(401, "UNAUTHORIZED", "Sign in with KingsChat to continue.");
     user = await fetchKingsChatProfile(token);
   }
-  if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
+  if (!user.is_super_admin && !hasDashboardAccount(req.campaign, user.username)) {
     throw new ApiError(403, "FORBIDDEN", `@${user.username} does not have dashboard access.`);
   }
-  user.permissions = getUserPermissions(user.username);
-  user.assignable_pages = ASSIGNABLE_PAGES;
-  return user;
+  // Copy rather than mutate: fetchKingsChatProfile caches this object across
+  // requests, which may come from different campaign hosts.
+  return { ...user, permissions: getUserPermissions(req.campaign, user.username), assignable_pages: ASSIGNABLE_PAGES };
 }
 
 export async function requireAdmin(req, _res, next) {
@@ -323,29 +356,30 @@ export async function requireSuperAdmin(req, _res, next) {
   }
 }
 
-function activeExternalApiKey() {
+function activeExternalApiKey(campaign) {
   return db.prepare(`SELECT key_prefix, created_by, created_at, last_used_at
-    FROM external_api_keys WHERE revoked_at IS NULL ORDER BY id DESC LIMIT 1`).get() || null;
+    FROM external_api_keys WHERE campaign = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1`).get(campaign) || null;
 }
 
-auth.get("/external-api-key", requireSuperAdmin, (_req, res) => {
+auth.get("/external-api-key", requireSuperAdmin, (req, res) => {
   // Never return the raw key after the one-time generation response.
-  res.json({ active_key: activeExternalApiKey() });
+  res.json({ active_key: activeExternalApiKey(req.campaign) });
 });
 
 auth.post("/external-api-key", requireSuperAdmin, wrap((req, res) => {
-  const rawKey = `${EXTERNAL_API_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
-  const prefix = `${rawKey.slice(0, EXTERNAL_API_KEY_PREFIX.length + 8)}…`;
+  const keyPrefix = externalApiKeyPrefix(req.campaign);
+  const rawKey = `${keyPrefix}${randomBytes(32).toString("base64url")}`;
+  const prefix = `${rawKey.slice(0, keyPrefix.length + 8)}…`;
   db.transaction(() => {
-    db.prepare("UPDATE external_api_keys SET revoked_at = datetime('now') WHERE revoked_at IS NULL").run();
-    db.prepare(`INSERT INTO external_api_keys (key_hash, key_prefix, created_by)
-      VALUES (?, ?, ?)`).run(externalApiKeyHash(rawKey), prefix, req.admin.username);
+    db.prepare("UPDATE external_api_keys SET revoked_at = datetime('now') WHERE campaign = ? AND revoked_at IS NULL").run(req.campaign);
+    db.prepare(`INSERT INTO external_api_keys (campaign, key_hash, key_prefix, created_by)
+      VALUES (?, ?, ?, ?)`).run(req.campaign, externalApiKeyHash(rawKey), prefix, req.admin.username);
   })();
-  res.status(201).json({ key: rawKey, active_key: activeExternalApiKey() });
+  res.status(201).json({ key: rawKey, active_key: activeExternalApiKey(req.campaign) });
 }));
 
-auth.delete("/external-api-key", requireSuperAdmin, (_req, res) => {
-  db.prepare("UPDATE external_api_keys SET revoked_at = datetime('now') WHERE revoked_at IS NULL").run();
+auth.delete("/external-api-key", requireSuperAdmin, (req, res) => {
+  db.prepare("UPDATE external_api_keys SET revoked_at = datetime('now') WHERE campaign = ? AND revoked_at IS NULL").run(req.campaign);
   res.json({ ok: true, active_key: null });
 });
 
@@ -379,7 +413,7 @@ auth.get("/kingschat/login", (req, res) => {
 
 auth.all("/kingschat/callback", wrap(async (req, res) => {
   const token = String(req.body?.accessToken || req.body?.access_token || req.query?.accessToken || req.query?.access_token || "").trim();
-  const landing = getDefaultLandingPage();
+  const landing = getDefaultLandingPage(req.campaign);
   if (!token) return res.redirect(`${landing}?auth_error=missing_token`);
   let user;
   try {
@@ -391,13 +425,10 @@ auth.all("/kingschat/callback", wrap(async (req, res) => {
   const leadershipAccess = cookie(req, "dg_auto_approve") === "1" ? "dg" : cookie(req, "pm_auto_approve") === "1" ? "pm" : "";
   if (leadershipAccess) {
     res.clearCookie(`${leadershipAccess}_auto_approve`, { httpOnly: true, sameSite: "none", secure: true, path: "/" });
-    db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(user.username, `${leadershipAccess}_auto_approve`);
-    // Seed default page permissions for leadership users so they start with the
-    // standard non-super-admin set, not the full list.
-    const permStmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
-    for (const key of DEFAULT_PAGE_KEYS) permStmt.run(user.username, key);
+    // Leadership users start with the standard non-super-admin page set.
+    addDashboardAccount(req.campaign, user.username, `${leadershipAccess}_auto_approve`);
   }
-  if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(user.username)) {
+  if (!user.is_super_admin && !hasDashboardAccount(req.campaign, user.username)) {
     return res.redirect(`${landing}?auth_error=${encodeURIComponent(`@${user.username} is not authorized`)}`);
   }
   const cookieOptions = {
@@ -431,11 +462,12 @@ auth.post("/logout", (req, res) => {
 // page. Lets you log out by visiting a URL directly (e.g. /api/auth/logout).
 auth.get("/logout", (req, res) => {
   clearSession(req, res);
-  res.redirect(getDefaultLandingPage());
+  res.redirect(getDefaultLandingPage(req.campaign));
 });
 
-auth.get("/accounts", requireSuperAdmin, (_req, res) => {
-  res.json(db.prepare("SELECT username, created_by, created_at FROM dashboard_accounts ORDER BY username COLLATE NOCASE").all());
+auth.get("/accounts", requireSuperAdmin, (req, res) => {
+  const s = adminStore(req.campaign);
+  res.json(db.prepare(`SELECT username, created_by, created_at FROM ${s.accounts} ${s.where ? "WHERE campaign = ?" : ""} ORDER BY username COLLATE NOCASE`).all(...s.params));
 });
 
 auth.get("/users/lookup", requireSuperAdmin, wrap(async (req, res) => {
@@ -450,22 +482,21 @@ auth.post("/accounts", requireSuperAdmin, wrap(async (req, res) => {
   if (!/^[a-z0-9._-]{2,100}$/i.test(username)) throw new ApiError(422, "VALIDATION", "Enter a valid KingsChat username.");
   const kingsChatUser = await lookupKingsChatUser(accessToken(req), username, req.admin);
   if (!kingsChatUser) throw new ApiError(422, "NOT_FOUND", "No exact KingsChat username match was found.");
-  db.prepare("INSERT OR IGNORE INTO dashboard_accounts (username, created_by) VALUES (?, ?)").run(username, req.admin.username);
-  // Seed default page permissions for manually added accounts.
-  const permStmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
-  for (const key of DEFAULT_PAGE_KEYS) permStmt.run(username, key);
-  res.status(201).json({ ...db.prepare("SELECT username, created_by, created_at FROM dashboard_accounts WHERE username = ?").get(username), name: kingsChatUser.name });
+  addDashboardAccount(req.campaign, username, req.admin.username);
+  const s = adminStore(req.campaign);
+  res.status(201).json({ ...db.prepare(`SELECT username, created_by, created_at FROM ${s.accounts} WHERE ${s.where}username = ?`).get(...s.params, username), name: kingsChatUser.name });
 }));
 
 auth.delete("/accounts/:username", requireSuperAdmin, wrap((req, res) => {
   const username = normalizeKingsChatUsername(req.params.username);
   if (username === SUPER_ADMIN_USERNAME) throw new ApiError(409, "SUPER_ADMIN", "The super admin account cannot be removed.");
-  if (db.prepare("SELECT COUNT(*) AS n FROM dashboard_accounts").get().n <= 1) {
+  const s = adminStore(req.campaign);
+  if (db.prepare(`SELECT COUNT(*) AS n FROM ${s.accounts} ${s.where ? "WHERE campaign = ?" : ""}`).get(...s.params).n <= 1) {
     throw new ApiError(409, "LAST_ACCOUNT", "At least one dashboard account is required.");
   }
-  const result = db.prepare("DELETE FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").run(username);
+  const result = db.prepare(`DELETE FROM ${s.accounts} WHERE ${s.where}username = ? COLLATE NOCASE`).run(...s.params, username);
   if (!result.changes) throw new ApiError(404, "NOT_FOUND", "Dashboard account not found.");
-  db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
+  db.prepare(`DELETE FROM ${s.permissions} WHERE ${s.where}username = ? COLLATE NOCASE`).run(...s.params, username);
   res.json({ ok: true });
 }));
 
@@ -478,7 +509,7 @@ auth.get("/pages", requireAdmin, (_req, res) => {
 // return all assignable pages.
 auth.get("/permissions/:username", requireSuperAdmin, wrap((req, res) => {
   const username = normalizeKingsChatUsername(req.params.username);
-  res.json({ username, permissions: getUserPermissions(username) });
+  res.json({ username, permissions: getUserPermissions(req.campaign, username) });
 }));
 
 // Replaces the full set of page permissions for an account. Send an empty
@@ -487,19 +518,20 @@ auth.get("/permissions/:username", requireSuperAdmin, wrap((req, res) => {
 auth.put("/permissions/:username", requireSuperAdmin, wrap((req, res) => {
   const username = normalizeKingsChatUsername(req.params.username);
   if (username === SUPER_ADMIN_USERNAME) throw new ApiError(409, "SUPER_ADMIN", "Super admin permissions cannot be changed.");
-  if (!db.prepare("SELECT 1 FROM dashboard_accounts WHERE username = ? COLLATE NOCASE").get(username)) {
+  if (!hasDashboardAccount(req.campaign, username)) {
     throw new ApiError(404, "NOT_FOUND", "Dashboard account not found.");
   }
   const requested = Array.isArray(req.body?.permissions) ? req.body.permissions : null;
   if (!requested) throw new ApiError(422, "VALIDATION", "Send a permissions array.");
   const validKeys = new Set(ASSIGNABLE_PAGES.map((p) => p.key));
   const clean = [...new Set(requested.filter((k) => validKeys.has(k)))];
+  const s = adminStore(req.campaign);
   const tx = db.transaction(() => {
-    db.prepare("UPDATE dashboard_accounts SET permissions_configured = 1 WHERE username = ? COLLATE NOCASE").run(username);
-    db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
-    const stmt = db.prepare("INSERT OR IGNORE INTO dashboard_permissions (username, page_key) VALUES (?, ?)");
-    for (const key of clean) stmt.run(username, key);
+    db.prepare(`UPDATE ${s.accounts} SET permissions_configured = 1 WHERE ${s.where}username = ? COLLATE NOCASE`).run(...s.params, username);
+    db.prepare(`DELETE FROM ${s.permissions} WHERE ${s.where}username = ? COLLATE NOCASE`).run(...s.params, username);
+    const stmt = db.prepare(`INSERT OR IGNORE INTO ${s.permissions} (${s.cols}username, page_key) VALUES (${s.vals}?, ?)`);
+    for (const key of clean) stmt.run(...s.params, username, key);
   });
   tx();
-  res.json({ username, permissions: getUserPermissions(username) });
+  res.json({ username, permissions: getUserPermissions(req.campaign, username) });
 }));

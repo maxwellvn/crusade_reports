@@ -1,12 +1,13 @@
-import { parentPort } from "node:worker_threads";
+import { parentPort, workerData } from "node:worker_threads";
 import { db } from "../db.js";
 import { buildReportDashboardData } from "../routes/stats.js";
 import { saveReportDashboardSnapshot } from "../reportDashboardSnapshot.js";
 
 const startedAt = performance.now();
 try {
-  const data = buildReportDashboardData();
-  const { sourceMaxId } = saveReportDashboardSnapshot(data);
+  const { campaign } = workerData;
+  const data = buildReportDashboardData(campaign);
+  const { sourceMaxId } = saveReportDashboardSnapshot(campaign, data);
   parentPort?.postMessage({ ok: true, durationMs: Math.round(performance.now() - startedAt), sourceMaxId });
 } catch (error) {
   parentPort?.postMessage({ ok: false, error: error.message });

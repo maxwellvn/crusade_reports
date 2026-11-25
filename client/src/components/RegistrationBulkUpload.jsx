@@ -19,6 +19,7 @@ import { DRAFT_KEY } from "@/components/RegistrationForm";
 import { UploadProgress } from "@/components/UploadProgress";
 import { uploadForm } from "@/lib/upload";
 import { TemplateDownloadButton } from "@/components/TemplateDownloadButton";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
 
 // Public bulk-upload page for crusade registrations. The org identity (who is
@@ -53,6 +54,8 @@ function WarningList({ warnings }) {
 }
 
 export function RegistrationBulkUpload() {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const portalToken = searchParams.get("portal") || "";
@@ -203,8 +206,8 @@ export function RegistrationBulkUpload() {
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/crusade-registration" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" className="h-8 w-auto" />
-            <span className="hidden text-sm font-semibold sm:block">A Night of a Thousand Crusades</span>
+            <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="h-8 w-auto" />
+            <span className="hidden text-sm font-semibold sm:block">{campaign.name}</span>
           </Link>
           <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer"
             className="reg-header-link inline-flex items-center gap-1 text-sm font-semibold transition-colors">
@@ -221,6 +224,7 @@ export function RegistrationBulkUpload() {
             </Link>
             <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Bulk registration</p>
             <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register many crusades at once.</h1>
+            {aac && <p className="text-sm font-medium text-amber-700">Every row must use a crusade date from 1 to 31 December 2026.</p>}
             <p className="text-sm text-muted-foreground">
               Download the template, fill one row per crusade, upload it here, then review and submit. The organization
               and contact details below apply to every crusade in the file.

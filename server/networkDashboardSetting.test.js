@@ -6,17 +6,17 @@ import { getCampaignSettings, updateCampaignSettings } from "./routes/campaignSe
 test("campaign settings persist network dashboard inheritance independently per network", () => {
   db.exec("BEGIN");
   try {
-    let settings = updateCampaignSettings({
+    let settings = updateCampaignSettings("notc", {
       network_dashboard_inherited_crusades: { "Youths Aglow": true, TEEVOLUTION: false },
     });
     assert.equal(settings.network_dashboard_inherited_crusades["Youths Aglow"], true);
     assert.equal(settings.network_dashboard_inherited_crusades.TEEVOLUTION, false);
     assert.equal(settings.network_dashboard_inherited_crusades["Say Yes to Kids"], false);
 
-    settings = updateCampaignSettings({ network_dashboard_inherited_crusades: { TEEVOLUTION: true } });
+    settings = updateCampaignSettings("notc", { network_dashboard_inherited_crusades: { TEEVOLUTION: true } });
     assert.equal(settings.network_dashboard_inherited_crusades["Youths Aglow"], true);
     assert.equal(settings.network_dashboard_inherited_crusades.TEEVOLUTION, true);
-    assert.deepEqual(getCampaignSettings().network_dashboard_inherited_crusades, settings.network_dashboard_inherited_crusades);
+    assert.deepEqual(getCampaignSettings("notc").network_dashboard_inherited_crusades, settings.network_dashboard_inherited_crusades);
   } finally {
     db.exec("ROLLBACK");
   }

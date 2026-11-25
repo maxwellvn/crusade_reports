@@ -5,13 +5,15 @@ import { wrap } from "../logger.js";
 import { COUNTRIES, resolveCountryName } from "./countries.js";
 import { coverageData } from "./coverage.js";
 import { cachedDashboardData } from "../dashboardCache.js";
+import { assertCampaign } from "../campaigns.js";
 
 export const countryCoverage = Router();
 
 const PUBLIC_PROGRAM_FILTER = "(i.program = 'public' OR i.program IS NULL)";
 
-function countryCoverageData() {
-  const unregistered = getCountriesWithoutRegistrations();
+function countryCoverageData(campaign) {
+  assertCampaign(campaign);
+  const unregistered = getCountriesWithoutRegistrations(campaign);
   const registered = COUNTRIES.filter((country) => !unregistered.some((item) => item.code === country.code));
   return {
     summary: {
@@ -20,9 +22,9 @@ function countryCoverageData() {
       unregisteredCount: unregistered.length,
     },
     unregisteredByContinent: groupByContinent(unregistered),
-    gpdZones: getGpdZonesCountryBreakdown(),
-    cellCrusades: getCellCrusadesCountryBreakdown(),
-    networks: getNetworkCountryBreakdown(),
+    gpdZones: getGpdZonesCountryBreakdown(campaign),
+    cellCrusades: getCellCrusadesCountryBreakdown(campaign),
+    networks: getNetworkCountryBreakdown(campaign),
   };
 }
 
@@ -68,11 +70,11 @@ export function sendEcardDataDownload(res, payload, date = new Date()) {
   res.send(body);
 }
 
-function getCountriesWithoutRegistrations() {
+function getCountriesWithoutRegistrations(campaign) {
   const registeredCountries = new Set(
     db.prepare(
-      `SELECT DISTINCT country FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
-    ).all().map((row) => resolveCountryName(row.country)).filter(Boolean)
+      `SELECT DISTINCT country FROM registration_items i WHERE i.campaign = ? AND ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
+    ).all(campaign).map((row) => resolveCountryName(row.country)).filter(Boolean)
   );
   return COUNTRIES.filter((c) => !registeredCountries.has(c.name));
 }
@@ -94,14 +96,14 @@ function groupByContinent(countries) {
 }
 
 // Aggregate all zones into a single "GPD Zones" group
-function getGpdZonesCountryBreakdown() {
+function getGpdZonesCountryBreakdown(campaign) {
   const raw = db.prepare(`
     SELECT i.country, SUM(i.planned_count) AS crusades, COUNT(DISTINCT i.registration_id) AS registrations
     FROM registration_items i
-    WHERE ${PUBLIC_PROGRAM_FILTER} AND i.zone IS NOT NULL AND i.country IS NOT NULL
+    WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND i.zone IS NOT NULL AND i.country IS NOT NULL
     GROUP BY i.country
     ORDER BY crusades DESC
-  `).all();
+  `).all({ campaign });
 
   const rows = mergeByCanonicalCountry(raw);
   const totalCrusades = rows.reduce((sum, r) => sum + r.crusades, 0);
@@ -134,16 +136,16 @@ function mergeByCanonicalCountry(rawRows) {
   return [...byCanonical.values()].sort((a, b) => Number(b.crusades) - Number(a.crusades) || a.country.localeCompare(b.country));
 }
 
-function getCellCrusadesCountryBreakdown() {
+function getCellCrusadesCountryBreakdown(campaign) {
   const raw = db.prepare(`
     SELECT i.country, SUM(i.planned_count) AS crusades, COUNT(DISTINCT i.registration_id) AS registrations
     FROM registration_items i
-    WHERE ${PUBLIC_PROGRAM_FILTER}
+    WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
       AND i.organization_type = 'cell'
       AND i.country IS NOT NULL
     GROUP BY i.country
     ORDER BY crusades DESC, i.country COLLATE NOCASE
-  `).all();
+  `).all({ campaign });
 
   const countries = mergeByCanonicalCountry(raw);
   return {
@@ -155,19 +157,19 @@ function getCellCrusadesCountryBreakdown() {
   };
 }
 
-function getNetworkCountryBreakdown() {
+function getNetworkCountryBreakdown(campaign) {
   const rows = db.prepare(`
     SELECT i.network_name AS network,
       i.country,
       SUM(i.planned_count) AS crusades,
       COUNT(DISTINCT i.registration_id) AS registrations
     FROM registration_items i
-    WHERE ${PUBLIC_PROGRAM_FILTER}
+    WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
       AND i.country IS NOT NULL
       AND i.network_name IS NOT NULL AND TRIM(i.network_name) <> ''
     GROUP BY network, i.country
     ORDER BY network COLLATE NOCASE, crusades DESC
-  `).all();
+  `).all({ campaign });
 
   const networkMap = new Map();
   for (const row of rows) {
@@ -190,26 +192,26 @@ function getNetworkCountryBreakdown() {
   return [...networkMap.values()].sort((a, b) => b.totalCrusades - a.totalCrusades);
 }
 
-countryCoverage.get("/", requirePageAccess("dashboard/country-coverage"), wrap((_req, res) => {
+countryCoverage.get("/", requirePageAccess("dashboard/country-coverage"), wrap((req, res) => {
   res.setHeader("Cache-Control", "private, max-age=30");
-  res.json(cachedDashboardData("country-coverage", countryCoverageData));
+  res.json(cachedDashboardData(`country-coverage:${req.campaign}`, () => countryCoverageData(req.campaign)));
 }));
 
 // Compact, complete source for the locally generated NOTC e-cards. This avoids
 // transferring the production SQLite database and keeps every figure aligned
 // with the live Country Coverage and Crusade Coverage reports.
-countryCoverage.get("/ecard-data", requirePageAccess("dashboard/country-coverage"), wrap(async (_req, res) => {
-  const countryData = countryCoverageData();
-  const zoneData = await coverageData();
+countryCoverage.get("/ecard-data", requirePageAccess("dashboard/country-coverage"), wrap(async (req, res) => {
+  const countryData = countryCoverageData(req.campaign);
+  const zoneData = await coverageData(req.campaign);
   const payload = buildEcardData(countryData, zoneData);
   sendEcardDataDownload(res, payload);
 }));
 
 // CSV export with all data combined
-countryCoverage.get("/export", requirePageAccess("dashboard/country-coverage"), wrap((_req, res) => {
-  const gpdZones = getGpdZonesCountryBreakdown();
-  const cellCrusades = getCellCrusadesCountryBreakdown();
-  const networks = getNetworkCountryBreakdown();
+countryCoverage.get("/export", requirePageAccess("dashboard/country-coverage"), wrap((req, res) => {
+  const gpdZones = getGpdZonesCountryBreakdown(req.campaign);
+  const cellCrusades = getCellCrusadesCountryBreakdown(req.campaign);
+  const networks = getNetworkCountryBreakdown(req.campaign);
 
   const escapeCSV = (value) => {
     const str = String(value ?? "");

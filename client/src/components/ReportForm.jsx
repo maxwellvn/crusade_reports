@@ -21,6 +21,7 @@ import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
 import { nfull } from "@/lib/dashboardWidgets";
 import { ReportMediaFields, buildReportFormData, MAX_REPORT_PHOTOS_BYTES, photosOverLimitMessage, totalPhotoBytes } from "@/components/ReportMediaFields";
+import { campaignDateProps, isAacCampaign, useCampaign } from "@/lib/campaign";
 import "../landing.css"; // campaign fonts; report theme lives in the .reg-page block
 
 // Post-crusade report form — the twin of the registration form. Same campaign-
@@ -55,6 +56,8 @@ const CRUSADE_DETAIL_FIELDS = ["event_name", "event_date", "venue", "attendance"
 const isCrusadeUntouched = (item) => !!item && CRUSADE_DETAIL_FIELDS.every((key) => !String(item[key] ?? "").trim());
 
 export function ReportForm() {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const form = useForm({ resolver: zodResolver(reportSchema), defaultValues, mode: "onBlur" });
   const { register, handleSubmit, control, watch, setValue, getValues, reset, trigger, formState: { errors, isSubmitting } } = form;
   const draftReady = React.useRef(false);
@@ -281,8 +284,8 @@ export function ReportForm() {
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/crusade-registration" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" className="h-8 w-auto" />
-            <span className="hidden text-sm font-semibold sm:block">A Night of a Thousand Crusades</span>
+            <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="h-8 w-auto" />
+            <span className="hidden text-sm font-semibold sm:block">{campaign.name}</span>
           </Link>
           <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer"
             className="reg-header-link inline-flex items-center gap-1 text-sm font-semibold transition-colors">
@@ -317,6 +320,7 @@ export function ReportForm() {
             <div className="space-y-2">
               <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Crusade Report</p>
               <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Report your crusades.</h1>
+              {aac && <p className="text-sm font-medium text-amber-700">Angels at Christmas crusades must have held from 1 to 31 December 2026.</p>}
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <p>Your progress is saved automatically in this browser, even while offline.</p>
                 <button type="button" onClick={discardDraft} className="font-medium text-foreground underline underline-offset-4">Discard saved draft</button>
@@ -485,7 +489,7 @@ export function ReportForm() {
                         </p>
                       )}
                       {crusadeArray.fields.slice(0, MAX_ROW_EDITORS).map((f, i) => (
-                        <CrusadeRow key={f.id} id={`crusade-card-${i}`} index={i} form={form} errors={errors} fetchCountries={fetchCountries} cityFetcherFor={cityFetcherFor}
+                        <CrusadeRow key={f.id} id={`crusade-card-${i}`} index={i} form={form} errors={errors} fetchCountries={fetchCountries} cityFetcherFor={cityFetcherFor} campaign={campaign}
                           manualCities={manualCities} onRemove={() => removeCrusade(i)} onClone={() => cloneCrusade(i)} />
                       ))}
                       {crusadeArray.fields.length > 0 && (
@@ -599,7 +603,7 @@ export function ReportForm() {
 
 // One crusade = one event. Country + city per crusade, essentials + core outcomes
 // always visible; extended stats + metadata behind a labelled expander.
-function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, manualCities, onRemove, onClone }) {
+function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, campaign, manualCities, onRemove, onClone }) {
   const { register, control, setValue, watch } = form;
   const [open, setOpen] = React.useState(false);
   const c = watch(`crusades.${index}`) || {};
@@ -615,6 +619,9 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, m
   if (!isOnline && ONLINE_TYPES.includes(c.event_type)) warns.push("This crusade type is usually held online — check the format.");
 
   const rowCountry = c.country || "";
+  const range = campaignDateProps(campaign);
+  const today = new Date().toISOString().slice(0, 10);
+  const dateBounds = { ...range, max: range.max && range.max < today ? range.max : today };
 
   function onTypeChange(e) {
     if (!c.format && ONLINE_TYPES.includes(e.target.value)) setValue(p("format"), "online", { shouldValidate: true });
@@ -652,7 +659,7 @@ function CrusadeRow({ id, index, form, errors, fetchCountries, cityFetcherFor, m
           <Input {...register(p("event_name"))} aria-invalid={!!rowErr.event_name} placeholder="Name this crusade" />
         </Field>
         <Field label="Date" required error={rowErr.event_date?.message} hint="The day the crusade held">
-          <Input type="date" max={new Date().toISOString().slice(0, 10)} {...register(p("event_date"))} aria-invalid={!!rowErr.event_date} />
+          <Input type="date" {...dateBounds} {...register(p("event_date"))} aria-invalid={!!rowErr.event_date} />
         </Field>
         <Field label="Country" required error={rowErr.country?.message} hint="Where this crusade held">
           <Controller control={control} name={p("country")} render={({ field }) => (

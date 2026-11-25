@@ -12,11 +12,19 @@ import { ADMIN_REPORT_ORDER } from "../reportOrdering.js";
 import { cachedDashboardData } from "../dashboardCache.js";
 import { cleanDuplicateReports, deleteCrusadeReportRow, duplicateReportPage } from "../duplicateReports.js";
 import { isRealISODate, isValidHeldDate } from "../validation.js";
+import { DEFAULT_CAMPAIGN, assertCampaign, campaignEventDateError } from "../campaigns.js";
 
 export const crusades = Router();
+const publicCrusade = (row) => {
+  if (!row) return row;
+  const { campaign: _campaign, ...data } = row;
+  return data;
+};
 
-export function deleteCrusadeReport(id) {
-  const row = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(id);
+export function deleteCrusadeReport(campaignOrId, maybeId) {
+  const campaign = maybeId === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrId);
+  const id = maybeId === undefined ? campaignOrId : maybeId;
+  const row = db.prepare("SELECT id, report_id FROM crusades WHERE id = ? AND campaign = ?").get(id, campaign);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found.");
   return db.transaction(() => deleteCrusadeReportRow(row))();
 }
@@ -27,23 +35,23 @@ const CRUSADE_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "cell_n
 
 // Values for the PM/admin report-table dropdowns come from the complete report
 // dataset, so newly submitted attribution values appear automatically.
-export function crusadeFilterOptions() {
-  return cachedDashboardData("crusade-filter-options", () => Object.fromEntries(CRUSADE_FILTER_OPTION_COLS.map((column) => [
+export function crusadeFilterOptions(campaign = DEFAULT_CAMPAIGN) {
+  return cachedDashboardData(`crusade-filter-options:${campaign}`, () => Object.fromEntries(CRUSADE_FILTER_OPTION_COLS.map((column) => [
     column,
     db.prepare(
       `SELECT DISTINCT TRIM(${column}) AS value
        FROM crusades
-       WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''
+       WHERE campaign = ? AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
        ORDER BY value COLLATE NOCASE LIMIT 500`
-    ).all().map((row) => row.value),
+    ).all(assertCampaign(campaign)).map((row) => row.value),
   ])), 300_000);
 }
 
 // Build the shared WHERE clause for the table and its export, so both apply the
 // exact same filters and free-text search.
-function crusadeFilters(query) {
-  const where = [];
-  const params = {};
+function crusadeFilters(campaign, query) {
+  const where = ["c.campaign = @campaign"];
+  const params = { campaign: assertCampaign(campaign) };
   for (const col of FILTER_COLS) {
     const v = query[col];
     if (v) { where.push(`c.${col} = @${col}`); params[col] = String(v); }
@@ -83,16 +91,18 @@ function crusadeFilters(query) {
 // format filter. Older clients sent `format=csv|xlsx`; treat those values only
 // as the file type so they cannot become an impossible `c.format = 'csv'`
 // predicate and silently produce a header-only export.
-export function crusadeExportRequest(query = {}) {
+export function crusadeExportRequest(campaignOrQuery = {}, maybeQuery) {
+  const campaign = maybeQuery === undefined ? DEFAULT_CAMPAIGN : campaignOrQuery;
+  const query = maybeQuery === undefined ? campaignOrQuery : maybeQuery;
   const legacyFileFormat = query.format === "xlsx" || query.format === "csv" ? query.format : null;
   const fileFormat = query.export_format === "xlsx" || query.export_format === "csv"
     ? query.export_format
     : legacyFileFormat || "csv";
   const filterQuery = legacyFileFormat ? { ...query, format: "" } : query;
-  return { fileFormat, ...crusadeFilters(filterQuery) };
+  return { fileFormat, ...crusadeFilters(campaign, filterQuery) };
 }
 
-const CRUSADE_FROM = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id";
+const CRUSADE_FROM = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id AND r.campaign = c.campaign";
 const CRUSADE_EXPORT_SELECT =
   `SELECT c.id, c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
           c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
@@ -128,7 +138,7 @@ const CRUSADE_EXPORT_COLUMNS = [
 
 // GET /api/crusades/export?format=csv|xlsx — all rows matching the current filters.
 crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap(async (req, res) => {
-  const { clause, params, fileFormat } = crusadeExportRequest(req.query);
+  const { clause, params, fileFormat } = crusadeExportRequest(req.campaign, req.query);
   const statement = db.prepare(`${CRUSADE_EXPORT_SELECT} ${CRUSADE_FROM} ${clause} ORDER BY ${ADMIN_REPORT_ORDER}`);
 
   // Exports are authenticated, point at live data, and must never reuse a browser
@@ -146,19 +156,19 @@ crusades.get("/export", requireAnyPageAccess(["crusades", "crusades/edit"]), wra
 // action permanently deletes reports. A report is duplicated when the date,
 // event name, country, and city match after case/whitespace normalization.
 crusades.get("/duplicates", requireSuperAdmin, wrap((req, res) => {
-  res.json(duplicateReportPage(req.query));
+  res.json(duplicateReportPage(req.campaign, req.query));
 }));
 
 crusades.post("/duplicates/clean", requireSuperAdmin, wrap((req, res) => {
   if (req.body.confirmed !== true) {
     throw new ApiError(400, "CONFIRMATION_REQUIRED", "Confirm duplicate cleanup before continuing.");
   }
-  res.json(cleanDuplicateReports(String(req.body.strategy || ""), req.query, req.body.expected_excess_reports));
+  res.json(cleanDuplicateReports(req.campaign, String(req.body.strategy || ""), req.query, req.body.expected_excess_reports));
 }));
 
 // GET /api/crusades — paginated, filtered table backing the "All crusades" view.
 crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
-  const { clause, params } = crusadeFilters(req.query);
+  const { clause, params } = crusadeFilters(req.campaign, req.query);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 50, 1), 200);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
@@ -171,7 +181,7 @@ crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req
   const orderBy = `${sortExpression}${TEXT_SORT.has(sortCol) && sortCol !== "submitted_at" ? " COLLATE NOCASE" : ""} ${dir}, c.id DESC`;
 
   // Full row, every uploaded field — this backs the "show everything received" table.
-  const from = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id";
+  const from = "FROM crusades c LEFT JOIN reports r ON r.id = c.report_id AND r.campaign = c.campaign";
   const countKey = `crusades-count:${JSON.stringify(params)}:${clause}`;
   const total = cachedDashboardData(countKey, () => db.prepare(`SELECT COUNT(*) AS n ${from} ${clause}`).get(params).n, 60_000);
   const rows = db.prepare(
@@ -182,11 +192,11 @@ crusades.get("/", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req
      ${from} ${clause} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
 
-  res.json({ rows, total, page, page_size: pageSize, filter_options: crusadeFilterOptions() });
+  res.json({ rows, total, page, page_size: pageSize, filter_options: crusadeFilterOptions(req.campaign) });
 }));
 
 crusades.delete("/:id", requireSuperAdmin, wrap((req, res) => {
-  res.json(deleteCrusadeReport(req.params.id));
+  res.json(deleteCrusadeReport(req.campaign, req.params.id));
 }));
 
 // ---- Super-admin edit: full crusade + report fields ---------------------------
@@ -207,17 +217,17 @@ crusades.get("/:id/edit", requirePageAccess("crusades/edit"), wrap((req, res) =>
   const row = db.prepare(`
     SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
            r.kingschat_username, r.highlights, r.media_links, r.photo_links, r.video_links, r.id AS report_id
-    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
-  `).get(req.params.id);
+    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id AND r.campaign = @campaign WHERE c.id = @id AND c.campaign = @campaign
+  `).get({ id: req.params.id, campaign: req.campaign });
   if (!row) throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
   row.photos = row.report_id ? listReportPhotos(row.report_id) : [];
-  res.json(row);
+  res.json(publicCrusade(row));
 }));
 
 // PUT /api/crusades/:id — assigned report editors update crusade/report fields and add photos.
 crusades.put("/:id", requirePageAccess("crusades/edit"), withReportPhotoUpload(wrap((req, res) => {
   const files = req.files || [];
-  const existing = db.prepare("SELECT id, report_id FROM crusades WHERE id = ?").get(req.params.id);
+  const existing = db.prepare("SELECT id, report_id FROM crusades WHERE id = ? AND campaign = ?").get(req.params.id, req.campaign);
   if (!existing) {
     removeUploadedFiles(files);
     throw new ApiError(404, "NOT_FOUND", "Crusade not found.");
@@ -239,6 +249,13 @@ crusades.put("/:id", requirePageAccess("crusades/edit"), withReportPhotoUpload(w
     throw new ApiError(422, "VALIDATION", isRealISODate(String(body.event_date || ""))
       ? "Date held cannot be in the future."
       : "Enter a valid date held in YYYY-MM-DD format.");
+  }
+  if ("event_date" in body) {
+    const dateError = campaignEventDateError(req.campaign, body.event_date);
+    if (dateError) {
+      removeUploadedFiles(files);
+      throw new ApiError(422, "CAMPAIGN_DATE", dateError);
+    }
   }
   if ("photo_links" in body || "video_links" in body) {
     body.media_links = composeMediaLinks(body.photo_links, body.video_links);
@@ -262,12 +279,12 @@ crusades.put("/:id", requirePageAccess("crusades/edit"), withReportPhotoUpload(w
 
   const update = db.transaction(() => {
     if (crusadeSet.length) {
-      crusadeVals.push(req.params.id);
-      db.prepare(`UPDATE crusades SET ${crusadeSet.join(", ")} WHERE id = ?`).run(...crusadeVals);
+      crusadeVals.push(req.params.id, req.campaign);
+      db.prepare(`UPDATE crusades SET ${crusadeSet.join(", ")} WHERE id = ? AND campaign = ?`).run(...crusadeVals);
     }
     if (reportSet.length && existing.report_id) {
-      reportVals.push(existing.report_id);
-      db.prepare(`UPDATE reports SET ${reportSet.join(", ")} WHERE id = ?`).run(...reportVals);
+      reportVals.push(existing.report_id, req.campaign);
+      db.prepare(`UPDATE reports SET ${reportSet.join(", ")} WHERE id = ? AND campaign = ?`).run(...reportVals);
     }
     if (files.length) saveReportPhotos(existing.report_id, files);
   });
@@ -281,8 +298,8 @@ crusades.put("/:id", requirePageAccess("crusades/edit"), withReportPhotoUpload(w
   const updated = db.prepare(`
     SELECT c.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
            r.kingschat_username, r.highlights, r.media_links, r.photo_links, r.video_links, r.id AS report_id
-    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id WHERE c.id = ?
-  `).get(req.params.id);
+    FROM crusades c LEFT JOIN reports r ON r.id = c.report_id AND r.campaign = @campaign WHERE c.id = @id AND c.campaign = @campaign
+  `).get({ id: req.params.id, campaign: req.campaign });
   updated.photos = updated.report_id ? listReportPhotos(updated.report_id) : [];
-  res.json(updated);
+  res.json(publicCrusade(updated));
 })));

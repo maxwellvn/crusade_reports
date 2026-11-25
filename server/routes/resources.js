@@ -10,6 +10,7 @@ import { isIP } from "node:net";
 import { db } from "../db.js";
 import { requirePageAccess } from "../auth.js";
 import { ApiError, wrap } from "../logger.js";
+import { assertCampaign } from "../campaigns.js";
 
 export const resources = Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,11 +26,14 @@ const upload = multer({ storage, limits: { fileSize: 150 * 1024 * 1024, files: 2
 const SAFE_THUMBNAIL_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const clean = (value, max = 500) => String(value || "").trim().slice(0, max);
-const publicRow = (row) => ({
-  ...row,
-  url: row.external_url || `/resource-files/${encodeURIComponent(row.stored_name)}`,
-  is_external: Boolean(row.external_url),
-});
+const publicRow = (row) => {
+  const { campaign: _campaign, ...publicData } = row;
+  return {
+    ...publicData,
+    url: row.external_url || `/resource-files/${encodeURIComponent(row.stored_name)}`,
+    is_external: Boolean(row.external_url),
+  };
+};
 
 function validHttpUrl(value) {
   try { return ["http:", "https:"].includes(new URL(value).protocol); } catch { return false; }
@@ -109,15 +113,15 @@ resources.get("/", wrap((req, res) => {
   const q = clean(req.query.q, 100);
   const type = clean(req.query.type, 20);
   const category = clean(req.query.category, 80);
-  const where = [];
-  const params = [];
+  const where = ["campaign = ?"];
+  const params = [assertCampaign(req.campaign)];
   if (q) { where.push("(title LIKE ? OR description LIKE ? OR category LIKE ?)"); params.push(...Array(3).fill(`%${q}%`)); }
   if (type && ALLOWED_TYPES.has(type)) { where.push("resource_type = ?"); params.push(type); }
   if (category) { where.push("category = ? COLLATE NOCASE"); params.push(category); }
-  const rows = db.prepare(`SELECT * FROM resources ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC, id DESC`).all(...params);
+  const rows = db.prepare(`SELECT * FROM resources WHERE ${where.join(" AND ")} ORDER BY created_at DESC, id DESC`).all(...params);
   const categories = db.prepare(`SELECT c.id, c.name, COUNT(r.id) AS resource_count
-    FROM resource_categories c LEFT JOIN resources r ON r.category = c.name COLLATE NOCASE
-    GROUP BY c.id ORDER BY c.name COLLATE NOCASE`).all();
+    FROM resource_categories c LEFT JOIN resources r ON r.category = c.name COLLATE NOCASE AND r.campaign = ?
+    GROUP BY c.id ORDER BY c.name COLLATE NOCASE`).all(req.campaign);
   res.json({ resources: rows.map(publicRow), categories });
 }));
 
@@ -173,11 +177,11 @@ resources.post("/", requirePageAccess("dashboard/resources"), upload.fields([{ n
       catch { throw new ApiError(400, "INVALID_THUMBNAIL", "Use a publicly accessible thumbnail image URL."); }
     }
     const result = db.prepare(`INSERT INTO resources
-      (title, description, category, resource_type, external_url, thumbnail_url, stored_name, original_name, mime_type, file_size, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(title, description || null, category, type, externalUrl || null, thumbnailUrl, file?.filename || null,
+      (campaign, title, description, category, resource_type, external_url, thumbnail_url, stored_name, original_name, mime_type, file_size, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(assertCampaign(req.campaign), title, description || null, category, type, externalUrl || null, thumbnailUrl, file?.filename || null,
         file?.originalname || null, file?.mimetype || null, file?.size || null, req.admin.username);
-    res.status(201).json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ?").get(result.lastInsertRowid)));
+    res.status(201).json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ? AND campaign = ?").get(result.lastInsertRowid, req.campaign)));
   } catch (error) {
     // Multer writes before field validation; remove rejected uploads immediately.
     for (const uploaded of [file, thumbnailFile]) if (uploaded?.filename) { try { unlinkSync(join(RESOURCE_FILES_DIR, uploaded.filename)); } catch { /* best effort */ } }
@@ -186,7 +190,7 @@ resources.post("/", requirePageAccess("dashboard/resources"), upload.fields([{ n
 }));
 
 resources.put("/:id", requirePageAccess("dashboard/resources"), upload.single("thumbnail"), wrap(async (req, res) => {
-  const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
+  const row = db.prepare("SELECT * FROM resources WHERE id = ? AND campaign = ?").get(req.params.id, req.campaign);
   if (!row) { if (req.file?.filename) unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); throw new ApiError(404, "NOT_FOUND", "Resource not found."); }
   try {
     const title = clean(req.body.title, 160); const description = clean(req.body.description, 2000); const category = clean(req.body.category, 80);
@@ -201,27 +205,27 @@ resources.put("/:id", requirePageAccess("dashboard/resources"), upload.single("t
     if (row.external_url && requestedUrl !== row.external_url && !req.file && !suppliedThumbnail) thumbnailUrl = await discoverThumbnail(requestedUrl);
     if (suppliedThumbnail && !req.file) { try { thumbnailUrl = (await assertPublicUrl(suppliedThumbnail)).href; } catch { throw new ApiError(400, "INVALID_THUMBNAIL", "Use a publicly accessible thumbnail image URL."); } }
     if (req.file) thumbnailUrl = `/resource-files/${encodeURIComponent(req.file.filename)}`;
-    db.prepare("UPDATE resources SET title = ?, description = ?, category = ?, resource_type = ?, external_url = ?, thumbnail_url = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(title, description || null, category, type, row.external_url ? requestedUrl : null, thumbnailUrl, row.id);
+    db.prepare("UPDATE resources SET title = ?, description = ?, category = ?, resource_type = ?, external_url = ?, thumbnail_url = ?, updated_at = datetime('now') WHERE id = ? AND campaign = ?")
+      .run(title, description || null, category, type, row.external_url ? requestedUrl : null, thumbnailUrl, row.id, req.campaign);
     if (thumbnailUrl !== row.thumbnail_url && row.thumbnail_url?.startsWith("/resource-files/")) { try { unlinkSync(join(RESOURCE_FILES_DIR, decodeURIComponent(row.thumbnail_url.slice(16)))); } catch { /* best effort */ } }
-    res.json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ?").get(row.id)));
+    res.json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ? AND campaign = ?").get(row.id, req.campaign)));
   } catch (error) { if (req.file?.filename) { try { unlinkSync(join(RESOURCE_FILES_DIR, req.file.filename)); } catch { /* best effort */ } } throw error; }
 }));
 
 resources.post("/:id/thumbnail", requirePageAccess("dashboard/resources"), wrap(async (req, res) => {
-  const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
+  const row = db.prepare("SELECT * FROM resources WHERE id = ? AND campaign = ?").get(req.params.id, req.campaign);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Resource not found.");
   if (!row.external_url) throw new ApiError(400, "NOT_A_LINK", "Only linked resources can fetch a thumbnail.");
   const thumbnailUrl = await discoverThumbnail(row.external_url);
   if (!thumbnailUrl) throw new ApiError(422, "THUMBNAIL_NOT_FOUND", "This link does not provide a usable thumbnail.");
-  db.prepare("UPDATE resources SET thumbnail_url = ?, updated_at = datetime('now') WHERE id = ?").run(thumbnailUrl, row.id);
-  res.json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ?").get(row.id)));
+  db.prepare("UPDATE resources SET thumbnail_url = ?, updated_at = datetime('now') WHERE id = ? AND campaign = ?").run(thumbnailUrl, row.id, req.campaign);
+  res.json(publicRow(db.prepare("SELECT * FROM resources WHERE id = ? AND campaign = ?").get(row.id, req.campaign)));
 }));
 
 resources.delete("/:id", requirePageAccess("dashboard/resources"), wrap((req, res) => {
-  const row = db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id);
+  const row = db.prepare("SELECT * FROM resources WHERE id = ? AND campaign = ?").get(req.params.id, req.campaign);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Resource not found.");
-  db.prepare("DELETE FROM resources WHERE id = ?").run(row.id);
+  db.prepare("DELETE FROM resources WHERE id = ? AND campaign = ?").run(row.id, req.campaign);
   if (row.stored_name) {
     try { unlinkSync(join(RESOURCE_FILES_DIR, row.stored_name)); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }

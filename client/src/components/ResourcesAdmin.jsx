@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { useCampaign } from "@/lib/campaign";
 
 const EMPTY = { title: "", description: "", category: "Teaching", resource_type: "document", external_url: "", thumbnail_url: "" };
 
@@ -19,6 +20,7 @@ function AdminSection({ title, description, children }) {
 }
 
 export function ResourcesAdmin() {
+  const campaign = useCampaign();
   const [resources, setResources] = React.useState([]);
   const [categories, setCategories] = React.useState([]);
   const [newCategory, setNewCategory] = React.useState("");
@@ -124,7 +126,7 @@ export function ResourcesAdmin() {
   return <div className="mx-auto max-w-5xl">
     <Breadcrumbs items={[{ label: "Reports dashboard", to: "/dashboard" }, { label: "Resources" }]} />
     <div className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between">
-      <div><h2 className="text-3xl font-normal tracking-[-0.03em] text-slate-950 sm:text-4xl">Approved Resources Hub</h2><p className="mt-2 text-sm text-slate-600">Publish and organize approved materials for the public NOTC hub.</p></div>
+      <div><h2 className="text-3xl font-normal tracking-[-0.03em] text-slate-950 sm:text-4xl">Approved Resources Hub</h2><p className="mt-2 text-sm text-slate-600">Publish and organize approved materials for the public {campaign.short_name} hub.</p></div>
       <Button asChild variant="outline" className="w-fit rounded-full"><a href="/resources" target="_blank" rel="noreferrer">View public hub <ArrowUpRight /></a></Button>
     </div>
 

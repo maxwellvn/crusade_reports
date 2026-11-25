@@ -1,6 +1,7 @@
 import { db, METRIC_FIELDS } from "./db.js";
 import { ApiError } from "./logger.js";
 import { deleteReportPhotos } from "./reportMedia.js";
+import { DEFAULT_CAMPAIGN, assertCampaign } from "./campaigns.js";
 
 const DUPLICATE_REPORT_GROUPS = `
   WITH duplicate_groups AS (
@@ -11,7 +12,7 @@ const DUPLICATE_REPORT_GROUPS = `
            COUNT(*) AS duplicate_count,
            MIN(id) AS keeper_id
     FROM crusades
-    WHERE event_name IS NOT NULL AND TRIM(event_name) <> ''
+    WHERE campaign = @campaign AND event_name IS NOT NULL AND TRIM(event_name) <> ''
       AND event_date IS NOT NULL AND TRIM(event_date) <> ''
     GROUP BY event_date, LOWER(TRIM(event_name)), LOWER(TRIM(COALESCE(country, ''))), LOWER(TRIM(COALESCE(city, '')))
     HAVING COUNT(*) > 1
@@ -22,7 +23,8 @@ const DUPLICATE_REPORT_GROUPS = `
       SELECT 1
       FROM crusades search_crusade
       LEFT JOIN reports search_report ON search_report.id = search_crusade.report_id
-      WHERE search_crusade.event_date = duplicate_groups.event_date
+      WHERE search_crusade.campaign = @campaign
+        AND search_crusade.event_date = duplicate_groups.event_date
         AND LOWER(TRIM(search_crusade.event_name)) = duplicate_groups.normalized_event_name
         AND LOWER(TRIM(COALESCE(search_crusade.country, ''))) = duplicate_groups.normalized_country
         AND LOWER(TRIM(COALESCE(search_crusade.city, ''))) = duplicate_groups.normalized_city
@@ -44,20 +46,22 @@ function duplicateSearch(query = {}) {
   return searchText ? `%${searchText}%` : "";
 }
 
-function duplicateSummary(search) {
+function duplicateSummary(campaign, search) {
   return db.prepare(`${DUPLICATE_REPORT_GROUPS}
     SELECT COALESCE(SUM(duplicate_count), 0) AS total,
            COUNT(*) AS duplicate_groups,
            COALESCE(SUM(duplicate_count - 1), 0) AS excess_reports
     FROM matching_groups
-  `).get({ search });
+  `).get({ campaign, search });
 }
 
-export function duplicateReportPage(query = {}) {
+export function duplicateReportPage(campaignOrQuery = {}, maybeQuery) {
+  const campaign = maybeQuery === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrQuery);
+  const query = maybeQuery === undefined ? campaignOrQuery : maybeQuery;
   const pageSize = Math.min(Math.max(parseInt(query.page_size, 10) || 25, 1), 100);
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
   const search = duplicateSearch(query);
-  const summary = duplicateSummary(search);
+  const summary = duplicateSummary(campaign, search);
   const rows = db.prepare(`${DUPLICATE_REPORT_GROUPS}
     SELECT c.id, c.report_id, c.created_at AS submitted_at, c.event_date, c.event_name,
            c.event_type, c.other_event_type, c.format, c.city, c.country, c.venue, c.minister_name,
@@ -67,7 +71,8 @@ export function duplicateReportPage(query = {}) {
            matching_groups.normalized_event_name, matching_groups.duplicate_count, matching_groups.keeper_id
     FROM matching_groups
     JOIN crusades c
-      ON c.event_date = matching_groups.event_date
+      ON c.campaign = @campaign
+      AND c.event_date = matching_groups.event_date
       AND LOWER(TRIM(c.event_name)) = matching_groups.normalized_event_name
       AND LOWER(TRIM(COALESCE(c.country, ''))) = matching_groups.normalized_country
       AND LOWER(TRIM(COALESCE(c.city, ''))) = matching_groups.normalized_city
@@ -75,7 +80,7 @@ export function duplicateReportPage(query = {}) {
     ORDER BY c.event_date DESC, matching_groups.normalized_country, matching_groups.normalized_city,
              matching_groups.normalized_event_name, c.created_at, c.id
     LIMIT @limit OFFSET @offset
-  `).all({ search, limit: pageSize, offset: (page - 1) * pageSize });
+  `).all({ campaign, search, limit: pageSize, offset: (page - 1) * pageSize });
 
   return { rows, ...summary, page, page_size: pageSize };
 }
@@ -129,7 +134,11 @@ function chooseDuplicateKeeper(rows, strategy) {
   }, null);
 }
 
-export function cleanDuplicateReports(strategy, query = {}, expectedExcessReports) {
+export function cleanDuplicateReports(campaignOrStrategy, strategyOrQuery = {}, queryOrExpected, maybeExpected) {
+  const campaign = maybeExpected === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrStrategy);
+  const strategy = maybeExpected === undefined ? campaignOrStrategy : strategyOrQuery;
+  const query = maybeExpected === undefined ? strategyOrQuery : queryOrExpected;
+  const expectedExcessReports = maybeExpected === undefined ? queryOrExpected : maybeExpected;
   if (!DUPLICATE_KEEP_STRATEGIES.has(strategy)) {
     throw new ApiError(400, "INVALID_STRATEGY", "Choose earliest, latest, highest figures, or best record.");
   }
@@ -140,7 +149,7 @@ export function cleanDuplicateReports(strategy, query = {}, expectedExcessReport
 
   return db.transaction(() => {
     const search = duplicateSearch(query);
-    const current = duplicateSummary(search);
+    const current = duplicateSummary(campaign, search);
     if (current.excess_reports !== expected) {
       throw new ApiError(409, "DUPLICATES_CHANGED", "The duplicate totals changed. Review the refreshed list before cleaning again.");
     }
@@ -151,13 +160,14 @@ export function cleanDuplicateReports(strategy, query = {}, expectedExcessReport
              matching_groups.normalized_city
       FROM matching_groups
       JOIN crusades c
-        ON c.event_date = matching_groups.event_date
+        ON c.campaign = @campaign
+        AND c.event_date = matching_groups.event_date
         AND LOWER(TRIM(c.event_name)) = matching_groups.normalized_event_name
         AND LOWER(TRIM(COALESCE(c.country, ''))) = matching_groups.normalized_country
         AND LOWER(TRIM(COALESCE(c.city, ''))) = matching_groups.normalized_city
       LEFT JOIN reports r ON r.id = c.report_id
       ORDER BY c.id
-    `).all({ search });
+    `).all({ campaign, search });
     const groups = new Map();
     for (const row of rows) {
       const key = JSON.stringify([row.event_date, row.normalized_event_name, row.normalized_country, row.normalized_city]);

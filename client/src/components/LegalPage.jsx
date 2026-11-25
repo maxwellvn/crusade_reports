@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Mail, Phone } from "lucide-react";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 
 const CONTACT = {
   email: "info@rhapsodycrusades.org",
@@ -13,7 +14,7 @@ function ContactBlock() {
     <div className="mt-12 border-t border-slate-200 pt-8">
       <h2 className="text-xl font-medium tracking-[-0.02em] text-slate-950">Contact us</h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-        Questions about these terms or how your information is handled can be sent to the NOTC platform team:
+        Questions about these terms or how your information is handled can be sent to the campaign platform team:
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         <a href={`mailto:${CONTACT.email}`} className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-slate-950 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">
@@ -50,11 +51,12 @@ function LegalSection({ number, heading, blocks }) {
 }
 
 function LegalShell({ eyebrow, title, updated, lead, sections, footerNote }) {
+  const campaign = useCampaign();
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <Link to="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4"><img src="/logo.png" alt="" className="h-10 w-auto" /><span className="hidden truncate text-sm font-semibold sm:block">{title}</span></Link>
+          <Link to="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4"><img src={isAacCampaign(campaign) ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="h-10 w-auto" /><span className="hidden truncate text-sm font-semibold sm:block">{title}</span></Link>
           <Link to="/" className="ml-auto text-sm font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">Return home</Link>
         </div>
       </header>
@@ -90,6 +92,24 @@ function LegalShell({ eyebrow, title, updated, lead, sections, footerNote }) {
 }
 
 export function PrivacyPolicy() {
+  const campaign = useCampaign();
+  if (isAacCampaign(campaign)) return (
+    <LegalShell
+      eyebrow="Angels at Christmas"
+      title="Privacy Policy"
+      updated="25 November 2026"
+      lead="This policy explains how Rhapsody End-Time Teaching Crusades collects, uses, stores and protects information submitted through the Angels at Christmas portal at aac.rhapsodycrusades.org."
+      sections={[
+        { heading: "Information we collect", blocks: ["We collect the details needed to register and report Angels at Christmas crusades.", ["Contact details, including name, email address, phone number and KingsChat username.", "Organisation details, including the zone, group, church, cell or network represented.", "Crusade details, including the event date, venue, country, city, expected attendance and preparation information.", "Verified report outcomes, highlights, evidence links and uploaded report photos.", "KingsChat profile details used to authenticate approved administrators."]] },
+        { heading: "How we use information", blocks: ["We use this information to coordinate Angels at Christmas Celebration Crusades, maintain campaign-only dashboards, verify results, provide approved resources, prevent duplicate or fraudulent submissions and support authorised campaign administration."] },
+        { heading: "Campaign separation and access", blocks: ["Angels at Christmas records are labelled and filtered separately from Night of a Thousand Crusades records. Approved administrators receive campaign-specific access. Zone and network portal links are private capability links and must only be shared with their intended teams."] },
+        { heading: "Storage, sharing and retention", blocks: ["Data is stored on the campaign platform and may be accessed by approved leadership and administrators who require it for campaign operations. We do not sell personal information. Service providers may process data only to operate and secure the platform."] },
+        { heading: "Your choices and corrections", blocks: ["You may contact us to request a correction, ask how your information is used or raise a privacy concern. Some records may be retained where required for campaign accountability, security, backup integrity or legal obligations."] },
+        { heading: "Changes to this policy", blocks: ["We may update this policy as the campaign and platform evolve. The effective date above shows the latest revision."] },
+      ]}
+      footerNote="This portal is operated for Angels at Christmas Celebration Crusades. Contact us below with questions about this policy or your data."
+    />
+  );
   return (
     <LegalShell
       eyebrow="Night of a Thousand Crusades (NOTC)"
@@ -211,6 +231,24 @@ export function PrivacyPolicy() {
 }
 
 export function TermsOfService() {
+  const campaign = useCampaign();
+  if (isAacCampaign(campaign)) return (
+    <LegalShell
+      eyebrow="Angels at Christmas"
+      title="Terms of Service"
+      updated="25 November 2026"
+      lead="These Terms govern access to and use of the Angels at Christmas portal at aac.rhapsodycrusades.org, including crusade registration, reporting, resources and campaign administration."
+      sections={[
+        { heading: "Agreement and authority", blocks: ["By using the portal, you agree to these Terms and the Privacy Policy. If you submit on behalf of a zone, group, church, cell, network or ministry, you confirm that you are authorised to do so."] },
+        { heading: "Campaign scope", blocks: ["The portal supports Angels at Christmas Celebration Crusades scheduled from 1 to 31 December 2026.", ["Register only confirmed crusades within the campaign date range.", "Submit complete and accurate reports for crusades that have held.", "Use campaign dashboards, resources and exports only for authorised ministry purposes."]] },
+        { heading: "Accurate and lawful use", blocks: ["Do not submit false, misleading, duplicated or unlawful information; upload harmful files; impersonate another person; interfere with the service; or attempt to access records outside the campaign or organisation scope granted to you."] },
+        { heading: "Private access links and accounts", blocks: ["Keep KingsChat credentials and zone or network portal links confidential. You are responsible for activity through your access. Administrative access may be suspended or revoked when required to protect the platform or campaign data."] },
+        { heading: "Evidence and content", blocks: ["You confirm that you have permission to submit photos, links, names and campaign information, and that their use for campaign verification and reporting does not violate another person's rights."] },
+        { heading: "Availability and changes", blocks: ["We may maintain, update or temporarily restrict the portal to protect data and service integrity. We may update these Terms; the effective date above shows the latest revision."] },
+      ]}
+      footerNote="Thank you for serving through Angels at Christmas. Contact us below if you have questions about these Terms."
+    />
+  );
   return (
     <LegalShell
       eyebrow="Night of a Thousand Crusades (NOTC)"

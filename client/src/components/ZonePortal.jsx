@@ -21,10 +21,16 @@ import { ReportMediaFields, buildReportFormData, formatBytes, MAX_REPORT_PHOTOS_
 import { UploadProgress } from "@/components/UploadProgress";
 import { uploadForm } from "@/lib/upload";
 import { TemplateDownloadButton } from "@/components/TemplateDownloadButton";
+import { campaignDateProps, isAacCampaign, useCampaign } from "@/lib/campaign";
 
 // UTC "today" (YYYY-MM-DD), matching the server's date('now') for the collaboration
 // edit lock. Purely a display cue — the server is the authority on the cutoff.
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const reportDateBounds = (campaign) => {
+  const range = campaignDateProps(campaign);
+  const today = todayISO();
+  return { ...range, max: range.max && range.max < today ? range.max : today };
+};
 const PAGE_SIZE = 50;
 const PORTAL_REPORT_DRAFT_VERSION = 1;
 const PORTAL_REPORT_DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
@@ -61,6 +67,8 @@ function readPortalReportDraft(key) {
 // scopes every read and readiness update to the token's zone/network.
 
 export function ZonePortal() {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const { token } = useParams();
   const [data, setData] = React.useState(null);
   const [error, setError] = React.useState(null);
@@ -108,7 +116,7 @@ export function ZonePortal() {
     return (
       <div className="grid min-h-screen place-items-center bg-background px-6">
         <div className="max-w-md space-y-4 text-center">
-          <img src="/logo.png" alt="" className="mx-auto h-10 w-auto" />
+          <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="mx-auto h-10 w-auto" />
           <h1 className="text-2xl tracking-tight">{invalidLink ? "This link isn’t valid." : "Dashboard temporarily unavailable"}</h1>
           <p className="text-sm text-muted-foreground">{error.message}</p>
           {!invalidLink && <Button type="button" onClick={loadPortal}>Try again</Button>}
@@ -127,7 +135,7 @@ export function ZonePortal() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4">
-          <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" />
+          <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="h-11 w-auto shrink-0" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold tracking-tight">{data ? data.zone : "Zone dashboard"}</h1>
             <p className="hidden truncate text-sm text-muted-foreground sm:block">Your {data?.kind === "network" ? "network" : "zone"}’s crusade registrations and reports.</p>
@@ -557,6 +565,7 @@ function useCityFetcher(countryName) {
 }
 
 export function CrusadeReportDialog({ crusade, token, savePath, submissionContext, onClose, onSubmitted, onAlreadySubmitted }) {
+  const campaign = useCampaign();
   const ref = React.useRef(null);
   const draftKey = token ? portalReportDraftKey(token, crusade.id) : "";
   const draft = React.useMemo(() => readPortalReportDraft(draftKey), [draftKey]);
@@ -707,7 +716,7 @@ export function CrusadeReportDialog({ crusade, token, savePath, submissionContex
             <Input value={report.event_name} onChange={(event) => setField("event_name", event.target.value)} />
           </Field>
           <Field label="Date held" required>
-            <Input type="date" max={new Date().toISOString().slice(0, 10)} value={report.event_date} onChange={(event) => setField("event_date", event.target.value)} />
+            <Input type="date" {...reportDateBounds(campaign)} value={report.event_date} onChange={(event) => setField("event_date", event.target.value)} />
           </Field>
           <Field label="Country">
             <Input value={crusade.country || "—"} readOnly aria-readonly="true" className="cursor-not-allowed text-muted-foreground" />
@@ -809,6 +818,7 @@ function StatusBadge({ status = "pending" }) {
 }
 
 export function CrusadeEditor({ crusade, savePath, onSaved }) {
+  const campaign = useCampaign();
   const [details, setDetails] = React.useState({
     event_type: crusade.event_type || "", event_name: crusade.event_name || "", event_date: crusade.event_date || "",
     venue: crusade.venue || "", expected_attendance: crusade.expected_attendance || "", minister_name: crusade.minister_name || "",
@@ -868,7 +878,7 @@ export function CrusadeEditor({ crusade, savePath, onSaved }) {
           <Input value={details.event_name} onChange={(event) => setDetails((current) => ({ ...current, event_name: event.target.value }))} />
         </Field>
         <Field label="Date" required>
-          <Input type="date" value={details.event_date} onChange={(event) => setDetails((current) => ({ ...current, event_date: event.target.value }))} />
+          <Input type="date" {...campaignDateProps(campaign)} value={details.event_date} onChange={(event) => setDetails((current) => ({ ...current, event_date: event.target.value }))} />
         </Field>
         <Field label="Expected attendance" required>
           <Input type="number" min="1" value={details.expected_attendance} onChange={(event) => setDetails((current) => ({ ...current, expected_attendance: event.target.value }))} />

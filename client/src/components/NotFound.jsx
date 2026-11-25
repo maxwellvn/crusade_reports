@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 
 export function NotFound() {
+  const campaign = useCampaign();
   return (
     <div className="grid min-h-screen place-items-center bg-background px-6">
       <div className="max-w-md space-y-5 text-center">
-        <img src="/logo.png" alt="" className="mx-auto h-10 w-auto" />
+        <img src={isAacCampaign(campaign) ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="mx-auto h-10 w-auto" />
         <p className="text-7xl tracking-[-1.2px] text-muted-foreground/40 tabular-nums">404</p>
         <h1 className="text-2xl tracking-tight">This page doesn’t exist.</h1>
         <p className="text-sm text-muted-foreground">The link may be wrong, or the page may have moved.</p>

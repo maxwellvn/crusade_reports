@@ -10,6 +10,7 @@ import { postJSON } from "@/lib/api";
 import { uploadForm } from "@/lib/upload";
 import { UploadProgress } from "@/components/UploadProgress";
 import { typeLabel } from "@/lib/dashboardWidgets";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 import "../landing.css";
 
 // Past this many pending registrations, one-at-a-time reporting is hopeless —
@@ -137,6 +138,8 @@ function crusadeName(crusade) {
 }
 
 export function FindCrusadeReport() {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const [entry, setEntry] = React.useState("");
   const [lookup, setLookup] = React.useState("");
   const [rows, setRows] = React.useState(null);
@@ -194,8 +197,8 @@ export function FindCrusadeReport() {
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/crusade-registration" className="flex min-w-0 items-center gap-2.5">
-            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" className="h-8 w-auto shrink-0" />
-            <span className="hidden truncate text-sm font-semibold sm:block">A Night of a Thousand Crusades</span>
+            <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="h-8 w-auto shrink-0" />
+            <span className="hidden truncate text-sm font-semibold sm:block">{campaign.name}</span>
           </Link>
           <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer"
             className="reg-header-link inline-flex shrink-0 items-center gap-1 text-sm font-semibold transition-colors">

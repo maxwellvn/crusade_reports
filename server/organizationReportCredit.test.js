@@ -26,10 +26,10 @@ test("organization report credit is off by default and exposed through campaign 
   db.exec("BEGIN");
   try {
     db.prepare("DELETE FROM app_settings WHERE key = 'organization_report_credit_enabled'").run();
-    assert.equal(isOrganizationReportCreditEnabled(), false);
-    const enabled = updateCampaignSettings({ organization_report_credit_enabled: true });
+    assert.equal(isOrganizationReportCreditEnabled("notc"), false);
+    const enabled = updateCampaignSettings("notc", { organization_report_credit_enabled: true });
     assert.equal(enabled.organization_report_credit_enabled, true);
-    assert.equal(isOrganizationReportCreditEnabled(), true);
+    assert.equal(isOrganizationReportCreditEnabled("notc"), true);
   } finally {
     db.exec("ROLLBACK");
   }
@@ -38,9 +38,9 @@ test("organization report credit is off by default and exposed through campaign 
 test("enabled organization credit counts unlinked reports against plan without exceeding plan", () => {
   db.exec("BEGIN");
   try {
-    setOrganizationReportCreditEnabled(true);
-    const baselineZoneTypeHeld = registrationProgress("organization_type").find((row) => row.key === "zone")?.held || 0;
-    const baselineStreetHeld = registrationProgress("event_type").find((row) => row.key === "street")?.held || 0;
+    setOrganizationReportCreditEnabled("notc", true);
+    const baselineZoneTypeHeld = registrationProgress("notc", "organization_type").find((row) => row.key === "zone")?.held || 0;
+    const baselineStreetHeld = registrationProgress("notc", "event_type").find((row) => row.key === "street")?.held || 0;
     const zone = `Progress Zone ${Date.now()}`;
     const registrationId = db.prepare(`
       INSERT INTO registrations (organization_type, zone, country, plan_date)
@@ -67,16 +67,16 @@ test("enabled organization credit counts unlinked reports against plan without e
     addReport({ zone });
     addReport({ zone: otherZone });
 
-    setOrganizationReportCreditEnabled(false);
-    assert.equal(registrationProgress("zone").find((row) => row.key === zone).held, 1);
+    setOrganizationReportCreditEnabled("notc", false);
+    assert.equal(registrationProgress("notc", "zone").find((row) => row.key === zone).held, 1);
 
-    setOrganizationReportCreditEnabled(true);
-    const progress = registrationProgress("zone").find((row) => row.key === zone);
+    setOrganizationReportCreditEnabled("notc", true);
+    const progress = registrationProgress("notc", "zone").find((row) => row.key === zone);
     assert.deepEqual({ planned: progress.planned, held: progress.held }, { planned: 2, held: 2 });
-    assert.equal(registrationProgress("organization_type").find((row) => row.key === "zone").held, baselineZoneTypeHeld + 3);
-    assert.equal(registrationProgress("event_type").find((row) => row.key === "street").held, baselineStreetHeld + 3);
+    assert.equal(registrationProgress("notc", "organization_type").find((row) => row.key === "zone").held, baselineZoneTypeHeld + 3);
+    assert.equal(registrationProgress("notc", "event_type").find((row) => row.key === "street").held, baselineStreetHeld + 3);
 
-    const summary = registrationSummary();
+    const summary = registrationSummary("notc");
     assert.equal(summary.reported <= summary.total, true);
     assert.equal(summary.awaiting, summary.total - summary.reported);
   } finally {
@@ -87,7 +87,7 @@ test("enabled organization credit counts unlinked reports against plan without e
 test("organization credit still saves reports linked to registered crusades", () => {
   db.exec("BEGIN");
   try {
-    setOrganizationReportCreditEnabled(true);
+    setOrganizationReportCreditEnabled("notc", true);
     const zone = `Linked Save ${Date.now()}`;
     const registrationId = db.prepare(`
       INSERT INTO registrations (organization_type, zone, country, plan_date)
@@ -100,6 +100,7 @@ test("organization credit still saves reports linked to registered crusades", ()
     `).run(registrationId, zone).lastInsertRowid;
 
     insertReport({
+      campaign: "notc",
       organization_type: "zone",
       zone,
       country: "Nigeria",
