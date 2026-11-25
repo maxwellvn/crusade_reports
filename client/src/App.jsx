@@ -200,8 +200,9 @@ function Shell({ subtitle, links }) {
   const [logoOk, setLogoOk] = useState(true);
   const admin = useAdmin();
   const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const visibleLinks = links.filter(([to, , , superAdminOnly]) => {
-    if (isAacCampaign(campaign) && !AAC_ADMIN_LINKS.has(to)) return false;
+    if (aac && !AAC_ADMIN_LINKS.has(to)) return false;
     if (superAdminOnly && !admin?.is_super_admin) return false;
     // For non-super-admins, check page-level permissions. The Home link ("/")
     // is always visible. Every other link needs a matching permission key.
@@ -215,33 +216,33 @@ function Shell({ subtitle, links }) {
     return true;
   });
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden">
+    <div className={cn("min-h-screen", aac && "aac-admin-shell")}>
+      <header className={cn("border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden", aac && "aac-admin-header")}>
         <div className="mx-auto max-w-7xl px-4 py-3">
           <div className="flex min-w-0 items-center gap-4">
           {logoOk && (
-            <img src={isAacCampaign(campaign) ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
+            <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt="" className={cn("h-11 w-auto shrink-0", aac && "h-14")} onError={() => setLogoOk(false)} />
           )}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold tracking-tight">{campaign.name}</h1>
-            <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>
+            <p className={cn("hidden truncate text-sm text-muted-foreground sm:block", aac && "aac-admin-subtitle")}>{subtitle}</p>
           </div>
           {campaign.campaigns?.length > 1 && (
-            <div className="flex shrink-0 items-center rounded-lg border border-blue-100 bg-blue-50 p-1 text-xs font-semibold print:hidden" aria-label="Switch campaign">
-              {campaign.campaigns.map((option) => <a key={option.id} href={campaignAdminUrl(option)} className={cn("rounded-md px-2.5 py-1.5", option.id === campaign.id ? "bg-white text-blue-800 shadow-sm" : "text-slate-500 hover:text-blue-700")}>{option.short_name}</a>)}
+            <div className={cn("flex shrink-0 items-center rounded-lg border border-blue-100 bg-blue-50 p-1 text-xs font-semibold print:hidden", aac && "aac-admin-switch")} aria-label="Switch campaign">
+              {campaign.campaigns.map((option) => <a key={option.id} href={campaignAdminUrl(option)} className={cn("rounded-md px-2.5 py-1.5", option.id === campaign.id ? "bg-white text-blue-800 shadow-sm" : "text-slate-500 hover:text-blue-700", aac && "aac-admin-switch-item", aac && option.id === campaign.id && "is-active")}>{option.short_name}</a>)}
             </div>
           )}
           </div>
           {visibleLinks.length > 0 && (
-            <nav className="mt-3 flex w-full gap-1 overflow-x-auto border-t border-blue-100 pt-2 [scrollbar-width:thin]">
+            <nav className={cn("mt-3 flex w-full gap-1 overflow-x-auto border-t border-blue-100 pt-2 [scrollbar-width:thin]", aac && "aac-admin-nav")}>
               {visibleLinks.map(([to, label, end]) => (
-                <NavLink key={to} to={to} end={end} className={(state) => cn(navLink(state), "shrink-0 whitespace-nowrap")}>{label}</NavLink>
+                <NavLink key={to} to={to} end={end} className={(state) => cn(navLink(state), "shrink-0 whitespace-nowrap", aac && "aac-admin-link", aac && state.isActive && "is-active")}>{label}</NavLink>
               ))}
             </nav>
           )}
         </div>
       </header>
-      <main className="px-4 py-8">
+      <main className={cn("px-4 py-8", aac && "aac-admin-main")}>
         <Outlet />
       </main>
     </div>

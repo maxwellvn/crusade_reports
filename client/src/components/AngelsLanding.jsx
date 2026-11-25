@@ -1,17 +1,76 @@
-import { Link } from "react-router-dom";
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, CalendarDays, CheckCircle2, FileText, Search } from "lucide-react";
 import "../landing.css";
 
-const PRINTS = [
-  ["/campaign/aac-worship.png", "Families worshipping at a Rhapsody crusade", "aac-print-one"],
-  ["/campaign/aac-baptism.png", "A new believer after water baptism", "aac-print-two"],
-  ["/campaign/aac-ministry.png", "Ministers praying with crusade attendees", "aac-print-three"],
-  ["/campaign/aac-believers.png", "Women receiving prayer and Rhapsody of Realities", "aac-print-four"],
+const REGISTER = "/crusade-registration/register";
+
+const HERO_PHOTOS = [
+  ["/campaign/aac-worship.png", "Families worshipping at a Rhapsody crusade", "aac-board-photo-main"],
+  ["/campaign/aac-baptism.png", "A new believer after water baptism", "aac-board-photo-top"],
+  ["/campaign/aac-believers.png", "Women receiving prayer and Rhapsody of Realities", "aac-board-photo-bottom"],
 ];
 
-export function AngelsLanding() {
+function RegisterButton({ className = "" }) {
+  const navigate = useNavigate();
+  const labelRef = React.useRef(null);
+  const [igniting, setIgniting] = React.useState(false);
+
+  const onClick = (event) => {
+    if (igniting) return;
+    event.preventDefault();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      navigate(REGISTER);
+      return;
+    }
+    const label = labelRef.current;
+    if (label) {
+      label.style.maxWidth = `${label.scrollWidth}px`;
+      void label.offsetWidth;
+      requestAnimationFrame(() => { label.style.maxWidth = "0px"; });
+    }
+    setIgniting(true);
+    window.setTimeout(() => navigate(REGISTER), 900);
+  };
+
   return (
-    <div className="aac-landing">
+    <Link
+      to={REGISTER}
+      onClick={onClick}
+      aria-label="Register a crusade"
+      className={`aac-register-button${igniting ? " is-igniting" : ""} ${className}`}
+    >
+      <span ref={labelRef} className="aac-register-label">Register a crusade</span>
+      <ArrowRight aria-hidden="true" />
+    </Link>
+  );
+}
+
+export function AngelsLanding() {
+  const rootRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    root.classList.add(reducedMotion ? "aac-motion-off" : "aac-ready");
+    if (reducedMotion || !("IntersectionObserver" in window)) {
+      root.querySelectorAll("[data-aac-reveal]").forEach((node) => node.classList.add("is-visible"));
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.18, rootMargin: "0px 0px -8%" });
+    root.querySelectorAll("[data-aac-reveal]").forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div className="aac-landing" ref={rootRef}>
       <header className="aac-nav">
         <Link to="/" className="aac-brand" aria-label="Angels at Christmas home">
           <img src="/angels-at-christmas-emblem.png" alt="" />
@@ -20,7 +79,7 @@ export function AngelsLanding() {
         <nav aria-label="Campaign links">
           <Link to="/find-my-crusade">Find my crusade</Link>
           <Link to="/report">Submit a report</Link>
-          <Link className="aac-nav-cta" to="/crusade-registration/register">Register <ArrowRight /></Link>
+          <RegisterButton className="aac-nav-register" />
         </nav>
       </header>
 
@@ -33,37 +92,69 @@ export function AngelsLanding() {
 
           <div className="aac-hero-copy">
             <p className="aac-kicker">Rhapsody End-Time Teaching Crusades presents</p>
-            <h1 id="aac-title"><span>Angels at</span><em>Christmas</em><span>Celebration Crusades</span></h1>
-            <p className="aac-lead">This December, take the Gospel to your world. Host a celebration crusade, share the joy of Christ and give Rhapsody of Realities to everyone in your community.</p>
+            <h1 id="aac-title">
+              <span>Angels at</span>
+              <span className="aac-gold-word">Christmas</span>
+              <span className="aac-title-tail">Celebration Crusades</span>
+            </h1>
+            <p className="aac-lead">This December, take the Gospel to your world. Host a celebration crusade, share the joy of Christ, and give Rhapsody of Realities to everyone in your community.</p>
             <div className="aac-actions">
-              <div className="aac-date"><CalendarDays /><span><small>Throughout</small><strong>December 2026</strong></span></div>
-              <Link className="aac-primary" to="/crusade-registration/register">Register a Crusade <ArrowRight /></Link>
+              <div className="aac-date"><CalendarDays /><span><small>Campaign dates</small><strong>1 to 31 December 2026</strong></span></div>
+              <RegisterButton />
             </div>
           </div>
 
-          <div className="aac-collage" aria-label="Scenes from Rhapsody crusades">
-            {PRINTS.map(([src, alt, className]) => <figure className={className} key={src}><img src={src} alt={alt} /></figure>)}
-            <img className="aac-emblem" src="/angels-at-christmas-emblem.png" alt="Angels at Christmas Celebration Crusades" />
+          <div className="aac-event-board" aria-label="Scenes from Rhapsody crusades">
+            <div className="aac-board-topline" aria-hidden="true"><span>AAC / 2026</span><span>Celebration crusades</span></div>
+            <div className="aac-board-grid">
+              {HERO_PHOTOS.map(([src, alt, className]) => (
+                <figure className={`aac-board-photo ${className}`} key={src}>
+                  <img src={src} alt={alt} />
+                </figure>
+              ))}
+            </div>
+            <img className="aac-board-emblem" src="/angels-at-christmas-emblem.png" alt="Angels at Christmas Celebration Crusades" />
+            <div className="aac-board-date" aria-hidden="true"><strong>31</strong><span>days of<br />celebration</span></div>
           </div>
         </section>
 
-        <section className="aac-path" aria-labelledby="aac-path-title">
-          <div className="aac-path-intro">
-            <p className="aac-section-kicker">One campaign. One clear record.</p>
-            <h2 id="aac-path-title">From your plan to the final testimony.</h2>
-            <p>Every Angels at Christmas crusade stays inside its own campaign record, separate from NOTC.</p>
+        <section className="aac-journey" aria-labelledby="aac-journey-title">
+          <div className="aac-journey-heading" data-aac-reveal>
+            <p>One crusade, one complete record.</p>
+            <h2 id="aac-journey-title">Plan it now. Return when it holds. Record what God did.</h2>
           </div>
-          <div className="aac-steps">
-            <article><span>01</span><CheckCircle2 /><h3>Register</h3><p>Add each confirmed crusade scheduled from 1–31 December 2026.</p><Link to="/crusade-registration/register">Start registration <ArrowRight /></Link></article>
-            <article><span>02</span><Search /><h3>Find it later</h3><p>Use your email address or KingsChat username to return to your crusades.</p><Link to="/find-my-crusade">Find my crusade <ArrowRight /></Link></article>
-            <article><span>03</span><FileText /><h3>Report outcomes</h3><p>After it holds, submit attendance, salvations, evidence and the testimony.</p><Link to="/report">Submit a report <ArrowRight /></Link></article>
+
+          <div className="aac-journey-layout">
+            <ol className="aac-route" data-aac-reveal>
+              <li>
+                <span className="aac-route-icon"><CheckCircle2 aria-hidden="true" /></span>
+                <div><small>Before the crusade</small><h3>Register the plan</h3><p>Add each confirmed crusade taking place from 1 to 31 December 2026.</p><RegisterButton className="aac-route-register" /></div>
+              </li>
+              <li>
+                <span className="aac-route-icon"><Search aria-hidden="true" /></span>
+                <div><small>When you return</small><h3>Find your crusade</h3><p>Use your email address or KingsChat username to open your registered crusades.</p><Link className="aac-text-link" to="/find-my-crusade">Find my crusade <ArrowRight /></Link></div>
+              </li>
+              <li>
+                <span className="aac-route-icon"><FileText aria-hidden="true" /></span>
+                <div><small>After it holds</small><h3>Report the outcome</h3><p>Submit attendance, salvations, photographs, and the testimony from the crusade.</p><Link className="aac-text-link" to="/report">Submit a report <ArrowRight /></Link></div>
+              </li>
+            </ol>
+
+            <aside className="aac-journey-note" data-aac-reveal>
+              <p>Everything you need is connected to the same campaign record, from registration to the final report.</p>
+              <div><span>Campaign window</span><strong>1 to 31<br />December 2026</strong></div>
+            </aside>
           </div>
         </section>
 
-        <section className="aac-closing">
-          <img src="/angels-at-christmas-emblem.png" alt="" />
-          <div><p>December 1–31, 2026</p><h2>Let every community hear the good news of Christmas.</h2></div>
-          <Link className="aac-primary" to="/crusade-registration/register">Register now <ArrowRight /></Link>
+        <section className="aac-closing" aria-labelledby="aac-closing-title">
+          <figure data-aac-reveal><img src="/campaign/aac-ministry.png" alt="A minister praying with crusade attendees" /></figure>
+          <div className="aac-closing-copy" data-aac-reveal>
+            <img src="/angels-at-christmas-emblem.png" alt="" />
+            <p>Angels at Christmas, December 2026</p>
+            <h2 id="aac-closing-title">Let every community hear the good news of Christmas.</h2>
+            <RegisterButton />
+          </div>
         </section>
       </main>
 
