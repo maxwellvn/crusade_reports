@@ -2340,6 +2340,106 @@ header.aac-nav nav > .aac-cta { display: inline-flex; }
 .aac-invitation-copy > p + p { margin-top: 22px; }
 .aac-invitation-copy .aac-cta { margin-top: 32px; }
 
+/* The real registration flow, presented with the same stepped clarity as NOTC. */
+.aac-register-guide {
+    position: relative;
+    padding: clamp(90px, 10vw, 150px) clamp(20px, 6vw, 92px);
+    overflow: hidden;
+    background: #fff;
+}
+.aac-register-guide::before {
+    content: "";
+    position: absolute;
+    top: -240px;
+    left: 50%;
+    width: 680px;
+    height: 680px;
+    border: 1px solid rgba(21, 58, 168, .08);
+    border-radius: 50%;
+    box-shadow: 0 0 0 80px rgba(21, 58, 168, .025), 0 0 0 160px rgba(21, 58, 168, .015);
+    transform: translateX(-50%);
+}
+.aac-register-guide-head,
+.aac-register-guide-steps,
+.aac-register-guide-action {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1240px;
+    margin-inline: auto;
+}
+.aac-register-guide-head { text-align: center; }
+.aac-register-guide-head h2 {
+    margin: 18px 0 0;
+    font-size: clamp(46px, 6.3vw, 84px);
+    font-weight: 650;
+    line-height: .94;
+    letter-spacing: -.058em;
+}
+.aac-register-guide-head h2 span { color: #b45309; }
+.aac-register-guide-head > p:last-child {
+    max-width: 610px;
+    margin: 24px auto 0;
+    color: var(--aac-muted);
+    font-size: 17px;
+    line-height: 1.65;
+}
+.aac-register-guide-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: clamp(54px, 7vw, 86px);
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(7, 19, 53, .17);
+    border-radius: 32px;
+    background: var(--aac-paper);
+    box-shadow: 0 24px 65px rgba(7, 19, 53, .08);
+    list-style: none;
+}
+.aac-register-guide-steps::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 4px;
+    transform: scaleX(0);
+    transform-origin: left;
+    background: linear-gradient(90deg, #b45309, var(--aac-gold), #153aa8);
+    transition: transform 1100ms var(--aac-ease-out) 120ms;
+}
+.aac-register-guide-steps.is-visible::after { transform: scaleX(1); }
+.aac-register-guide-steps li {
+    min-height: 360px;
+    padding: clamp(28px, 3vw, 42px);
+    border-right: 1px solid rgba(7, 19, 53, .14);
+    opacity: .12;
+    transform: translateY(24px);
+    transition: opacity 620ms ease, transform 720ms var(--aac-ease-out), background-color 180ms ease;
+}
+.aac-register-guide-steps li:last-child { border-right: 0; }
+.aac-register-guide-steps.is-visible li { opacity: 1; transform: none; }
+.aac-register-guide-steps.is-visible li:nth-child(2) { transition-delay: 100ms; }
+.aac-register-guide-steps.is-visible li:nth-child(3) { transition-delay: 200ms; }
+.aac-guide-step-top { display: flex; align-items: center; justify-content: space-between; }
+.aac-guide-number { color: rgba(7, 19, 53, .38); font-size: 12px; font-weight: 800; letter-spacing: .12em; }
+.aac-guide-icon {
+    display: grid;
+    place-items: center;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: var(--aac-ink);
+    box-shadow: 0 12px 26px rgba(7, 19, 53, .18);
+    color: var(--aac-gold);
+}
+.aac-guide-icon svg { width: 24px; height: 24px; stroke-width: 1.8; }
+.aac-register-guide-steps small { display: block; margin-top: 62px; color: #9d4b09; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.aac-register-guide-steps h3 { margin: 9px 0 0; font-size: clamp(27px, 2.35vw, 35px); line-height: 1.04; letter-spacing: -.038em; }
+.aac-register-guide-steps p { margin: 17px 0 0; color: var(--aac-muted); font-size: 15px; line-height: 1.65; }
+.aac-register-guide-action { display: flex; align-items: center; gap: 24px; margin-top: 32px; }
+.aac-register-guide-action > p { max-width: 470px; margin: 0; color: #737b8d; font-size: 13px; line-height: 1.55; }
+
 /* Registration journey */
 .aac-journey { position: relative; padding: clamp(90px, 10vw, 150px) clamp(20px, 6vw, 92px); overflow: hidden; background: var(--aac-paper-deep); }
 .aac-journey::before { content: ""; position: absolute; top: -190px; right: -170px; width: 480px; height: 480px; border: 1px solid rgba(180,83,9,.13); border-radius: 50%; box-shadow: 0 0 0 70px rgba(180,83,9,.035), 0 0 0 140px rgba(180,83,9,.025); }
@@ -2450,6 +2550,7 @@ html[data-campaign="aac"] .reg-page [class*="from-blue-50"] { background: linear
     .aac-cta:active { transform: scale(.96); }
     .aac-hero-print:hover { z-index: 7; transform: rotate(0) scale(1.035); box-shadow: 0 30px 68px rgba(0,0,0,.58); }
     .aac-invitation-photo:hover img, .aac-moments-gallery figure:hover img { transform: scale(1.025); }
+    .aac-register-guide-steps li:hover { background: #fff; }
     .aac-text-link:hover svg { transform: translateX(4px); }
     .aac-footer-directory a:hover { color: #fff; transform: translateX(3px); }
     html[data-campaign="aac"] .reg-page .bg-primary:hover { background: linear-gradient(180deg,#fff0a4 0%,#ffd04a 58%,#edb21b 100%); }
@@ -2477,6 +2578,10 @@ html[data-campaign="aac"] .reg-page [class*="from-blue-50"] { background: linear
     .aac-invitation-heading, .aac-journey-heading, .aac-purpose-head { grid-template-columns: 1fr; gap: 18px; }
     .aac-invitation-heading .aac-section-kicker, .aac-journey-heading .aac-section-kicker, .aac-purpose-head .aac-section-kicker { padding-top: 0; }
     .aac-journey-layout { grid-template-columns: 1fr; }
+    .aac-register-guide-steps { grid-template-columns: 1fr; }
+    .aac-register-guide-steps li { min-height: 0; border-right: 0; border-bottom: 1px solid rgba(7,19,53,.14); }
+    .aac-register-guide-steps li:last-child { border-bottom: 0; }
+    .aac-register-guide-steps small { margin-top: 38px; }
     .aac-journey-card { position: relative; top: auto; min-height: 430px; }
     .aac-journey-card img { height: 430px; }
     .aac-purpose-grid { grid-template-columns: 1fr; }
@@ -2508,7 +2613,7 @@ html[data-campaign="aac"] .reg-page [class*="from-blue-50"] { background: linear
     .aac-hero-print { padding: 4px; border-radius: 12px; }
     .aac-hero-print img { border-radius: 8px; }
     .aac-hero-emblem { width: 49%; }
-    .aac-invitation, .aac-journey, .aac-purpose, .aac-moments { padding: 78px 17px; }
+    .aac-invitation, .aac-register-guide, .aac-journey, .aac-purpose, .aac-moments { padding: 78px 17px; }
     .aac-invitation-heading h2, .aac-journey-heading h2, .aac-purpose-head h2 { font-size: 43px; }
     .aac-invitation-story { margin-top: 48px; }
     .aac-invitation-photo { border-radius: 18px; }
@@ -2516,6 +2621,14 @@ html[data-campaign="aac"] .reg-page [class*="from-blue-50"] { background: linear
     .aac-invitation-photo figcaption { right: 15px; bottom: 14px; left: 15px; font-size: 9px; }
     .aac-invitation-copy { display: block; }
     .aac-invitation-copy > p + p { margin-top: 18px; }
+    .aac-register-guide-head h2 { font-size: 43px; }
+    .aac-register-guide-head > p:last-child { font-size: 15px; }
+    .aac-register-guide-steps { margin-top: 46px; border-radius: 22px; }
+    .aac-register-guide-steps li { padding: 26px 22px 30px; }
+    .aac-register-guide-steps small { margin-top: 32px; }
+    .aac-register-guide-action { align-items: stretch; flex-direction: column; }
+    .aac-register-guide-action .aac-cta { width: 100%; }
+    .aac-register-guide-action .aac-cta-body { flex: 1; }
     .aac-journey-layout { margin-top: 48px; }
     .aac-route::before { left: 24px; }
     .aac-route li { grid-template-columns: 50px minmax(0,1fr); gap: 16px; padding: 28px 28px 32px 0; }
@@ -2552,6 +2665,7 @@ html[data-campaign="aac"] .reg-page [class*="from-blue-50"] { background: linear
 
 @media (prefers-reduced-motion: reduce) {
     .aac-title-line > span, .aac-hero-rise, .aac-hero-collage, [data-aac-reveal] { opacity: 1; transform: none; animation: none; transition: opacity 160ms ease; }
+    .aac-register-guide-steps::after, .aac-register-guide-steps li { opacity: 1; transform: none; transition: none; }
     .aac-globe, .aac-hero-copy { transform: none; opacity: 1; }
     .aac-scroll-cue i::after { animation: none; transform: none; }
     .aac-cta, .aac-cta-body, .aac-cta-seal, .aac-cta-seal svg, .aac-hero-print, .aac-invitation-photo img, .aac-moments-gallery img, .aac-text-link svg { transition: none; }

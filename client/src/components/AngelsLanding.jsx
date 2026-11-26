@@ -7,11 +7,14 @@ import {
   BookOpenText,
   CalendarDays,
   CheckCircle2,
+  ClipboardCheck,
   FileText,
+  ListPlus,
   Mail,
   MapPin,
   Search,
   Sparkles,
+  UserRound,
 } from "lucide-react";
 import "../landing.css";
 
@@ -47,6 +50,27 @@ const PURPOSE = [
   { number: "01", icon: Sparkles, title: "Celebrate Christ", copy: "Gather your community around the good news and joy of Christmas." },
   { number: "02", icon: BookOpenText, title: "Give Rhapsody", copy: "Put Rhapsody of Realities into the hands of everyone you reach." },
   { number: "03", icon: MapPin, title: "Reach your world", copy: "Take the celebration beyond a venue and into cities, streets and communities." },
+];
+
+const REGISTRATION_STEPS = [
+  {
+    icon: UserRound,
+    label: "Who you are",
+    title: "Tell us who is registering",
+    copy: "Choose your organisation type and add the contact details for the person coordinating the crusades.",
+  },
+  {
+    icon: ListPlus,
+    label: "Your crusades",
+    title: "Add every confirmed crusade",
+    copy: "Select the crusade type, then add its date, venue, city, expected attendance and minister details.",
+  },
+  {
+    icon: ClipboardCheck,
+    label: "Review",
+    title: "Check and submit",
+    copy: "Review the complete registration, correct anything that needs attention and submit it to the AAC campaign.",
+  },
 ];
 
 function useCampaignMotion(rootRef) {
@@ -186,7 +210,32 @@ export function AngelsLanding() {
           </div>
         </section>
 
-        <section className="aac-journey" id="how-it-works" aria-labelledby="aac-journey-title">
+        <section className="aac-register-guide" id="how-it-works" aria-labelledby="aac-register-guide-title">
+          <div className="aac-register-guide-head" data-aac-reveal>
+            <p className="aac-section-kicker">How to register</p>
+            <h2 id="aac-register-guide-title">Three clear steps.<br /><span>A few focused minutes.</span></h2>
+            <p>The form saves your progress in this browser while you work, so you can complete every confirmed crusade carefully.</p>
+          </div>
+          <ol className="aac-register-guide-steps" data-aac-reveal>
+            {REGISTRATION_STEPS.map(({ icon: Icon, label, title, copy }, index) => (
+              <li key={title}>
+                <div className="aac-guide-step-top">
+                  <span className="aac-guide-number">0{index + 1}</span>
+                  <span className="aac-guide-icon"><Icon aria-hidden="true" /></span>
+                </div>
+                <small>{label}</small>
+                <h3>{title}</h3>
+                <p>{copy}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="aac-register-guide-action" data-aac-reveal>
+            <RegisterButton />
+            <p>Only confirmed crusades scheduled from 1 to 31 December 2026 can be registered.</p>
+          </div>
+        </section>
+
+        <section className="aac-journey" aria-labelledby="aac-journey-title">
           <div className="aac-journey-heading" data-aac-reveal>
             <p className="aac-section-kicker">One campaign. One complete record.</p>
             <h2 id="aac-journey-title">From the first plan to the final testimony.</h2>
