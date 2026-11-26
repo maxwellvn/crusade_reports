@@ -6,9 +6,9 @@ import "../landing.css";
 const REGISTER = "/crusade-registration/register";
 
 const HERO_PHOTOS = [
-  ["/campaign/aac-worship.png", "Families worshipping at a Rhapsody crusade", "aac-board-photo-main"],
-  ["/campaign/aac-baptism.png", "A new believer after water baptism", "aac-board-photo-top"],
-  ["/campaign/aac-believers.png", "Women receiving prayer and Rhapsody of Realities", "aac-board-photo-bottom"],
+  { src: "/campaign/aac-worship.png", alt: "Families worshipping at a Rhapsody crusade", className: "aac-board-photo-main", width: 1024, height: 521 },
+  { src: "/campaign/aac-baptism.png", alt: "A new believer after water baptism", className: "aac-board-photo-baptism", width: 1024, height: 558 },
+  { src: "/campaign/aac-believers.png", alt: "Women receiving prayer and Rhapsody of Realities", className: "aac-board-photo-believers", width: 1024, height: 534 },
 ];
 
 function RegisterButton({ className = "" }) {
@@ -105,16 +105,22 @@ export function AngelsLanding() {
           </div>
 
           <div className="aac-event-board" aria-label="Scenes from Rhapsody crusades">
-            <div className="aac-board-topline" aria-hidden="true"><span>AAC / 2026</span><span>Celebration crusades</span></div>
-            <div className="aac-board-grid">
-              {HERO_PHOTOS.map(([src, alt, className]) => (
-                <figure className={`aac-board-photo ${className}`} key={src}>
-                  <img src={src} alt={alt} />
-                </figure>
-              ))}
+            <div className="aac-board-rail">
+              <img className="aac-board-emblem" src="/angels-at-christmas-emblem.png" alt="Angels at Christmas Celebration Crusades" width="1196" height="1315" />
+              <div className="aac-board-date" aria-hidden="true"><span>Campaign dates</span><strong>1–31</strong><small>December 2026</small></div>
             </div>
-            <img className="aac-board-emblem" src="/angels-at-christmas-emblem.png" alt="Angels at Christmas Celebration Crusades" />
-            <div className="aac-board-date" aria-hidden="true"><strong>31</strong><span>days of<br />celebration</span></div>
+            <div className="aac-board-gallery">
+              <figure className={`aac-board-photo ${HERO_PHOTOS[0].className}`}>
+                <img src={HERO_PHOTOS[0].src} alt={HERO_PHOTOS[0].alt} width={HERO_PHOTOS[0].width} height={HERO_PHOTOS[0].height} fetchPriority="high" />
+              </figure>
+              <div className="aac-board-supporting">
+                {HERO_PHOTOS.slice(1).map(({ src, alt, className, width, height }) => (
+                  <figure className={`aac-board-photo ${className}`} key={src}>
+                    <img src={src} alt={alt} width={width} height={height} />
+                  </figure>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -148,7 +154,7 @@ export function AngelsLanding() {
         </section>
 
         <section className="aac-closing" aria-labelledby="aac-closing-title">
-          <figure data-aac-reveal><img src="/campaign/aac-ministry.png" alt="A minister praying with crusade attendees" /></figure>
+          <figure data-aac-reveal><img src="/campaign/aac-ministry.png" alt="A minister praying with crusade attendees" width="1024" height="540" /></figure>
           <div className="aac-closing-copy" data-aac-reveal>
             <img src="/angels-at-christmas-emblem.png" alt="" />
             <p>Angels at Christmas, December 2026</p>
