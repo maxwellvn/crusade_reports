@@ -156,7 +156,6 @@ export function AngelsLanding() {
         <section className="aac-closing" aria-labelledby="aac-closing-title">
           <figure data-aac-reveal><img src="/campaign/aac-ministry.png" alt="A minister praying with crusade attendees" width="1024" height="540" /></figure>
           <div className="aac-closing-copy" data-aac-reveal>
-            <img src="/angels-at-christmas-emblem.png" alt="" />
             <p>Angels at Christmas, December 2026</p>
             <h2 id="aac-closing-title">Let every community hear the good news of Christmas.</h2>
             <RegisterButton />
