@@ -40,11 +40,14 @@ import { renderPageMetadata } from "./pageMeta.js";
 import { scheduleRegistrationDashboardRefresh } from "./registrationDashboardSnapshot.js";
 import { scheduleReportDashboardRefresh } from "./reportDashboardSnapshot.js";
 import { mystreamspace } from "./routes/mystreamspace.js";
+import { requireNotcCampaign, resolveCampaign } from "./campaigns.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set("trust proxy", 1); // Coolify terminates HTTPS before forwarding to Node.
 const PORT = process.env.PORT || 4000;
+
+app.use(resolveCampaign);
 
 // Dashboard payloads are large JSON documents that gzip 5-10x. Coolify's proxy
 // forwards responses untouched, so compress here.
@@ -95,21 +98,21 @@ app.use("/api/dashboard-layout", dashboardLayout);
 app.use("/api/crusades", crusades);
 app.use("/api/registrations", registrations);
 app.use("/api/campaign-settings", campaignSettings);
-app.use("/api/mystreamspace", mystreamspace);
-app.use("/api/blue-elite", blueElite);
+app.use("/api/mystreamspace", requireNotcCampaign, mystreamspace);
+app.use("/api/blue-elite", requireNotcCampaign, blueElite);
 app.use("/api/resources", resources);
-app.use("/api/mission-nations", missionNations);
-app.use("/api/media-training", mediaTraining);
-app.use("/api/mission-trips", missionTrips);
-app.use("/api/upcoming-crusades", upcomingCrusades);
-app.use("/api/crusade-expenses", crusadeExpenses);
+app.use("/api/mission-nations", requireNotcCampaign, missionNations);
+app.use("/api/media-training", requireNotcCampaign, mediaTraining);
+app.use("/api/mission-trips", requireNotcCampaign, missionTrips);
+app.use("/api/upcoming-crusades", requireNotcCampaign, upcomingCrusades);
+app.use("/api/crusade-expenses", requireNotcCampaign, crusadeExpenses);
 app.use("/api/translation", translation);
 app.use("/api/coverage", coverage);
 app.use("/api/country-coverage", countryCoverage);
 app.use("/api/admin/country-consolidation", countryConsolidation);
-app.use("/api/zone-checklist", pastoralChecklist);
-app.use("/api/blw-campus", blwCampus);
-app.use("/api/collective-report", collectiveReport);
+app.use("/api/zone-checklist", requireNotcCampaign, pastoralChecklist);
+app.use("/api/blw-campus", requireNotcCampaign, blwCampus);
+app.use("/api/collective-report", requireNotcCampaign, collectiveReport);
 app.use("/api/admin/database-protection", databaseProtection);
 app.use("/api", zonePortal);
 
@@ -135,7 +138,7 @@ if (existsSync(dist)) {
       res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
     }
     const origin = `${req.protocol}://${req.get("host")}`;
-    res.type("html").send(renderPageMetadata(indexTemplate, req.path, origin));
+    res.type("html").send(renderPageMetadata(indexTemplate, req.path, origin, req.campaign));
   });
 }
 

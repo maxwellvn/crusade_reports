@@ -19,6 +19,7 @@ import { CRUSADE_TYPES, PERMIT_OPTIONS, PHONE_CODES } from "@/lib/constants";
 import { nfull, typeLabel } from "@/lib/dashboardWidgets";
 import { useOrgData, Stepper, Summary } from "@/lib/orgForm";
 import { citySelectionFields } from "@/lib/citySelection";
+import { campaignDateProps, isAacCampaign, useCampaign } from "@/lib/campaign";
 import "../landing.css"; // campaign fonts; reg theme lives in the .reg-page block
 
 // Public crusade registration — the intent-side twin of the report form.
@@ -95,6 +96,9 @@ function MinisterTags({ value = "", onChange, invalid }) {
 }
 
 export function RegistrationForm() {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
+  const eventDateProps = campaignDateProps(campaign);
   const form = useForm({ resolver: zodResolver(registrationSchema), defaultValues: registrationDefaults, mode: "onBlur" });
   const { register, handleSubmit, control, watch, getValues, setValue, reset, trigger, formState: { errors, isSubmitting } } = form;
   const draftReady = React.useRef(false);
@@ -291,8 +295,8 @@ export function RegistrationForm() {
       <header className="fixed inset-x-0 top-4 z-50 px-4">
         <div className="reg-header mx-auto flex h-14 max-w-3xl items-center justify-between rounded-full pl-3 pr-4 backdrop-blur-md">
           <Link to="/crusade-registration" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Rhapsody End-Time Teaching Crusades" className="h-8 w-auto" />
-            <span className="hidden text-sm font-semibold sm:block">A Night of a Thousand Crusades</span>
+            <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt="" className="h-8 w-auto" />
+            <span className="hidden text-sm font-semibold sm:block">{campaign.name}</span>
           </Link>
           <a href="https://rhapsodycrusades.org" target="_blank" rel="noreferrer"
             className="reg-header-link inline-flex items-center gap-1 text-sm font-semibold transition-colors">
@@ -326,6 +330,7 @@ export function RegistrationForm() {
             <div className="space-y-2">
               <p className="reg-eyebrow text-sm font-semibold uppercase tracking-[0.35px]">Crusade Registration</p>
               <h1 className="reg-title text-3xl tracking-[-0.9px] sm:text-4xl">Register your crusades.</h1>
+              {aac && <p className="text-sm font-medium text-amber-700">Angels at Christmas crusades must take place from 1–31 December 2026.</p>}
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <p>Your progress is saved automatically in this browser, even while offline.</p>
                 <button type="button" onClick={discardDraft} className="font-medium text-foreground underline underline-offset-4">Discard saved draft</button>
@@ -494,7 +499,7 @@ export function RegistrationForm() {
                               <Input placeholder="e.g. Lekki Community Crusade" {...register(`items.${i}.event_name`)} aria-invalid={!!rowErr.event_name} />
                             </Field>
                             <Field label="Crusade date" required error={rowErr.event_date?.message}>
-                              <Input type="date" {...register(`items.${i}.event_date`)} aria-invalid={!!rowErr.event_date} />
+                              <Input type="date" {...eventDateProps} {...register(`items.${i}.event_date`)} aria-invalid={!!rowErr.event_date} />
                             </Field>
                             <Field label="Expected attendance" required error={rowErr.expected_attendance?.message}>
                               <Input type="number" min="1" placeholder="e.g. 500" {...register(`items.${i}.expected_attendance`)} aria-invalid={!!rowErr.expected_attendance} />

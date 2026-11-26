@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { deleteJSON, getJSON, postJSON, putJSON } from "@/lib/api";
 import { formatWholeNumberInput, parseWholeNumberInput } from "@/lib/wholeNumberInput";
 import { useAdmin } from "@/components/AdminGate";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 
 // Human-readable labels for the whitelisted landing-page routes. The server is
 // the source of truth for which routes are allowed; this map just makes them
@@ -67,6 +68,8 @@ function SettingsSection({ title, description, children }) {
 
 export function Settings() {
   const admin = useAdmin();
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const [accounts, setAccounts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [username, setUsername] = React.useState("");
@@ -120,7 +123,7 @@ export function Settings() {
   }, [admin]);
 
   React.useEffect(() => {
-    if (!admin?.is_super_admin) return;
+    if (!admin?.is_super_admin || aac) return;
     getJSON("/mystreamspace")
       .then((result) => {
         setMyStreamSpace(result);
@@ -131,7 +134,7 @@ export function Settings() {
     getJSON("/mystreamspace/link")
       .then(setMyStreamSpaceLinkStatus)
       .catch((error) => toast.error(error.message));
-  }, [admin]);
+  }, [admin, aac]);
 
   async function applyConsolidation() {
     if (!confirm("Rewrite every stored country name to its canonical spelling? This updates all registration rows at once. Backups are taken automatically.")) return;
@@ -464,7 +467,7 @@ export function Settings() {
       <div className="flex flex-col gap-5 pb-10 pt-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-3xl font-normal tracking-[-0.03em] text-slate-950 sm:text-4xl">Settings</h2>
-          <p className="mt-2 text-sm text-slate-600">Campaign controls and dashboard access for NOTC administrators.</p>
+          <p className="mt-2 text-sm text-slate-600">Campaign controls and dashboard access for {campaign.short_name} administrators.</p>
         </div>
         <div className="flex items-center gap-4">
           <p className="min-w-0 text-sm text-slate-500"><span className="block truncate font-medium text-slate-900">{admin.name}</span>@{admin.username}</p>
@@ -512,6 +515,7 @@ export function Settings() {
         <p className="mt-3 text-xs leading-5 text-slate-500">This changes dashboard calculations only. Reports submitted for registered crusades still save and remain linked normally.</p>
       </SettingsSection>
 
+      {!aac && <>
       <SettingsSection title="MyStreamSpace totals" description="Maintain the additional MyStreamSpace crusades and online attendance that cannot be imported automatically. These figures are added to existing MyStreamSpace reports.">
         <form onSubmit={saveMyStreamSpace} className="max-w-2xl space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -584,6 +588,7 @@ export function Settings() {
           ))}
         </div>
       </SettingsSection>
+      </>}
 
       <SettingsSection title="External data API" description="Create one read-only key for trusted server-to-server integrations. Only the super admin can manage this key.">
         <div className="max-w-2xl space-y-4">

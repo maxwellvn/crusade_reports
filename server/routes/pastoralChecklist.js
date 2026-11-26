@@ -5,11 +5,13 @@ import { wrap } from "../logger.js";
 import { buildPastoralChecklistRows, filterPastoralChecklistRows, pastoralChecklistSummary } from "../pastoralChecklist.js";
 import { sendExport } from "./exporter.js";
 import { loadZones } from "./zones.js";
+import { DEFAULT_CAMPAIGN, assertCampaign } from "../campaigns.js";
 
 export const pastoralChecklist = Router();
 const PAGE_KEY = "dashboard/pastoral-checklist";
 
-export async function pastoralChecklistData() {
+export async function pastoralChecklistData(campaign = DEFAULT_CAMPAIGN) {
+  assertCampaign(campaign);
   const directory = await loadZones();
   const registrationRows = db.prepare(`
     SELECT zone,
@@ -19,16 +21,16 @@ export async function pastoralChecklistData() {
       COALESCE(SUM(CASE WHEN LOWER(COALESCE(event_name, '') || ' ' || COALESCE(other_event_type, '')) LIKE '%wonders%'
         AND LOWER(COALESCE(event_name, '') || ' ' || COALESCE(other_event_type, '')) LIKE '%diamond%' THEN 1 ELSE 0 END), 0) AS wonders_diamond_records
     FROM registration_items
-    WHERE zone IS NOT NULL AND TRIM(zone) <> ''
+    WHERE campaign = ? AND zone IS NOT NULL AND TRIM(zone) <> ''
       AND (program = 'public' OR program IS NULL)
     GROUP BY zone COLLATE NOCASE
-  `).all();
-  const nationRows = db.prepare(`
+  `).all(campaign);
+  const nationRows = campaign === DEFAULT_CAMPAIGN ? db.prepare(`
     SELECT zone_name, pastor_name, mission_country_name, mission_country_names, created_at
     FROM mission_nation_selections
     WHERE minister_type = 'zonal_pastor' OR minister_type IS NULL
     ORDER BY created_at DESC, id DESC
-  `).all();
+  `).all() : [];
   const rows = buildPastoralChecklistRows(directory, registrationRows, nationRows);
   return {
     rows,
@@ -52,12 +54,12 @@ const exportColumns = [
   { header: "Checklist", value: (row) => `${row.completed_items}/5`, align: "right", pdfWidth: 0.6 },
 ];
 
-pastoralChecklist.get("/", requirePageAccess(PAGE_KEY), wrap(async (_req, res) => {
-  res.json(await pastoralChecklistData());
+pastoralChecklist.get("/", requirePageAccess(PAGE_KEY), wrap(async (req, res) => {
+  res.json(await pastoralChecklistData(req.campaign));
 }));
 
 pastoralChecklist.get("/export", requirePageAccess(PAGE_KEY), wrap(async (req, res) => {
-  const data = await pastoralChecklistData();
+  const data = await pastoralChecklistData(req.campaign);
   const rows = filterPastoralChecklistRows(data.rows, req.query);
   const format = ["csv", "xlsx", "pdf"].includes(req.query.format) ? req.query.format : "xlsx";
   await sendExport(res, format, "zone-accountability-checklist", exportColumns, rows, {

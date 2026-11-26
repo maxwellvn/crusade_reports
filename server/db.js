@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSyn
 import { resolveRegistrationDatabasePath } from "./databasePaths.js";
 import { logger } from "./logger.js";
 import { registrationSearchSchema, indexedRowCount, REGISTRATION_SEARCH_TABLES } from "./searchIndex.js";
+import { CAMPAIGN_IDS, CAMPAIGN_SCOPED_SETTINGS, DEFAULT_CAMPAIGN, campaignSettingKey } from "./campaigns.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CRUSADE_DB_PATH || join(__dirname, "..", "data", "reports.sqlite");
@@ -850,6 +851,67 @@ if (!registrationItemColsForProgram.has("program")) {
   db.exec(`ALTER TABLE registration_items ADD COLUMN program TEXT NOT NULL DEFAULT 'public'`);
 }
 
+// Campaign (see campaigns.js): which crusade campaign a row belongs to. Adding a
+// column with a constant default is a schema-only change in SQLite — existing
+// rows are not rewritten and all read back as 'notc', the original campaign.
+for (const table of ["registrations", "registration_items", "reports", "crusades", "resources", "external_api_keys"]) {
+  const columns = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+  if (!columns.has("campaign")) db.exec(`ALTER TABLE ${table} ADD COLUMN campaign TEXT NOT NULL DEFAULT 'notc'`);
+}
+
+// Dashboard access for campaigns other than NOTC. NOTC keeps using
+// dashboard_accounts / dashboard_permissions unchanged; every other campaign has
+// its own allow list and page permissions here, seeded once from NOTC's and
+// edited independently afterwards.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS campaign_dashboard_accounts (
+    campaign   TEXT NOT NULL,
+    username   TEXT NOT NULL COLLATE NOCASE,
+    created_by TEXT,
+    permissions_configured INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (campaign, username)
+  );
+  CREATE TABLE IF NOT EXISTS campaign_dashboard_permissions (
+    campaign  TEXT NOT NULL,
+    username  TEXT NOT NULL COLLATE NOCASE,
+    page_key  TEXT NOT NULL,
+    PRIMARY KEY (campaign, username, page_key)
+  );
+  CREATE TABLE IF NOT EXISTS campaign_zone_tokens (
+    campaign   TEXT NOT NULL,
+    zone       TEXT NOT NULL,
+    token      TEXT NOT NULL UNIQUE,
+    kind       TEXT NOT NULL DEFAULT 'zone',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (campaign, zone)
+  );
+  CREATE TABLE IF NOT EXISTS campaign_dashboard_layout (
+    campaign TEXT NOT NULL,
+    id       INTEGER NOT NULL,
+    layout   TEXT NOT NULL,
+    PRIMARY KEY (campaign, id)
+  );
+`);
+
+// First boot with a new campaign: start it with NOTC's admins, page permissions
+// and campaign settings. Runs once per campaign; after that the copies are
+// independent, so editing one campaign never changes another.
+for (const campaign of CAMPAIGN_IDS.filter((id) => id !== DEFAULT_CAMPAIGN)) {
+  const marker = `campaign_seeded:${campaign}`;
+  if (db.prepare("SELECT 1 FROM app_settings WHERE key = ?").get(marker)) continue;
+  db.transaction(() => {
+    db.prepare(`INSERT OR IGNORE INTO campaign_dashboard_accounts (campaign, username, created_by, permissions_configured, created_at)
+      SELECT ?, username, created_by, permissions_configured, created_at FROM dashboard_accounts`).run(campaign);
+    db.prepare(`INSERT OR IGNORE INTO campaign_dashboard_permissions (campaign, username, page_key)
+      SELECT ?, username, page_key FROM dashboard_permissions`).run(campaign);
+    const copySetting = db.prepare(`INSERT OR IGNORE INTO app_settings (key, value)
+      SELECT ?, value FROM app_settings WHERE key = ?`);
+    for (const key of CAMPAIGN_SCOPED_SETTINGS) copySetting.run(campaignSettingKey(campaign, key), key);
+    db.prepare("INSERT INTO app_settings (key, value) VALUES (?, datetime('now'))").run(marker);
+  })();
+}
+
 const registrationItemCols = new Set(db.prepare("PRAGMA table_info(registration_items)").all().map((c) => c.name));
 for (const col of ["other_event_type", "event_name", "event_date", "venue", "readiness_notes", "readiness_updated_at"]) {
   if (!registrationItemCols.has(col)) db.exec(`ALTER TABLE registration_items ADD COLUMN ${col} TEXT`);
@@ -1042,6 +1104,15 @@ if (crusadeCount !== indexedCrusadeCount) {
 // above, so they are created only once every column exists.
 const registrationSchemaPrefix = splitDatabaseEnabled ? `${REGISTRATION_DB_SCHEMA}.` : "";
 db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_reports_campaign ON reports(campaign, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_crusades_campaign ON crusades(campaign, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_crusades_campaign_report ON crusades(campaign, report_id);
+  CREATE INDEX IF NOT EXISTS idx_crusades_campaign_registration ON crusades(campaign, registration_item_id);
+  CREATE INDEX IF NOT EXISTS idx_resources_campaign ON resources(campaign, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_external_api_keys_campaign_active ON external_api_keys(campaign, revoked_at, created_at DESC);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_campaign ON registration_items(campaign, id DESC);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_campaign_registration ON registration_items(campaign, registration_id);
+  CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_registrations_campaign ON registrations(campaign, id DESC);
   CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_readiness ON registration_items(readiness_status);
   CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_event_date ON registration_items(event_date);
   CREATE INDEX IF NOT EXISTS ${registrationSchemaPrefix}idx_reg_items_program ON registration_items(program);

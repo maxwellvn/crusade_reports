@@ -8,6 +8,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { getJSON } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { installKeyboardViewportManager } from "@/lib/keyboardViewport";
+import { CampaignProvider, isAacCampaign, useCampaign } from "@/lib/campaign";
+import { AngelsLanding } from "@/components/AngelsLanding";
 
 // Every page loads as its own chunk so the first paint does not wait for the
 // whole admin suite, ExcelJS-sized dashboards or animation libraries.
@@ -103,6 +105,19 @@ const PAGE_META = [
   [/^\/(admin|dashboard|crusades|registrations)/, "NOTC Administration", "Protected NOTC administration workspace.", false],
 ];
 
+const AAC_PAGE_META = [
+  [/^\/$/, "Angels at Christmas Celebration Crusades", "Register and report Angels at Christmas Celebration Crusades taking place throughout December 2026.", true, "/", "/angels-at-christmas-emblem.png"],
+  [/^\/crusade-registration\/register/, "Register an Angels at Christmas Crusade", "Register a confirmed Angels at Christmas Celebration Crusade scheduled from 1 to 31 December 2026.", true, "/crusade-registration/register", "/angels-at-christmas-emblem.png"],
+  [/^\/crusade-registration\/bulk-upload/, "Bulk Register Crusades", "Register multiple Angels at Christmas Celebration Crusades from a spreadsheet.", true, "/crusade-registration/bulk-upload", "/angels-at-christmas-emblem.png"],
+  [/^\/crusade-registration/, "Angels at Christmas Celebration Crusades", "Register Angels at Christmas Celebration Crusades for December 2026.", true, "/crusade-registration", "/angels-at-christmas-emblem.png"],
+  [/^\/report/, "Report an Angels at Christmas Crusade", "Submit the verified outcome of a completed Angels at Christmas Celebration Crusade.", true, "/report", "/angels-at-christmas-emblem.png"],
+  [/^\/find-my-crusade/, "Find Your Crusade", "Find a registered Angels at Christmas crusade and submit its completed report.", true, "/find-my-crusade", "/angels-at-christmas-emblem.png"],
+  [/^\/resources$/, "Angels at Christmas Resources", "Access approved Angels at Christmas campaign resources.", true, "/resources", "/angels-at-christmas-emblem.png"],
+  [/^\/zone\//, "Campaign Portal", "Private Angels at Christmas planning and reporting portal.", false],
+  [/^\/(admin|dashboard|crusades|registrations)/, "Angels at Christmas Administration", "Protected Angels at Christmas administration workspace.", false],
+  [/^\/(privacy|terms)/, "Angels at Christmas", "Angels at Christmas campaign policies and terms.", true],
+];
+
 function setMeta(selector, attribute, value) {
   let element = document.head.querySelector(selector);
   if (!element) { element = document.createElement("meta"); document.head.appendChild(element); }
@@ -112,22 +127,25 @@ function setMeta(selector, attribute, value) {
 
 function TitleManager() {
   const { pathname } = useLocation();
+  const campaign = useCampaign();
   useEffect(() => {
-    const match = PAGE_META.find(([re]) => re.test(pathname));
+    const aac = isAacCampaign(campaign);
+    const match = (aac ? AAC_PAGE_META : PAGE_META).find(([re]) => re.test(pathname));
     const title = match?.[1] || "Page Not Found";
     const description = match?.[2] || DEFAULT_DESCRIPTION;
     const indexable = Boolean(match?.[3]);
     const canonicalPath = match?.[4] || pathname;
     const canonicalUrl = `${window.location.origin}${canonicalPath}`;
-    const socialImage = `${window.location.origin}${match?.[5] || "/logo.png"}`;
-    document.title = `${title} — ${BRAND}`;
+    const socialImage = `${window.location.origin}${match?.[5] || (aac ? "/angels-at-christmas-emblem.png" : "/logo.png")}`;
+    const brand = aac ? "Angels at Christmas" : BRAND;
+    document.title = `${title} — ${brand}`;
     setMeta('meta[name="description"]', { name: "description" }, description);
     setMeta('meta[name="robots"]', { name: "robots" }, indexable ? "index, follow" : "noindex, nofollow");
     setMeta('meta[property="og:title"]', { property: "og:title" }, document.title);
     setMeta('meta[property="og:description"]', { property: "og:description" }, description);
     setMeta('meta[property="og:type"]', { property: "og:type" }, "website");
     setMeta('meta[property="og:url"]', { property: "og:url" }, canonicalUrl);
-    setMeta('meta[property="og:site_name"]', { property: "og:site_name" }, BRAND);
+    setMeta('meta[property="og:site_name"]', { property: "og:site_name" }, brand);
     setMeta('meta[property="og:image"]', { property: "og:image" }, socialImage);
     setMeta('meta[name="twitter:card"]', { name: "twitter:card" }, match?.[5] ? "summary_large_image" : "summary");
     setMeta('meta[name="twitter:title"]', { name: "twitter:title" }, document.title);
@@ -136,8 +154,18 @@ function TitleManager() {
     let canonical = document.head.querySelector('link[rel="canonical"]');
     if (!canonical) { canonical = document.createElement("link"); canonical.rel = "canonical"; document.head.appendChild(canonical); }
     canonical.href = canonicalUrl;
-  }, [pathname]);
+  }, [pathname, campaign]);
   return null;
+}
+
+function CampaignLanding() {
+  const campaign = useCampaign();
+  return isAacCampaign(campaign) ? <AngelsLanding /> : <Landing />;
+}
+
+function NotcOnly({ children }) {
+  const campaign = useCampaign();
+  return isAacCampaign(campaign) ? <Navigate to="/" replace /> : children;
 }
 
 function KeyboardViewportManager() {
@@ -151,13 +179,30 @@ const navLink = ({ isActive }) =>
     isActive ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
   );
 
+const AAC_ADMIN_LINKS = new Set([
+  "/", "/registrations/live", "/dashboard/crusade-analysis", "/registrations", "/dashboard",
+  "/dashboard/rhapsody-distributed", "/crusades", "/dashboard/duplicate-reports", "/dashboard/media-reports",
+  "/dashboard/coverage", "/dashboard/country-coverage", "/dashboard/zone-links",
+  "/registrations/manual-organizations", "/dashboard/resources", "/dashboard/database-protection", "/dashboard/settings",
+]);
+
+function campaignAdminUrl(option) {
+  const local = window.location.hostname === "localhost" || window.location.hostname.endsWith(".localhost");
+  const host = local ? (option.id === "aac" ? "aac.localhost" : "localhost") : option.host;
+  const port = local && window.location.port ? `:${window.location.port}` : "";
+  return `${window.location.protocol}//${host}${port}/admin`;
+}
+
 // Shared header shell. Surfaces are deliberately separate — the report form,
 // the admin dashboards and the public campaign pages never cross-link; each
 // audience gets only its own URLs.
 function Shell({ subtitle, links }) {
   const [logoOk, setLogoOk] = useState(true);
   const admin = useAdmin();
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const visibleLinks = links.filter(([to, , , superAdminOnly]) => {
+    if (aac && !AAC_ADMIN_LINKS.has(to)) return false;
     if (superAdminOnly && !admin?.is_super_admin) return false;
     // For non-super-admins, check page-level permissions. The Home link ("/")
     // is always visible. Every other link needs a matching permission key.
@@ -171,28 +216,33 @@ function Shell({ subtitle, links }) {
     return true;
   });
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden">
+    <div className={cn("min-h-screen", aac && "aac-admin-shell")}>
+      <header className={cn("border-b border-blue-100 bg-white/95 shadow-sm shadow-blue-100/50 backdrop-blur print:hidden", aac && "aac-admin-header")}>
         <div className="mx-auto max-w-7xl px-4 py-3">
           <div className="flex min-w-0 items-center gap-4">
           {logoOk && (
-            <img src="/logo.png" alt="" className="h-11 w-auto shrink-0" onError={() => setLogoOk(false)} />
+            <img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt="" className={cn("h-11 w-auto shrink-0", aac && "h-14")} onError={() => setLogoOk(false)} />
           )}
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold tracking-tight">Rhapsody End-Time Teaching Crusades</h1>
-            <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>
+            <h1 className="truncate text-base font-semibold tracking-tight">{campaign.name}</h1>
+            <p className={cn("hidden truncate text-sm text-muted-foreground sm:block", aac && "aac-admin-subtitle")}>{subtitle}</p>
           </div>
+          {campaign.campaigns?.length > 1 && (
+            <div className={cn("flex shrink-0 items-center rounded-lg border border-blue-100 bg-blue-50 p-1 text-xs font-semibold print:hidden", aac && "aac-admin-switch")} aria-label="Switch campaign">
+              {campaign.campaigns.map((option) => <a key={option.id} href={campaignAdminUrl(option)} className={cn("rounded-md px-2.5 py-1.5", option.id === campaign.id ? "bg-white text-blue-800 shadow-sm" : "text-slate-500 hover:text-blue-700", aac && "aac-admin-switch-item", aac && option.id === campaign.id && "is-active")}>{option.short_name}</a>)}
+            </div>
+          )}
           </div>
           {visibleLinks.length > 0 && (
-            <nav className="mt-3 flex w-full gap-1 overflow-x-auto border-t border-blue-100 pt-2 [scrollbar-width:thin]">
+            <nav className={cn("mt-3 flex w-full gap-1 overflow-x-auto border-t border-blue-100 pt-2 [scrollbar-width:thin]", aac && "aac-admin-nav")}>
               {visibleLinks.map(([to, label, end]) => (
-                <NavLink key={to} to={to} end={end} className={(state) => cn(navLink(state), "shrink-0 whitespace-nowrap")}>{label}</NavLink>
+                <NavLink key={to} to={to} end={end} className={(state) => cn(navLink(state), "shrink-0 whitespace-nowrap", aac && "aac-admin-link", aac && state.isActive && "is-active")}>{label}</NavLink>
               ))}
             </nav>
           )}
         </div>
       </header>
-      <main className="px-4 py-8">
+      <main className={cn("px-4 py-8", aac && "aac-admin-main")}>
         <Outlet />
       </main>
     </div>
@@ -254,23 +304,24 @@ function PageGuard({ pageKey, alternatePageKeys = [], children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <CampaignProvider>
       <TitleManager />
       <KeyboardViewportManager />
       <PublicTranslator />
       <Suspense fallback={<div className="min-h-screen" aria-busy="true" />}>
       <Routes>
         {/* Public campaign surface — self-contained pages, no app chrome */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/crusade-registration" element={<Landing />} />
+        <Route path="/" element={<CampaignLanding />} />
+        <Route path="/crusade-registration" element={<CampaignLanding />} />
         <Route path="/crusade-registration/register" element={<RegistrationForm />} />
         <Route path="/crusade-registration/bulk-upload" element={<RegistrationBulkUpload />} />
 
         {/* Loveworld Blue Elite staff registration — standalone surface, same
             crusade logic as the public form but a separate audience and data
             partition (program='blue_elite'). No portal connection. */}
-        <Route path="/blue-elite" element={<BlueEliteLanding />} />
-        <Route path="/blue-elite/register" element={<BlueEliteRegistrationForm />} />
-        <Route path="/blue-elite/avatar" element={<BlueEliteAvatar />} />
+        <Route path="/blue-elite" element={<NotcOnly><BlueEliteLanding /></NotcOnly>} />
+        <Route path="/blue-elite/register" element={<NotcOnly><BlueEliteRegistrationForm /></NotcOnly>} />
+        <Route path="/blue-elite/avatar" element={<NotcOnly><BlueEliteAvatar /></NotcOnly>} />
 
         {/* Zone capability-link dashboards — self-contained, token-scoped */}
         <Route path="/zone/:token" element={<ZonePortal />} />
@@ -279,16 +330,16 @@ export default function App() {
         <Route path="/report" element={<ReportForm />} />
         <Route path="/find-my-crusade" element={<FindCrusadeReport />} />
         <Route path="/resources" element={<ResourcesLibrary />} />
-        <Route path="/select-nation" element={<MissionNationSelection />} />
-        <Route path="/media-training" element={<MediaTrainingRegistration />} />
-        <Route path="/mission-trips" element={<MissionTripRegistration />} />
-        <Route path="/crusade-expenses" element={<CrusadeExpenses />} />
-        <Route path="/upcoming-crusades" element={<UpcomingCrusades />} />
-        <Route path="/avatar" element={<AvatarFrame />} />
+        <Route path="/select-nation" element={<NotcOnly><MissionNationSelection /></NotcOnly>} />
+        <Route path="/media-training" element={<NotcOnly><MediaTrainingRegistration /></NotcOnly>} />
+        <Route path="/mission-trips" element={<NotcOnly><MissionTripRegistration /></NotcOnly>} />
+        <Route path="/crusade-expenses" element={<NotcOnly><CrusadeExpenses /></NotcOnly>} />
+        <Route path="/upcoming-crusades" element={<NotcOnly><UpcomingCrusades /></NotcOnly>} />
+        <Route path="/avatar" element={<NotcOnly><AvatarFrame /></NotcOnly>} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
-        <Route path="/docs" element={<ApiDocumentation />} />
-        <Route path="/mystreamspace/update/:token" element={<MyStreamSpaceUpdateForm />} />
+        <Route path="/docs" element={<NotcOnly><ApiDocumentation /></NotcOnly>} />
+        <Route path="/mystreamspace/update/:token" element={<NotcOnly><MyStreamSpaceUpdateForm /></NotcOnly>} />
 
         {/* /admin lands on the configured default landing page */}
         <Route path="/admin" element={<AdminRedirect />} />
@@ -334,6 +385,7 @@ export default function App() {
       </Routes>
       </Suspense>
       <Toaster />
+      </CampaignProvider>
     </BrowserRouter>
   );
 }

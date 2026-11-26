@@ -12,6 +12,7 @@ import { METRIC_FIELDS } from "./db.js";
 
 function reportPayload(marker, spreadsheetImported) {
   return {
+    campaign: "notc",
     organization_type: "zone",
     zone: "Test Zone",
     country: "Nigeria",
@@ -41,18 +42,18 @@ test("spreadsheet duplicate protection defaults on and can be changed from campa
   db.exec("BEGIN");
   try {
     db.prepare("DELETE FROM app_settings WHERE key = 'spreadsheet_duplicate_protection_enabled'").run();
-    assert.equal(isSpreadsheetDuplicateProtectionEnabled(), true);
-    assert.equal(shouldProtectAgainstDuplicateReports("spreadsheet"), true);
+    assert.equal(isSpreadsheetDuplicateProtectionEnabled("notc"), true);
+    assert.equal(shouldProtectAgainstDuplicateReports("notc", "spreadsheet"), true);
 
-    let updated = updateCampaignSettings({ spreadsheet_duplicate_protection_enabled: false });
+    let updated = updateCampaignSettings("notc", { spreadsheet_duplicate_protection_enabled: false });
     assert.equal(updated.spreadsheet_duplicate_protection_enabled, false);
-    assert.equal(isSpreadsheetDuplicateProtectionEnabled(), false);
-    assert.equal(shouldProtectAgainstDuplicateReports("spreadsheet"), false);
-    assert.equal(shouldProtectAgainstDuplicateReports("manual"), true);
+    assert.equal(isSpreadsheetDuplicateProtectionEnabled("notc"), false);
+    assert.equal(shouldProtectAgainstDuplicateReports("notc", "spreadsheet"), false);
+    assert.equal(shouldProtectAgainstDuplicateReports("notc", "manual"), true);
 
-    updated = updateCampaignSettings({ spreadsheet_duplicate_protection_enabled: true });
+    updated = updateCampaignSettings("notc", { spreadsheet_duplicate_protection_enabled: true });
     assert.equal(updated.spreadsheet_duplicate_protection_enabled, true);
-    assert.equal(isSpreadsheetDuplicateProtectionEnabled(), true);
+    assert.equal(isSpreadsheetDuplicateProtectionEnabled("notc"), true);
   } finally {
     db.exec("ROLLBACK");
   }
@@ -64,12 +65,12 @@ test("turning protection off accepts spreadsheet duplicates but still protects m
     const marker = `Spreadsheet toggle ${Date.now()}`;
     insertReport(reportPayload(marker, false));
 
-    setSpreadsheetDuplicateProtectionEnabled(true);
+    setSpreadsheetDuplicateProtectionEnabled("notc", true);
     const protectedUpload = reportPayload(marker, true);
     insertReport(protectedUpload);
     assert.equal(protectedUpload.skippedDuplicates, 1);
 
-    setSpreadsheetDuplicateProtectionEnabled(false);
+    setSpreadsheetDuplicateProtectionEnabled("notc", false);
     const allowedUpload = reportPayload(marker, true);
     insertReport(allowedUpload);
     assert.equal(allowedUpload.skippedDuplicates, 0);

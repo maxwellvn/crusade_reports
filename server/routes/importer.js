@@ -163,15 +163,15 @@ importer.post("/", upload.single("file"), wrap(async (req, res) => {
   // this file or already reported. Duplicates are excluded from the loaded
   // rows and surfaced as counts so the reporter submits the rest confidently.
   const dupKey = (c) => `${c.event_date}|${c.event_name.toLowerCase()}|${c.country.toLowerCase()}|${c.city.toLowerCase()}`;
-  const duplicateProtectionEnabled = isSpreadsheetDuplicateProtectionEnabled();
+  const duplicateProtectionEnabled = isSpreadsheetDuplicateProtectionEnabled(req.campaign);
   const seenInFile = new Set();
   const dupInFile = [];
   const dupReported = [];
   const reportedKeys = duplicateProtectionEnabled ? new Set(
     db.prepare(`
       SELECT event_date || '|' || lower(event_name) || '|' || lower(coalesce(country, '')) || '|' || lower(coalesce(city, '')) AS k
-      FROM crusades WHERE event_name IS NOT NULL AND trim(event_name) <> '' AND event_date IS NOT NULL AND event_date <> ''
-    `).all().map((row) => row.k)
+      FROM crusades WHERE campaign = ? AND event_name IS NOT NULL AND trim(event_name) <> '' AND event_date IS NOT NULL AND event_date <> ''
+    `).all(req.campaign).map((row) => row.k)
   ) : new Set();
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);

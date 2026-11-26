@@ -6,6 +6,7 @@ import { requireAnyPageAccess, requireExternalOrPageAccess, requirePageAccess } 
 import { backfillCityCoords } from "./places.js";
 import { ensureReportingOpen, shouldProtectAgainstDuplicateReports } from "../appSettings.js";
 import { applyPortalScope } from "../portalScope.js";
+import { DEFAULT_CAMPAIGN, assertCampaign, campaignEventDateError } from "../campaigns.js";
 import { cachedDashboardData } from "../dashboardCache.js";
 import {
   composeMediaLinks,
@@ -18,16 +19,21 @@ import {
 } from "../reportMedia.js";
 
 export const reports = Router();
+const publicDatabaseRow = (row) => {
+  if (!row) return row;
+  const { campaign: _campaign, ...data } = row;
+  return data;
+};
 
 const insertReportStmt = db.prepare(`
-  INSERT INTO reports (organization_type, zone, group_name, church_name, cell_name, network_name, network_type, country,
+  INSERT INTO reports (campaign, organization_type, zone, group_name, church_name, cell_name, network_name, network_type, country,
     contact_name, contact_email, phone_country_code, phone_number, kingschat_username, highlights, media_links, photo_links, video_links)
-  VALUES (@organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @network_type, @country,
+  VALUES (@campaign, @organization_type, @zone, @group_name, @church_name, @cell_name, @network_name, @network_type, @country,
     @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username, @highlights, @media_links, @photo_links, @video_links)
 `);
 
 const CRUSADE_COLS = [
-  "report_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country",
+  "campaign", "report_id", "organization_type", "zone", "group_name", "church_name", "cell_name", "network_name", "country",
   "format", "event_type", "other_event_type", "event_name", "city", "city_place_id", "event_date", "attendance", "crusade_expense",
   ...METRIC_FIELDS, "minister_name", "venue", "photo_links", "video_links", "registration_item_id",
 ];
@@ -58,9 +64,11 @@ const HAS_REPORT_MEDIA_SQL = `(
   OR TRIM(COALESCE(r.media_links, '')) <> ''
 )`;
 
-export function mediaReportRequest(query = {}) {
-  const where = [HAS_REPORT_MEDIA_SQL];
-  const params = {};
+export function mediaReportRequest(campaignOrQuery = {}, maybeQuery) {
+  const campaign = maybeQuery === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrQuery);
+  const query = maybeQuery === undefined ? campaignOrQuery : maybeQuery;
+  const where = ["r.campaign = @campaign", HAS_REPORT_MEDIA_SQL];
+  const params = { campaign };
   const crusadeWhere = [];
   const exactReportFilters = [["zone", "r.zone"], ["network_name", "r.network_name"]];
   for (const [key, column] of exactReportFilters) {
@@ -78,7 +86,7 @@ export function mediaReportRequest(query = {}) {
   if (query.date_from) { crusadeWhere.push("c.event_date >= @date_from"); params.date_from = String(query.date_from); }
   if (query.date_to) { crusadeWhere.push("c.event_date <= @date_to"); params.date_to = String(query.date_to); }
   if (crusadeWhere.length) {
-    where.push(`EXISTS (SELECT 1 FROM crusades c WHERE c.report_id = r.id AND ${crusadeWhere.join(" AND ")})`);
+    where.push(`EXISTS (SELECT 1 FROM crusades c WHERE c.report_id = r.id AND c.campaign = @campaign AND ${crusadeWhere.join(" AND ")})`);
   }
 
   const reviewStatus = String(query.review_status || "").trim();
@@ -97,7 +105,7 @@ export function mediaReportRequest(query = {}) {
     where.push(`(
       CAST(r.id AS TEXT) LIKE @q OR r.zone LIKE @q OR r.group_name LIKE @q OR r.church_name LIKE @q
       OR r.cell_name LIKE @q OR r.network_name LIKE @q OR r.country LIKE @q OR r.highlights LIKE @q
-      OR EXISTS (SELECT 1 FROM crusades search_crusade WHERE search_crusade.report_id = r.id AND (
+      OR EXISTS (SELECT 1 FROM crusades search_crusade WHERE search_crusade.report_id = r.id AND search_crusade.campaign = @campaign AND (
         search_crusade.event_name LIKE @q OR search_crusade.city LIKE @q OR search_crusade.country LIKE @q
         OR search_crusade.venue LIKE @q OR search_crusade.minister_name LIKE @q
       ))
@@ -113,17 +121,21 @@ export function mediaReportRequest(query = {}) {
 // the duplicates are skipped and the rest is submitted.
 const alreadyReportedStmt = db.prepare(
   `SELECT 1 FROM crusades
-   WHERE event_date = @event_date AND lower(event_name) = lower(@event_name)
+   WHERE campaign = @campaign AND event_date = @event_date AND lower(event_name) = lower(@event_name)
      AND lower(coalesce(country, '')) = lower(@country) AND lower(coalesce(city, '')) = lower(@city)
    LIMIT 1`
 );
 
 export const insertReport = db.transaction((d) => {
+  const campaign = assertCampaign(d.campaign);
+  const dateError = campaignEventDateError(campaign, d.crusades.map((crusade) => crusade.event_date));
+  if (dateError) throw new ApiError(422, "CAMPAIGN_DATE", dateError);
   // Country is per-crusade now; the report row keeps the first crusade's country
   // as its primary (the column is NOT NULL and drives report-level grouping).
   const reportCountry = d.country || d.crusades[0]?.country || "";
   const media = normalizeMediaFields(d);
   const reportId = insertReportStmt.run({
+    campaign,
     organization_type: d.organization_type,
     zone: d.zone || null,
     group_name: d.group_name || null,
@@ -149,10 +161,10 @@ export const insertReport = db.transaction((d) => {
     // Rows linked to a registration are uniqueness-guarded by the unique
     // registration_item_id index — never drop them on a name/date heuristic.
     const key = `${c.event_date}|${String(c.event_name || "").toLowerCase()}|${String(c.country || "").toLowerCase()}|${String(c.city || "").toLowerCase()}`;
-    const duplicateProtectionEnabled = shouldProtectAgainstDuplicateReports(c.spreadsheet_imported ? "spreadsheet" : "manual");
+    const duplicateProtectionEnabled = shouldProtectAgainstDuplicateReports(campaign, c.spreadsheet_imported ? "spreadsheet" : "manual");
     if (duplicateProtectionEnabled && !c.registration_item_id && c.event_name && c.event_date) {
       if (seenInPayload.has(key) || alreadyReportedStmt.get({
-        event_date: c.event_date, event_name: c.event_name, country: c.country || "", city: c.city || "",
+        campaign, event_date: c.event_date, event_name: c.event_name, country: c.country || "", city: c.city || "",
       })) {
         skippedDuplicates += 1;
         continue;
@@ -163,6 +175,7 @@ export const insertReport = db.transaction((d) => {
       continue;
     }
     const row = {
+      campaign,
       report_id: reportId,
       organization_type: d.organization_type,
       zone: d.zone || null,
@@ -199,14 +212,17 @@ export function submitRegisteredCrusadeReport(item, body, files = []) {
     removeUploadedFiles(files);
     throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid report details.");
   }
-  if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
+  if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ? AND campaign = ?").get(item.id, item.campaign)) {
     removeUploadedFiles(files);
     throw new ApiError(409, "ALREADY_REPORTED", "A report has already been submitted for this crusade.");
   }
 
   let reportId;
   try {
+    // A report belongs to the campaign of the crusade it reports on, whichever
+    // host it was submitted through.
     reportId = insertReport({
+      campaign: item.campaign,
       organization_type: item.organization_type,
       zone: item.zone || "",
       group_name: item.group_name || "",
@@ -233,18 +249,18 @@ export function submitRegisteredCrusadeReport(item, body, files = []) {
 
   const report = db.prepare(`SELECT id AS report_crusade_id, report_id, created_at AS reported_at,
     attendance AS reported_attendance, crusade_expense AS reported_expense, online_participation AS reported_online_participation,
-    salvation AS reported_salvation FROM crusades WHERE registration_item_id = ?`).get(item.id);
+    salvation AS reported_salvation FROM crusades WHERE registration_item_id = ? AND campaign = ?`).get(item.id, item.campaign);
   backfillCityCoords().catch(() => {});
   return { ...report, report_id: reportId, photos: listReportPhotos(reportId) };
 }
 
 reports.post("/", withReportPhotoUpload(wrap((req, res) => {
-  ensureReportingOpen();
+  ensureReportingOpen(req.campaign);
   const files = req.files || [];
   let payload;
   try {
     const body = parseReportPayload(req);
-    payload = applyPortalScope(body, String(body?.portal_token || req.body?.portal_token || ""));
+    payload = applyPortalScope(body, String(body?.portal_token || req.body?.portal_token || ""), req.campaign);
   } catch (error) {
     removeUploadedFiles(files);
     throw error;
@@ -257,8 +273,9 @@ reports.post("/", withReportPhotoUpload(wrap((req, res) => {
   let id;
   let skippedDuplicates;
   try {
-    id = insertReport(parsed.data);
-    skippedDuplicates = parsed.data.skippedDuplicates || 0;
+    const report = { ...parsed.data, campaign: req.campaign };
+    id = insertReport(report);
+    skippedDuplicates = report.skippedDuplicates || 0;
     saveReportPhotos(id, files);
   } catch (error) {
     removeUploadedFiles(files);
@@ -274,16 +291,16 @@ reports.get("/", requireExternalOrPageAccess(["crusades", "crusades/edit"]), wra
     const cursor = Math.max(parseInt(req.query.cursor, 10) || 0, 0);
     const rows = db.prepare(`SELECT id, created_at, organization_type, zone, group_name, church_name, cell_name,
       network_name, network_type, country, highlights, media_links, photo_links, video_links
-      FROM reports WHERE (@cursor = 0 OR id < @cursor) ORDER BY id DESC LIMIT @limit_plus_one`)
-      .all({ cursor, limit_plus_one: limit + 1 });
+      FROM reports WHERE campaign = @campaign AND (@cursor = 0 OR id < @cursor) ORDER BY id DESC LIMIT @limit_plus_one`)
+      .all({ campaign: req.campaign, cursor, limit_plus_one: limit + 1 });
     const hasMore = rows.length > limit;
     const pageRows = rows.slice(0, limit);
     const ids = pageRows.map((row) => row.id);
     const crusadesByReport = new Map(ids.map((id) => [id, []]));
     if (ids.length) {
       const placeholders = ids.map(() => "?").join(", ");
-      for (const crusade of db.prepare(`SELECT * FROM crusades WHERE report_id IN (${placeholders}) ORDER BY id DESC`).all(...ids)) {
-        crusadesByReport.get(crusade.report_id).push(crusade);
+      for (const crusade of db.prepare(`SELECT * FROM crusades WHERE campaign = ? AND report_id IN (${placeholders}) ORDER BY id DESC`).all(req.campaign, ...ids)) {
+        crusadesByReport.get(crusade.report_id).push(publicDatabaseRow(crusade));
       }
     }
     return res.json({
@@ -291,9 +308,9 @@ reports.get("/", requireExternalOrPageAccess(["crusades", "crusades/edit"]), wra
       meta: { limit, has_more: hasMore, next_cursor: hasMore ? pageRows.at(-1)?.id || null : null },
     });
   }
-  const rows = db.prepare("SELECT * FROM reports ORDER BY created_at DESC LIMIT 500").all();
-  const crus = db.prepare("SELECT * FROM crusades WHERE report_id = ?");
-  res.json(rows.map((r) => ({ ...r, crusades: crus.all(r.id), photos: listReportPhotos(r.id) })));
+  const rows = db.prepare("SELECT * FROM reports WHERE campaign = ? ORDER BY created_at DESC LIMIT 500").all(req.campaign);
+  const crus = db.prepare("SELECT * FROM crusades WHERE report_id = ? AND campaign = ?");
+  res.json(rows.map((r) => ({ ...publicDatabaseRow(r), crusades: crus.all(r.id, req.campaign).map(publicDatabaseRow), photos: listReportPhotos(r.id) })));
 }));
 
 // Media review is report-based because uploaded files and external links belong
@@ -302,7 +319,7 @@ reports.get("/", requireExternalOrPageAccess(["crusades", "crusades/edit"]), wra
 reports.get("/media", requirePageAccess(MEDIA_PAGE_KEY), wrap((req, res) => {
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const pageSize = Math.min(Math.max(parseInt(req.query.page_size, 10) || 30, 1), 100);
-  const { clause, params } = mediaReportRequest(req.query);
+  const { clause, params } = mediaReportRequest(req.campaign, req.query);
   const total = db.prepare(`
     SELECT COUNT(*) AS count FROM reports r
     LEFT JOIN report_media_reviews rv ON rv.report_id = r.id
@@ -313,7 +330,7 @@ reports.get("/media", requirePageAccess(MEDIA_PAGE_KEY), wrap((req, res) => {
            r.network_name, r.country, r.highlights, r.photo_links, r.video_links, r.media_links,
            COALESCE(rv.status, 'new') AS review_status, rv.reviewed_at,
            (SELECT COUNT(*) FROM report_photos p WHERE p.report_id = r.id) AS photo_count,
-           (SELECT COUNT(*) FROM crusades count_crusade WHERE count_crusade.report_id = r.id) AS crusade_count
+           (SELECT COUNT(*) FROM crusades count_crusade WHERE count_crusade.report_id = r.id AND count_crusade.campaign = @campaign) AS crusade_count
     FROM reports r
     LEFT JOIN report_media_reviews rv ON rv.report_id = r.id
     ${clause}
@@ -327,15 +344,15 @@ reports.get("/media", requirePageAccess(MEDIA_PAGE_KEY), wrap((req, res) => {
     const placeholders = ids.map(() => "?").join(", ");
     for (const crusade of db.prepare(`
       SELECT id, report_id, event_name, event_type, other_event_type, format, event_date, city, country, venue, minister_name
-      FROM crusades WHERE report_id IN (${placeholders}) ORDER BY event_date DESC, id DESC
-    `).all(...ids)) crusadesByReport.get(crusade.report_id)?.push(crusade);
+      FROM crusades WHERE campaign = ? AND report_id IN (${placeholders}) ORDER BY event_date DESC, id DESC
+    `).all(req.campaign, ...ids)) crusadesByReport.get(crusade.report_id)?.push(crusade);
   }
 
-  const filterOptions = cachedDashboardData("media-report-filter-options", () => {
+  const filterOptions = cachedDashboardData(`media-report-filter-options:${req.campaign}`, () => {
     const optionRows = (column, source = "reports r") => db.prepare(`
       SELECT DISTINCT TRIM(${column}) AS value FROM ${source}
-      WHERE TRIM(COALESCE(${column}, '')) <> '' ORDER BY value COLLATE NOCASE LIMIT 500
-    `).all().map((row) => row.value);
+      WHERE r.campaign = @campaign AND TRIM(COALESCE(${column}, '')) <> '' ORDER BY value COLLATE NOCASE LIMIT 500
+    `).all({ campaign: req.campaign }).map((row) => row.value);
     return {
       event_type: optionRows("c.event_type", "crusades c JOIN reports r ON r.id = c.report_id"),
       zone: optionRows("r.zone"),
@@ -360,11 +377,11 @@ reports.get("/media/:id", requirePageAccess(MEDIA_PAGE_KEY), wrap((req, res) => 
            r.network_name, r.country, r.highlights, r.photo_links, r.video_links, r.media_links,
            COALESCE(rv.status, 'new') AS review_status, rv.reviewed_at
     FROM reports r LEFT JOIN report_media_reviews rv ON rv.report_id = r.id
-    WHERE r.id = ?
-  `).get(req.params.id);
+    WHERE r.id = ? AND r.campaign = ?
+  `).get(req.params.id, req.campaign);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found.");
   row.crusades = db.prepare(`SELECT id, report_id, event_name, event_type, other_event_type, format, event_date,
-    city, country, venue, minister_name FROM crusades WHERE report_id = ? ORDER BY event_date DESC, id DESC`).all(row.id);
+    city, country, venue, minister_name FROM crusades WHERE report_id = ? AND campaign = ? ORDER BY event_date DESC, id DESC`).all(row.id, req.campaign);
   row.photos = listReportPhotos(row.id);
   res.setHeader("Cache-Control", "private, no-store");
   res.json(row);
@@ -373,7 +390,7 @@ reports.get("/media/:id", requirePageAccess(MEDIA_PAGE_KEY), wrap((req, res) => 
 reports.patch("/media/:id/review", requirePageAccess(MEDIA_PAGE_KEY), wrap((req, res) => {
   const status = String(req.body?.status || "");
   if (!MEDIA_REVIEW_STATUSES.has(status)) throw new ApiError(422, "VALIDATION", "Select a valid review status.");
-  if (!db.prepare("SELECT 1 FROM reports WHERE id = ?").get(req.params.id)) {
+  if (!db.prepare("SELECT 1 FROM reports WHERE id = ? AND campaign = ?").get(req.params.id, req.campaign)) {
     throw new ApiError(404, "NOT_FOUND", "Report not found.");
   }
   db.prepare(`
@@ -388,6 +405,10 @@ reports.patch("/media/:id/review", requirePageAccess(MEDIA_PAGE_KEY), wrap((req,
 // Authenticated photo download for admins reviewing submitted reports.
 reports.get("/photo-file/:storedName", requireAnyPageAccess(["crusades", "crusades/edit", MEDIA_PAGE_KEY]), wrap((req, res) => {
   const { row, stream } = resolveReportPhotoPath(req.params.storedName);
+  if (!db.prepare("SELECT 1 FROM reports WHERE id = ? AND campaign = ?").get(row.report_id, req.campaign)) {
+    stream.destroy();
+    throw new ApiError(404, "NOT_FOUND", "Photo not found.");
+  }
   res.setHeader("Content-Type", row.mime_type || "application/octet-stream");
   res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(row.original_name || row.stored_name)}"`);
   res.setHeader("Cache-Control", "private, max-age=86400");
@@ -396,9 +417,9 @@ reports.get("/photo-file/:storedName", requireAnyPageAccess(["crusades", "crusad
 }));
 
 reports.get("/:id", requireAnyPageAccess(["crusades", "crusades/edit"]), wrap((req, res) => {
-  const row = db.prepare("SELECT * FROM reports WHERE id = ?").get(req.params.id);
+  const row = db.prepare("SELECT * FROM reports WHERE id = ? AND campaign = ?").get(req.params.id, req.campaign);
   if (!row) throw new ApiError(404, "NOT_FOUND", "Report not found");
-  row.crusades = db.prepare("SELECT * FROM crusades WHERE report_id = ?").all(row.id);
+  row.crusades = db.prepare("SELECT * FROM crusades WHERE report_id = ? AND campaign = ?").all(row.id, req.campaign);
   row.photos = listReportPhotos(row.id);
-  res.json(row);
+  res.json({ ...publicDatabaseRow(row), crusades: row.crusades.map(publicDatabaseRow) });
 }));

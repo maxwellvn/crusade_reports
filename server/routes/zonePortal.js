@@ -20,6 +20,7 @@ import { portalReportPreview, shouldDirectCommitReport } from "../portalReportIm
 import { personalDashboardScope } from "../portalVisibility.js";
 import { cachedDashboardData, clearDashboardCache } from "../dashboardCache.js";
 import { generatePortalReportTemplate, parsePortalReportTemplateInWorker, removeGeneratedTemplate } from "../portalReportTemplateJobs.js";
+import { DEFAULT_CAMPAIGN, assertCampaign } from "../campaigns.js";
 
 export const zonePortal = Router();
 const portalTemplateUpload = multer({ dest: tmpdir(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
@@ -75,18 +76,36 @@ export function changedPortalTemplateFields(uploaded, item) {
 
 export const currentDirectoryZoneNames = (directory) => [...new Set(directory.map((entry) => entry.zone).filter(Boolean))];
 
+function tokenStore(campaign) {
+  return assertCampaign(campaign) === DEFAULT_CAMPAIGN ? {
+    table: "zone_tokens", where: "", cols: "", vals: "", params: [], conflict: "zone",
+  } : {
+    table: "campaign_zone_tokens", where: "campaign = ? AND ", cols: "campaign, ", vals: "?, ", params: [campaign], conflict: "campaign, zone",
+  };
+}
+
+function listPortalTokens(campaign) {
+  const store = tokenStore(campaign);
+  return db.prepare(`SELECT zone AS name, token, kind FROM ${store.table} ${store.where ? "WHERE campaign = ?" : ""}`).all(...store.params);
+}
+
+function portalToken(campaign, token) {
+  const store = tokenStore(campaign);
+  return db.prepare(`SELECT zone AS name, kind FROM ${store.table} WHERE ${store.where}token = ?`).get(...store.params, token);
+}
+
 // GET /api/zone-links — current Churches API zones and all networks, each with
 // its token if one exists. The directory is authoritative for zone visibility:
 // deleted/renamed zones must not be reintroduced by stale tokens or old reports.
 zonePortal.get("/zone-links", requirePageAccess("dashboard/zone-links"), wrap(async (req, res) => {
-  const tokens = db.prepare("SELECT zone AS name, token, kind FROM zone_tokens").all();
+  const tokens = listPortalTokens(req.campaign);
   const tokenFor = (kind, name) => tokens.find((t) => t.kind === kind && t.name === name)?.token || null;
 
   const zoneNames = new Set(currentDirectoryZoneNames(await loadZones().catch(() => [])));
 
   const networkNames = new Set(db.prepare("SELECT name FROM networks").all().map((r) => r.name));
-  db.prepare(`SELECT DISTINCT network_name AS n FROM registrations WHERE network_name IS NOT NULL
-              UNION SELECT DISTINCT network_name FROM crusades WHERE network_name IS NOT NULL`).all()
+  db.prepare(`SELECT DISTINCT network_name AS n FROM registrations WHERE campaign = @campaign AND network_name IS NOT NULL
+              UNION SELECT DISTINCT network_name FROM crusades WHERE campaign = @campaign AND network_name IS NOT NULL`).all({ campaign: req.campaign })
     .forEach((r) => networkNames.add(r.n));
   tokens.filter((t) => t.kind === "network").forEach((t) => networkNames.add(t.name));
 
@@ -103,20 +122,21 @@ zonePortal.post("/zone-links", requirePageAccess("dashboard/zone-links"), wrap((
   const kind = req.body?.kind === "network" ? "network" : "zone";
   if (!name) throw new ApiError(422, "VALIDATION", "Name is required");
   const token = randomBytes(16).toString("base64url");
+  const store = tokenStore(req.campaign);
   db.prepare(`
-    INSERT INTO zone_tokens (zone, token, kind) VALUES (?, ?, ?)
-    ON CONFLICT(zone) DO UPDATE SET token = excluded.token, kind = excluded.kind, created_at = datetime('now')
-  `).run(name, token, kind);
+    INSERT INTO ${store.table} (${store.cols}zone, token, kind) VALUES (${store.vals}?, ?, ?)
+    ON CONFLICT(${store.conflict}) DO UPDATE SET token = excluded.token, kind = excluded.kind, created_at = datetime('now')
+  `).run(...store.params, name, token, kind);
   res.json({ name, kind, token });
 }));
 
 // ---- Zone portal: token-scoped data ------------------------------------------
 
-function resolvePortalScope(tokenValue) {
-  const row = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(tokenValue);
+function resolvePortalScope(campaign, tokenValue) {
+  const row = portalToken(campaign, tokenValue);
   if (!row) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
   const { name, kind } = row;
-  const inheritedVisibilityEnabled = isNetworkDashboardInheritanceEnabled(name);
+  const inheritedVisibilityEnabled = campaign === DEFAULT_CAMPAIGN && isNetworkDashboardInheritanceEnabled(name);
   const { col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams } = personalDashboardScope({
     name,
     kind,
@@ -227,7 +247,7 @@ function buildListFilter({ q, eventType, readiness, source, scopeSql, scopeParam
 // crusades stay fast; totals and breakdowns are always computed over the full
 // scoped set, never the page.
 zonePortal.get("/zone-portal/:token", wrap((req, res) => {
-  const { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams, inheritedVisibilityEnabled } = resolvePortalScope(req.params.token);
+  const { name, kind, col, listWhere, listParams, totalsWhere, totalsParams, registrationsWhere, registrationsParams, inheritedVisibilityEnabled } = resolvePortalScope(req.campaign, req.params.token);
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(req.query.page_size, 10) || DEFAULT_PAGE_SIZE));
   const offset = (page - 1) * pageSize;
@@ -235,10 +255,10 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   const registrations = db.prepare(`
     SELECT r.id, r.created_at, r.organization_type, r.group_name, r.church_name, r.country, r.plan_date,
            COALESCE(SUM(i.planned_count), 0) AS planned
-    FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
-    WHERE ${registrationsWhere} AND (r.program = 'public' OR r.program IS NULL)
+    FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id AND i.campaign = ?
+    WHERE r.campaign = ? AND ${registrationsWhere} AND (r.program = 'public' OR r.program IS NULL)
     GROUP BY r.id ORDER BY r.created_at DESC LIMIT 500
-  `).all(...registrationsParams);
+  `).all(req.campaign, req.campaign, ...registrationsParams);
 
   // Items: scoped + filtered + paginated. The search/filters come from the
   // dashboard's query params so the page reflects the applied filters.
@@ -252,10 +272,11 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     scopeKind: kind,
     prefix: "registration_items.",
   });
-  const scopeItemsSql = `(${listWhere("registration_items.")}) AND (registration_items.program = 'public' OR registration_items.program IS NULL)`;
-  const listCountKey = `portal-items-count:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}:${JSON.stringify(filter.params)}:${filter.sql}`;
+  const scopeItemsSql = `registration_items.campaign = ? AND (${listWhere("registration_items.")}) AND (registration_items.program = 'public' OR registration_items.program IS NULL)`;
+  const scopeItemsParams = [req.campaign, ...listParams];
+  const listCountKey = `portal-items-count:${req.campaign}:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}:${JSON.stringify(filter.params)}:${filter.sql}`;
   const itemsTotal = cachedDashboardData(listCountKey,
-    () => db.prepare(`SELECT COUNT(*) n FROM registration_items WHERE ${scopeItemsSql}${filter.sql}`).get(...listParams, ...filter.params).n,
+    () => db.prepare(`SELECT COUNT(*) n FROM registration_items WHERE ${scopeItemsSql}${filter.sql}`).get(...scopeItemsParams, ...filter.params).n,
     30_000);
 
   const itemOrder = portalItemOrder(req.query.view);
@@ -276,12 +297,12 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
            crusades.salvation AS reported_salvation,
            reg.contact_name, reg.contact_email, reg.phone_country_code, reg.phone_number, reg.kingschat_username
     FROM registration_items
-    LEFT JOIN registrations reg ON reg.id = registration_items.registration_id
-    LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id
+    LEFT JOIN registrations reg ON reg.id = registration_items.registration_id AND reg.campaign = registration_items.campaign
+    LEFT JOIN crusades ON crusades.registration_item_id = registration_items.id AND crusades.campaign = registration_items.campaign
     WHERE ${scopeItemsSql}${filter.sql}
     ORDER BY ${itemOrder}
     LIMIT ? OFFSET ?
-  `).all(...listParams, ...filter.params, pageSize, offset).map((r) => {
+  `).all(...scopeItemsParams, ...filter.params, pageSize, offset).map((r) => {
     const visitor = r[col] !== name;
     return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
   });
@@ -297,10 +318,11 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
     scopeKind: kind,
     prefix: "",
   });
-  const scopeCrusadesSql = `(${listWhere("")}) AND registration_item_id IS NULL`;
-  const reportCountKey = `portal-reports-count:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}:${JSON.stringify(crusadeFilter.params)}:${crusadeFilter.sql}`;
+  const scopeCrusadesSql = `campaign = ? AND (${listWhere("")}) AND registration_item_id IS NULL`;
+  const scopeCrusadesParams = [req.campaign, ...listParams];
+  const reportCountKey = `portal-reports-count:${req.campaign}:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}:${JSON.stringify(crusadeFilter.params)}:${crusadeFilter.sql}`;
   const crusadesTotal = cachedDashboardData(reportCountKey,
-    () => db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql}`).get(...listParams, ...crusadeFilter.params).n,
+    () => db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql}`).get(...scopeCrusadesParams, ...crusadeFilter.params).n,
     30_000);
 
   const crusades = db.prepare(`
@@ -308,14 +330,14 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
            organization_type, zone, group_name, church_name, cell_name, network_name,
            attendance, online_participation, salvation, minister_name, venue
     FROM crusades WHERE ${scopeCrusadesSql}${crusadeFilter.sql} ORDER BY ${PORTAL_UNREGISTERED_REPORT_ORDER} LIMIT ? OFFSET ?
-  `).all(...listParams, ...crusadeFilter.params, pageSize, offset).map((r) => {
+  `).all(...scopeCrusadesParams, ...crusadeFilter.params, pageSize, offset).map((r) => {
     const visitor = r[col] !== name;
     return { ...r, visitor, source_scope: visitor ? (r.organization_type || "other") : kind };
   });
 
   // Source breakdown over the FULL scoped set (not the page) so the network
   // dashboard's aggregate card stays correct regardless of pagination.
-  const aggregateKey = `portal-aggregates:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}`;
+  const aggregateKey = `portal-aggregates:${req.campaign}:${kind}:${name}:${inheritedVisibilityEnabled ? 1 : 0}`;
   const aggregates = cachedDashboardData(aggregateKey, () => {
     let source_breakdown = db.prepare(`
       SELECT CASE WHEN ${col} = ? THEN '${kind}'
@@ -324,7 +346,7 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
       FROM registration_items
       WHERE ${scopeItemsSql}
       GROUP BY source
-    `).all(name, ...listParams);
+    `).all(name, ...scopeItemsParams);
     const sourceOrder = ["network", "zone", "group", "church", "cell", "other"];
     const sourceByKey = new Map(source_breakdown.map((entry) => [entry.source, entry.planned]));
     source_breakdown = sourceOrder
@@ -334,27 +356,27 @@ zonePortal.get("/zone-portal/:token", wrap((req, res) => {
   // Count of this portal's own registered crusades still awaiting a report.
     const pendingCount = db.prepare(`
       SELECT COUNT(*) n FROM registration_items
-      LEFT JOIN crusades c ON c.registration_item_id = registration_items.id
-      WHERE registration_items.${col} = ? AND c.report_id IS NULL
+      LEFT JOIN crusades c ON c.registration_item_id = registration_items.id AND c.campaign = registration_items.campaign
+      WHERE registration_items.campaign = ? AND registration_items.${col} = ? AND c.report_id IS NULL
         AND (registration_items.program = 'public' OR registration_items.program IS NULL)
-    `).get(name).n;
+    `).get(req.campaign, name).n;
 
     const totals = {
-      planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(...totalsParams).n,
-      held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
-      attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
-      salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE ${totalsWhere}`).get(...totalsParams).n,
+      planned: db.prepare(`SELECT COALESCE(SUM(planned_count),0) n FROM registration_items WHERE campaign = ? AND ${totalsWhere} AND (program = 'public' OR program IS NULL)`).get(req.campaign, ...totalsParams).n,
+      held: db.prepare(`SELECT COUNT(*) n FROM crusades WHERE campaign = ? AND ${totalsWhere}`).get(req.campaign, ...totalsParams).n,
+      attendance: db.prepare(`SELECT COALESCE(SUM(attendance + online_participation),0) n FROM crusades WHERE campaign = ? AND ${totalsWhere}`).get(req.campaign, ...totalsParams).n,
+      salvation: db.prepare(`SELECT COALESCE(SUM(salvation),0) n FROM crusades WHERE campaign = ? AND ${totalsWhere}`).get(req.campaign, ...totalsParams).n,
     };
     return { source_breakdown, pendingCount, totals };
   }, 60_000);
 
   res.setHeader("Cache-Control", "private, max-age=15");
-  res.json({ zone: name, kind, inherited_visibility_enabled: inheritedVisibilityEnabled, reporting_open: isReportingOpen(), ...aggregates, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
+  res.json({ zone: name, kind, inherited_visibility_enabled: inheritedVisibilityEnabled, reporting_open: isReportingOpen(req.campaign), ...aggregates, registrations, items, items_total: itemsTotal, crusades, crusades_total: crusadesTotal });
 }));
 
 // CSV/Excel export of registered crusades visible on this dashboard.
 zonePortal.get("/zone-portal/:token/export/registrations", wrap(async (req, res) => {
-  const { listWhere, listParams, slug } = resolvePortalScope(req.params.token);
+  const { listWhere, listParams, slug } = resolvePortalScope(req.campaign, req.params.token);
   const rows = db.prepare(`
     SELECT i.event_type, i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date, i.venue, i.expected_attendance,
            i.minister_name, i.country, i.city, i.readiness_status, i.readiness_notes,
@@ -362,18 +384,18 @@ zonePortal.get("/zone-portal/:token/export/registrations", wrap(async (req, res)
            i.permits_obtained, i.media_coverage_plan,
            r.created_at AS registered_at, i.organization_type, i.zone, i.group_name, i.church_name, i.cell_name, i.network_name,
            r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username,
-           EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+           EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = ?) AS report_submitted
     FROM registration_items i
-    JOIN registrations r ON r.id = i.registration_id
-    WHERE ${listWhere("i.")} AND (i.program = 'public' OR i.program IS NULL)
+    JOIN registrations r ON r.id = i.registration_id AND r.campaign = i.campaign
+    WHERE i.campaign = ? AND ${listWhere("i.")} AND (i.program = 'public' OR i.program IS NULL)
     ORDER BY COALESCE(i.event_date, i.plan_date), i.id
-  `).iterate(...listParams);
+  `).iterate(req.campaign, req.campaign, ...listParams);
   await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-registrations`, PORTAL_REGISTRATION_EXPORT_COLUMNS, rows);
 }));
 
 // CSV/Excel export of submitted crusade reports visible on this dashboard.
 zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
-  const { listWhere, listParams, slug } = resolvePortalScope(req.params.token);
+  const { listWhere, listParams, slug } = resolvePortalScope(req.campaign, req.params.token);
   const rows = db.prepare(`
     SELECT c.event_date, c.format, c.event_type, c.other_event_type, c.event_name, c.city, c.country,
            c.organization_type, c.zone, c.group_name, c.church_name, c.cell_name, c.network_name,
@@ -381,16 +403,16 @@ zonePortal.get("/zone-portal/:token/export/reports", wrap(async (req, res) => {
            c.minister_name, c.venue, c.registration_item_id,
            r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
     FROM crusades c
-    LEFT JOIN reports r ON r.id = c.report_id
-    WHERE ${listWhere("c.")}
+    LEFT JOIN reports r ON r.id = c.report_id AND r.campaign = c.campaign
+    WHERE c.campaign = ? AND ${listWhere("c.")}
     ORDER BY c.created_at DESC, c.id DESC
-  `).iterate(...listParams);
+  `).iterate(req.campaign, ...listParams);
   await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", `${slug}-reports`, PORTAL_REPORT_EXPORT_COLUMNS, rows);
 }));
 
 // Download a protected Excel workbook containing this dashboard's own
 // registrations that do not yet have reports. Network visitor rows are excluded.
-export function portalReportTemplateRows({ name, col }) {
+export function portalReportTemplateRows({ name, col, campaign = DEFAULT_CAMPAIGN }) {
   if (!["zone", "network_name"].includes(col)) throw new Error("Invalid personal dashboard scope.");
   return db.prepare(`
     SELECT i.id, i.event_type,
@@ -398,20 +420,20 @@ export function portalReportTemplateRows({ name, col }) {
            i.event_name, COALESCE(i.event_date, i.plan_date) AS event_date,
            i.country, i.city, i.city_place_id, i.venue, i.minister_name
     FROM registration_items i
-    WHERE i.${col} = ? AND (i.program = 'public' OR i.program IS NULL)
-      AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
+    WHERE i.campaign = ? AND i.${col} = ? AND (i.program = 'public' OR i.program IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = ?)
     ORDER BY COALESCE(i.event_date, i.plan_date), i.id
-  `).all(name);
+  `).all(assertCampaign(campaign), name, campaign);
 }
 
 zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
-  ensureReportingOpen();
-  const { name, kind, col, slug } = resolvePortalScope(req.params.token);
+  ensureReportingOpen(req.campaign);
+  const { name, kind, col, slug } = resolvePortalScope(req.campaign, req.params.token);
   const controller = new AbortController();
   res.once("close", () => { if (!res.writableFinished) controller.abort(); });
   // Rows are queried on the main thread (portalReportTemplateRows) — the
   // generation worker must not touch better-sqlite3.
-  const path = await generatePortalReportTemplate({ rows: portalReportTemplateRows({ name, col }), dashboardName: `${name} ${kind} dashboard` }, { signal: controller.signal });
+  const path = await generatePortalReportTemplate({ rows: portalReportTemplateRows({ name, col, campaign: req.campaign }), dashboardName: `${name} ${kind} dashboard` }, { signal: controller.signal });
   await new Promise((resolve, reject) => {
     res.download(path, `${slug}-report-template.xlsx`, (error) => {
       removeGeneratedTemplate(path).finally(() => error ? reject(error) : resolve());
@@ -422,9 +444,9 @@ zonePortal.get("/zone-portal/:token/report-template", wrap(async (req, res) => {
 // Preview or commit a completed workbook. Every Registration ID is resolved
 // again under the capability token before validation or insertion.
 zonePortal.post("/zone-portal/:token/report-template", receivePortalTemplate, wrap(async (req, res) => {
-  ensureReportingOpen();
+  ensureReportingOpen(req.campaign);
   if (!req.file) throw new ApiError(400, "NO_FILE", "Choose a completed .xlsx report template.");
-  const scope = resolvePortalScope(req.params.token);
+  const scope = resolvePortalScope(req.campaign, req.params.token);
   let parsedWorkbook;
   const controller = new AbortController();
   res.once("close", () => { if (!res.writableFinished) controller.abort(); });
@@ -442,14 +464,14 @@ zonePortal.post("/zone-portal/:token/report-template", receivePortalTemplate, wr
   for (const uploaded of parsedWorkbook.reports) {
     const item = db.prepare(`
       SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
-      FROM registration_items i JOIN registrations r ON r.id = i.registration_id
-      WHERE i.id = ? AND i.${scope.col} = ? AND (i.program = 'public' OR i.program IS NULL)
-    `).get(uploaded.registration_item_id, scope.name);
+      FROM registration_items i JOIN registrations r ON r.id = i.registration_id AND r.campaign = i.campaign
+      WHERE i.id = ? AND i.campaign = ? AND i.${scope.col} = ? AND (i.program = 'public' OR i.program IS NULL)
+    `).get(uploaded.registration_item_id, req.campaign, scope.name);
     if (!item) {
       errors.push(`Row ${uploaded.row_number}: Registration ID ${uploaded.registration_item_id} does not belong to this dashboard.`);
       continue;
     }
-    if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
+    if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ? AND campaign = ?").get(item.id, req.campaign)) {
       // Idempotent retry: the previous request may have committed successfully
       // even if its HTTP response was lost. Never duplicate or reject the rest
       // of the workbook because this registration is already complete.
@@ -523,7 +545,7 @@ zonePortal.post("/zone-portal/:token/report-template", receivePortalTemplate, wr
 
 // The capability token may update only individual crusades belonging to its zone/network.
 zonePortal.put("/zone-portal/:token/crusades/:id/readiness", wrap((req, res) => {
-  const token = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(req.params.token);
+  const token = portalToken(req.campaign, req.params.token);
   if (!token) throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
 
   const parsed = registrationCrusadeEditSchema.safeParse(req.body);
@@ -531,18 +553,18 @@ zonePortal.put("/zone-portal/:token/crusades/:id/readiness", wrap((req, res) => 
   const d = parsed.data;
 
   const col = token.kind === "network" ? "network_name" : "zone";
-  const crusade = db.prepare(`SELECT id, registration_id, readiness_status FROM registration_items WHERE id = ? AND ${col} = ?`).get(req.params.id, token.name);
+  const crusade = db.prepare(`SELECT id, registration_id, readiness_status FROM registration_items WHERE id = ? AND campaign = ? AND ${col} = ?`).get(req.params.id, req.campaign, token.name);
   if (!crusade) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");
 
-  res.json(updateRegistrationCrusade(crusade.id, d));
+  res.json(updateRegistrationCrusade(req.campaign, crusade.id, d));
 }));
 
 // Submit outcomes for one registered crusade. Organization and reporter details
 // come from its registration, so a capability link cannot report as another org.
 zonePortal.post("/zone-portal/:token/crusades/:id/report", withReportPhotoUpload(wrap((req, res) => {
-  ensureReportingOpen();
+  ensureReportingOpen(req.campaign);
   const files = req.files || [];
-  const token = db.prepare("SELECT zone AS name, kind FROM zone_tokens WHERE token = ?").get(req.params.token);
+  const token = portalToken(req.campaign, req.params.token);
   if (!token) {
     removeUploadedFiles(files);
     throw new ApiError(404, "NOT_FOUND", "This link is not valid — ask your coordinator for a new one.");
@@ -551,9 +573,9 @@ zonePortal.post("/zone-portal/:token/crusades/:id/report", withReportPhotoUpload
   const col = token.kind === "network" ? "network_name" : "zone";
   const item = db.prepare(`
     SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
-    FROM registration_items i JOIN registrations r ON r.id = i.registration_id
-    WHERE i.id = ? AND i.${col} = ?
-  `).get(req.params.id, token.name);
+    FROM registration_items i JOIN registrations r ON r.id = i.registration_id AND r.campaign = i.campaign
+    WHERE i.id = ? AND i.campaign = ? AND i.${col} = ?
+  `).get(req.params.id, req.campaign, token.name);
   if (!item) {
     removeUploadedFiles(files);
     throw new ApiError(404, "NOT_FOUND", "Registered crusade not found on this dashboard.");

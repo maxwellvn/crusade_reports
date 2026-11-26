@@ -5,6 +5,7 @@ import { getJSON } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isAacCampaign, useCampaign } from "@/lib/campaign";
 
 const TYPES = [
   ["all", "All resources"], ["document", "Documents"], ["image", "Images"],
@@ -54,6 +55,8 @@ function ResourceRow({ resource }) {
 }
 
 export function ResourcesLibrary() {
+  const campaign = useCampaign();
+  const aac = isAacCampaign(campaign);
   const [query, setQuery] = React.useState("");
   const [type, setType] = React.useState("all");
   const [category, setCategory] = React.useState("all");
@@ -78,17 +81,17 @@ export function ResourcesLibrary() {
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <Link to="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4"><img src="/logo.png" alt="" className="h-10 w-auto" /><span className="hidden truncate text-sm font-semibold sm:block">Approved Resources Hub</span></Link>
+          <Link to="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4"><img src={aac ? "/angels-at-christmas-emblem.png" : "/logo.png"} alt={campaign.name} className="h-10 w-auto" /><span className="hidden truncate text-sm font-semibold sm:block">Approved Resources Hub</span></Link>
           <Link to="/" className="ml-auto text-sm font-semibold text-slate-700 underline-offset-4 hover:text-slate-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-4">Return home</Link>
         </div>
       </header>
       <main className="bg-white">
         <section className="border-b border-slate-200">
           <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-20">
-            <p className="text-sm font-semibold text-blue-700">Night of a Thousand Crusades (NOTC)</p>
+            <p className="text-sm font-semibold text-blue-700">{campaign.name}</p>
             <h1 className="mt-4 max-w-3xl text-4xl font-normal leading-[1.02] tracking-[-0.035em] text-slate-950 sm:text-6xl">Approved Resources Hub</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">Access all approved resources required for effective preparation, teaching, outreach, and crusade execution.</p>
-            <ul className="mt-8 grid max-w-4xl gap-x-10 gap-y-3 border-y border-slate-200 py-6 text-sm text-slate-700 sm:grid-cols-2">{["Approved teaching materials", "Outreach resources", "Crusade guides and operational documents", "Campaign media assets", "Approved songs and videos", "Promotional materials", "Official NOTC links and resources", "Other approved resources"].map((item) => <li key={item} className="flex items-start gap-3"><Check className="mt-0.5 size-4 shrink-0 text-blue-700" /><span>{item}</span></li>)}</ul>
+            <ul className="mt-8 grid max-w-4xl gap-x-10 gap-y-3 border-y border-slate-200 py-6 text-sm text-slate-700 sm:grid-cols-2">{["Approved teaching materials", "Outreach resources", "Crusade guides and operational documents", "Campaign media assets", "Approved songs and videos", "Promotional materials", `Official ${campaign.short_name} links and resources`, "Other approved resources"].map((item) => <li key={item} className="flex items-start gap-3"><Check className="mt-0.5 size-4 shrink-0 text-blue-700" /><span>{item}</span></li>)}</ul>
             <p className="mt-8 max-w-3xl border-l-2 border-blue-600 pl-4 text-sm font-medium leading-6 text-slate-700">All teams are encouraged to access and utilise only approved resources from this platform to ensure consistency, excellence, and alignment across all nations.</p>
           </div>
         </section>
@@ -102,7 +105,7 @@ export function ResourcesLibrary() {
           {error && <div role="alert" className="border-y border-red-300 py-4 text-sm text-red-800">The library could not be loaded. Check your connection and try again.</div>}
           {loading ? <div className="border-t border-slate-200 py-6"><div className="grid gap-5 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-8"><Skeleton className="aspect-[16/10] rounded-lg" /><div className="space-y-3 py-2"><Skeleton className="h-3 w-36" /><Skeleton className="h-7 w-3/4" /><Skeleton className="h-4 w-full max-w-xl" /><Skeleton className="h-4 w-2/3" /></div></div></div> : data.resources.length ? (
             <div>{data.resources.map((r) => <ResourceRow key={r.id} resource={r} />)}</div>
-          ) : <div className="border-t border-slate-200 py-16 sm:py-24"><h2 className="text-2xl font-medium tracking-[-0.02em] text-slate-950">{hasFilters ? "No matching resources" : "The hub is being prepared"}</h2><p className="mt-2 max-w-md text-sm leading-6 text-slate-600">{hasFilters ? "Change the search term or reset the filters to see the full hub." : "Approved NOTC resources will appear here as they are published."}</p>{hasFilters && <button className="mt-5 text-sm font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4" onClick={() => { setQuery(""); setType("all"); setCategory("all"); }}>Show all resources</button>}</div>}
+          ) : <div className="border-t border-slate-200 py-16 sm:py-24"><h2 className="text-2xl font-medium tracking-[-0.02em] text-slate-950">{hasFilters ? "No matching resources" : "The hub is being prepared"}</h2><p className="mt-2 max-w-md text-sm leading-6 text-slate-600">{hasFilters ? "Change the search term or reset the filters to see the full hub." : `Approved ${campaign.short_name} resources will appear here as they are published.`}</p>{hasFilters && <button className="mt-5 text-sm font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4" onClick={() => { setQuery(""); setType("all"); setCategory("all"); }}>Show all resources</button>}</div>}
         </section>
       </main>
     </div>

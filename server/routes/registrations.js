@@ -9,6 +9,7 @@ import { wrap, ApiError, logger } from "../logger.js";
 import { requirePageAccess, requireSuperAdmin, requireExternalOrPageAccess } from "../auth.js";
 import { backfillCityCoords } from "./places.js";
 import { applyPortalScope } from "../portalScope.js";
+import { DEFAULT_CAMPAIGN, assertCampaign, campaignEventDateError } from "../campaigns.js";
 import { ensureReportingOpen, isManualGroupsEnabled, isManualZonesEnabled } from "../appSettings.js";
 import { submitRegisteredCrusadeReport } from "./reports.js";
 import { generatePortalReportTemplate, removeGeneratedTemplate, parsePortalReportTemplateInWorker } from "../portalReportTemplateJobs.js";
@@ -66,7 +67,10 @@ const LOOKUP_MATCH_SQL = `(
   OR LOWER(TRIM(REPLACE(COALESCE(r.kingschat_username, ''), '@', ''))) = @lookup
 )`;
 
-export function findCrusadesForLookup(value) {
+export function findCrusadesForLookup(campaignOrValue, maybeValue) {
+  const legacyCall = arguments.length < 2;
+  const campaign = legacyCall ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrValue);
+  const value = legacyCall ? campaignOrValue : maybeValue;
   const lookup = requireCrusadeLookup(value);
   return db.prepare(`
     SELECT i.id, i.event_type, i.other_event_type, i.event_name, i.event_date,
@@ -74,21 +78,21 @@ export function findCrusadesForLookup(value) {
            c.id AS report_crusade_id, c.report_id, c.created_at AS reported_at
     FROM registration_items i
     JOIN registrations r ON r.id = i.registration_id
-    LEFT JOIN crusades c ON c.registration_item_id = i.id
-    WHERE ${LOOKUP_MATCH_SQL}
+    LEFT JOIN crusades c ON c.registration_item_id = i.id AND c.campaign = @campaign
+    WHERE i.campaign = @campaign AND r.campaign = @campaign AND ${LOOKUP_MATCH_SQL}
     ORDER BY i.event_date DESC, i.id DESC
     LIMIT 250
-  `).all({ lookup });
+  `).all({ campaign: assertCampaign(campaign), lookup });
 }
 
-function registrationForLookup(itemId, value) {
+function registrationForLookup(campaign, itemId, value) {
   const lookup = requireCrusadeLookup(value);
   return db.prepare(`
     SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
     FROM registration_items i
     JOIN registrations r ON r.id = i.registration_id
-    WHERE i.id = @item_id AND ${LOOKUP_MATCH_SQL}
-  `).get({ item_id: itemId, lookup });
+    WHERE i.id = @item_id AND i.campaign = @campaign AND r.campaign = @campaign AND ${LOOKUP_MATCH_SQL}
+  `).get({ campaign: assertCampaign(campaign), item_id: itemId, lookup });
 }
 
 // The server, not the client-supplied *_manual flags, decides whether an
@@ -137,38 +141,40 @@ export function validateRegistrationOrganization(data, directory, {
   return organization;
 }
 
-export function deleteRegistrationCrusade(id) {
+export function deleteRegistrationCrusade(campaignOrId, maybeId) {
+  const campaign = maybeId === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrId);
+  const id = maybeId === undefined ? campaignOrId : maybeId;
   const item = db.prepare(`
     SELECT i.id, i.registration_id,
-           EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
-    FROM registration_items i WHERE i.id = ?
-  `).get(id);
+           EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign) AS report_submitted
+    FROM registration_items i WHERE i.id = @id AND i.campaign = @campaign
+  `).get({ campaign: assertCampaign(campaign), id });
   if (!item) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
   if (item.report_submitted) {
     throw new ApiError(409, "REPORT_EXISTS", "Delete this crusade's report before deleting its registration.");
   }
 
   return db.transaction(() => {
-    db.prepare("DELETE FROM registration_items WHERE id = ?").run(item.id);
-    const registrationDeleted = !db.prepare("SELECT 1 FROM registration_items WHERE registration_id = ?").get(item.registration_id);
+    db.prepare("DELETE FROM registration_items WHERE id = ? AND campaign = ?").run(item.id, campaign);
+    const registrationDeleted = !db.prepare("SELECT 1 FROM registration_items WHERE registration_id = ? AND campaign = ?").get(item.registration_id, campaign);
     if (registrationDeleted) {
-      db.prepare("DELETE FROM registrations WHERE id = ?").run(item.registration_id);
+      db.prepare("DELETE FROM registrations WHERE id = ? AND campaign = ?").run(item.registration_id, campaign);
     } else {
       db.prepare(`UPDATE registrations SET plan_date =
-        (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ?) WHERE id = ?`
-      ).run(item.registration_id, item.registration_id);
+        (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ? AND campaign = ?) WHERE id = ? AND campaign = ?`
+      ).run(item.registration_id, campaign, item.registration_id, campaign);
     }
     return { id: item.id, registration_id: item.registration_id, registration_deleted: registrationDeleted };
   })();
 }
 
 const insertRegStmt = db.prepare(`
-  INSERT INTO registrations (organization_type, zone, group_name, zone_manual, group_manual, church_name, cell_name, network_name, country, plan_date,
+  INSERT INTO registrations (campaign, organization_type, zone, group_name, zone_manual, group_manual, church_name, cell_name, network_name, country, plan_date,
     contact_name, contact_email, phone_country_code, phone_number, kingschat_username)
-  VALUES (@organization_type, @zone, @group_name, @zone_manual, @group_manual, @church_name, @cell_name, @network_name, @country, @plan_date,
+  VALUES (@campaign, @organization_type, @zone, @group_name, @zone_manual, @group_manual, @church_name, @cell_name, @network_name, @country, @plan_date,
     @contact_name, @contact_email, @phone_country_code, @phone_number, @kingschat_username)
 `);
-const ITEM_COLS = ["registration_id", "organization_type", "zone", "group_name", "zone_manual", "group_manual", "church_name", "cell_name", "network_name", "country", "plan_date",
+const ITEM_COLS = ["campaign", "registration_id", "organization_type", "zone", "group_name", "zone_manual", "group_manual", "church_name", "cell_name", "network_name", "country", "plan_date",
   "event_type", "other_event_type", "planned_count", "event_name", "event_date", "venue", "expected_attendance", "minister_name", "city", "city_place_id",
   "crusade_collaborators", "zone_contribution", "estimated_budget", "rhapsody_copies_confirmed", "permits_obtained", "media_coverage_plan",
   "readiness_status"];
@@ -182,8 +188,12 @@ const insertItemStmt = db.prepare(
 );
 
 export const insertRegistration = db.transaction((d) => {
+  const campaign = assertCampaign(d.campaign);
+  const dateError = campaignEventDateError(campaign, d.items.map((item) => item.event_date));
+  if (dateError) throw new ApiError(422, "CAMPAIGN_DATE", dateError);
   const planDate = d.items.map((item) => item.event_date).sort()[0];
   const base = {
+    campaign,
     organization_type: d.organization_type,
     zone: d.zone || null,
     group_name: d.group_name || null,
@@ -236,18 +246,18 @@ export const insertRegistration = db.transaction((d) => {
 
 registrations.post("/", wrap(async (req, res) => {
   const portalToken = String(req.body?.portal_token || "");
-  const payload = applyPortalScope(req.body, portalToken);
+  const payload = applyPortalScope(req.body, portalToken, req.campaign);
   const parsed = registrationSchema.safeParse(payload);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid data");
   const registration = parsed.data.organization_type === "network"
     ? validateRegistrationOrganization(parsed.data, [], {})
     : validateRegistrationOrganization(parsed.data, portalToken ? [] : await loadZones(), {
-      manualZonesEnabled: isManualZonesEnabled(),
-      manualGroupsEnabled: isManualGroupsEnabled(),
+      manualZonesEnabled: isManualZonesEnabled(req.campaign),
+      manualGroupsEnabled: isManualGroupsEnabled(req.campaign),
       trustedZone: Boolean(portalToken),
     });
-  const id = insertRegistration(registration);
-  scheduleRegistrationDashboardRefresh({ force: true });
+  const id = insertRegistration({ ...registration, campaign: req.campaign });
+  scheduleRegistrationDashboardRefresh({ campaign: req.campaign, force: true });
   backfillCityCoords().catch(() => {});
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed"));
   res.status(201).json({ id });
@@ -260,17 +270,17 @@ registrations.use("/import", registrationImporter);
 // Directory gaps are intentionally visible to admins for reconciliation. These
 // rows remain ordinary registrations; the flags only identify names typed by a
 // registrant instead of selected from the directory.
-registrations.get("/manual-organizations", requirePageAccess("registrations/manual-organizations"), wrap((_req, res) => {
+registrations.get("/manual-organizations", requirePageAccess("registrations/manual-organizations"), wrap((req, res) => {
   const rows = db.prepare(`
     SELECT i.id, i.registration_id, i.created_at, i.zone, i.group_name,
            i.zone_manual, i.group_manual, i.event_name, i.event_date, i.city, i.country,
            r.organization_type, r.contact_name, r.contact_email
     FROM registration_items i
     JOIN registrations r ON r.id = i.registration_id
-    WHERE (i.program = 'public' OR i.program IS NULL)
+    WHERE i.campaign = ? AND r.campaign = ? AND (i.program = 'public' OR i.program IS NULL)
       AND (i.zone_manual = 1 OR i.group_manual = 1)
     ORDER BY i.created_at DESC, i.id DESC
-  `).all();
+  `).all(req.campaign, req.campaign);
   res.json({ rows });
 }));
 
@@ -282,15 +292,15 @@ registrations.patch("/manual-organizations/:registrationId", requirePageAccess("
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid organisation update.");
   const { zone, group_name } = parsed.data;
   const regId = req.params.registrationId;
-  const reg = db.prepare("SELECT id FROM registrations WHERE id = ?").get(regId);
+  const reg = db.prepare("SELECT id FROM registrations WHERE id = ? AND campaign = ?").get(regId, req.campaign);
   if (!reg) throw new ApiError(404, "NOT_FOUND", "Registration not found");
   db.transaction(() => {
-    db.prepare("UPDATE registrations SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE id = ?")
-      .run(zone, group_name || null, regId);
-    db.prepare("UPDATE registration_items SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE registration_id = ?")
-      .run(zone, group_name || null, regId);
+    db.prepare("UPDATE registrations SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE id = ? AND campaign = ?")
+      .run(zone, group_name || null, regId, req.campaign);
+    db.prepare("UPDATE registration_items SET zone = ?, group_name = ?, zone_manual = 0, group_manual = 0 WHERE registration_id = ? AND campaign = ?")
+      .run(zone, group_name || null, regId, req.campaign);
   })();
-  scheduleRegistrationDashboardRefresh({ force: true });
+  scheduleRegistrationDashboardRefresh({ campaign: req.campaign, force: true });
   backupDatabaseRolling().catch((error) => logger.error({ err: error }, "org reconciliation backup failed"));
   res.json({ ok: true });
 }));
@@ -304,8 +314,13 @@ export function planningEditable(eventDate) {
   return eventDate >= db.prepare("SELECT date('now') AS today").get().today;
 }
 
-export function updateRegistrationCrusade(id, d) {
-  const crusade = db.prepare("SELECT id, registration_id, event_date FROM registration_items WHERE id = ?").get(id);
+export function updateRegistrationCrusade(campaignOrId, idOrData, maybeData) {
+  const campaign = maybeData === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrId);
+  const id = maybeData === undefined ? campaignOrId : idOrData;
+  const d = maybeData === undefined ? idOrData : maybeData;
+  const dateError = campaignEventDateError(campaign, d.event_date);
+  if (dateError) throw new ApiError(422, "CAMPAIGN_DATE", dateError);
+  const crusade = db.prepare("SELECT id, registration_id, event_date FROM registration_items WHERE id = ? AND campaign = ?").get(id, campaign);
   if (!crusade) return null;
   const canEditPlanning = planningEditable(crusade.event_date);
   db.transaction(() => {
@@ -332,14 +347,15 @@ export function updateRegistrationCrusade(id, d) {
       params.permits_obtained = orNull(d.permits_obtained);
       params.media_coverage_plan = orNull(d.media_coverage_plan);
     }
-    db.prepare(`UPDATE registration_items SET ${assignments.join(", ")} WHERE id = @id`).run(params);
-    db.prepare(`UPDATE registrations SET plan_date = (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ?)
-      WHERE id = ?`).run(crusade.registration_id, crusade.registration_id);
+    params.campaign = campaign;
+    db.prepare(`UPDATE registration_items SET ${assignments.join(", ")} WHERE id = @id AND campaign = @campaign`).run(params);
+    db.prepare(`UPDATE registrations SET plan_date = (SELECT MIN(event_date) FROM registration_items WHERE registration_id = ? AND campaign = ?)
+      WHERE id = ? AND campaign = ?`).run(crusade.registration_id, campaign, crusade.registration_id, campaign);
   })();
   backfillCityCoords().catch(() => {});
   return db.prepare(`SELECT id, event_type, event_name, event_date, venue, expected_attendance, minister_name, city, city_place_id,
     crusade_collaborators, zone_contribution, estimated_budget, rhapsody_copies_confirmed, permits_obtained, media_coverage_plan,
-    readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ?`).get(crusade.id);
+    readiness_status, readiness_notes, readiness_updated_at FROM registration_items WHERE id = ? AND campaign = ?`).get(crusade.id, campaign);
 }
 
 // Public self-service reporting. The lookup value is used only to find matching
@@ -347,7 +363,7 @@ export function updateRegistrationCrusade(id, d) {
 registrations.post("/find", wrap((req, res) => {
   enforcePublicLookupLimit(req);
   res.setHeader("Cache-Control", "no-store");
-  const rows = findCrusadesForLookup(req.body?.lookup);
+  const rows = findCrusadesForLookup(req.campaign, req.body?.lookup);
   // Unreported total is uncapped — the list above stops at 250, but the bulk
   // upload offer needs the real number.
   const total_pending = normalizeCrusadeLookup(req.body?.lookup).length >= 2
@@ -355,15 +371,15 @@ registrations.post("/find", wrap((req, res) => {
         SELECT COUNT(*) AS n
         FROM registration_items i
         JOIN registrations r ON r.id = i.registration_id
-        WHERE ${LOOKUP_MATCH_SQL} AND (i.program = 'public' OR i.program IS NULL)
-          AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
-      `).get({ lookup: normalizeCrusadeLookup(req.body?.lookup) }).n
+        WHERE i.campaign = @campaign AND r.campaign = @campaign AND ${LOOKUP_MATCH_SQL} AND (i.program = 'public' OR i.program IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign)
+      `).get({ campaign: req.campaign, lookup: normalizeCrusadeLookup(req.body?.lookup) }).n
     : 0;
   res.json({ rows, total_pending });
 }));
 
 registrations.post("/find/:id/report", withReportPhotoUpload(wrap((req, res) => {
-  ensureReportingOpen();
+  ensureReportingOpen(req.campaign);
   enforcePublicLookupLimit(req);
   const files = req.files || [];
   let body;
@@ -373,7 +389,7 @@ registrations.post("/find/:id/report", withReportPhotoUpload(wrap((req, res) => 
     removeUploadedFiles(files);
     throw error;
   }
-  const item = registrationForLookup(req.params.id, body.lookup);
+  const item = registrationForLookup(req.campaign, req.params.id, body.lookup);
   if (!item) {
     removeUploadedFiles(files);
     throw new ApiError(404, "NOT_FOUND", "This crusade could not be found for the supplied email address or KingsChat username.");
@@ -386,7 +402,7 @@ registrations.post("/find/:id/report", withReportPhotoUpload(wrap((req, res) => 
 // template of THEIR unreported items and upload it back. Every Registration
 // ID is re-verified against the lookup on upload, so a stolen file without
 // the email address is useless.
-function findBulkTemplateRows(lookup) {
+function findBulkTemplateRows(campaign, lookup) {
   const l = requireCrusadeLookup(lookup);
   return db.prepare(`
     SELECT i.id, i.event_type,
@@ -395,18 +411,18 @@ function findBulkTemplateRows(lookup) {
            i.country, i.city, i.city_place_id, i.venue, i.minister_name
     FROM registration_items i
     JOIN registrations r ON r.id = i.registration_id
-    WHERE ${LOOKUP_MATCH_SQL} AND (i.program = 'public' OR i.program IS NULL)
-      AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)
+    WHERE i.campaign = @campaign AND r.campaign = @campaign AND ${LOOKUP_MATCH_SQL} AND (i.program = 'public' OR i.program IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign)
     ORDER BY COALESCE(i.event_date, i.plan_date), i.id
-  `).all({ lookup: l });
+  `).all({ campaign: assertCampaign(campaign), lookup: l });
 }
 
 const findBulkUpload = multer({ dest: tmpdir(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
 
 registrations.post("/find/bulk-template", wrap(async (req, res) => {
   enforcePublicLookupLimit(req);
-  ensureReportingOpen();
-  const rows = findBulkTemplateRows(req.body?.lookup);
+  ensureReportingOpen(req.campaign);
+  const rows = findBulkTemplateRows(req.campaign, req.body?.lookup);
   if (!rows.length) throw new ApiError(404, "NOT_FOUND", "No unreported registered crusades were found for that email address or KingsChat username.");
   const path = await generatePortalReportTemplate({ rows, dashboardName: "Your registered crusades" });
   await new Promise((resolve, reject) => {
@@ -417,7 +433,7 @@ registrations.post("/find/bulk-template", wrap(async (req, res) => {
 }));
 
 registrations.post("/find/bulk-report", findBulkUpload.single("file"), wrap(async (req, res) => {
-  ensureReportingOpen();
+  ensureReportingOpen(req.campaign);
   enforcePublicLookupLimit(req);
   if (!req.file) throw new ApiError(400, "NO_FILE", "Choose a completed .xlsx report template.");
   const lookup = req.body?.lookup;
@@ -437,12 +453,12 @@ registrations.post("/find/bulk-report", findBulkUpload.single("file"), wrap(asyn
   const validated = [];
   let alreadySubmitted = 0;
   for (const uploaded of parsedWorkbook.reports) {
-    const item = registrationForLookup(uploaded.registration_item_id, lookup);
+    const item = registrationForLookup(req.campaign, uploaded.registration_item_id, lookup);
     if (!item) {
       errors.push(`Row ${uploaded.row_number}: Registration ID ${uploaded.registration_item_id} was not found for that email address or KingsChat username.`);
       continue;
     }
-    if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ?").get(item.id)) {
+    if (db.prepare("SELECT 1 FROM crusades WHERE registration_item_id = ? AND campaign = ?").get(item.id, req.campaign)) {
       alreadySubmitted += 1;
       continue;
     }
@@ -517,26 +533,26 @@ registrations.post("/find/bulk-report", findBulkUpload.single("file"), wrap(asyn
 registrations.put("/:id", requirePageAccess("registrations"), wrap((req, res) => {
   const parsed = registrationCrusadeEditSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(422, "VALIDATION", parsed.error.issues[0]?.message || "Invalid crusade details.");
-  const updated = updateRegistrationCrusade(req.params.id, parsed.data);
+  const updated = updateRegistrationCrusade(req.campaign, req.params.id, parsed.data);
   if (!updated) throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
-  scheduleRegistrationDashboardRefresh({ force: true });
+  scheduleRegistrationDashboardRefresh({ campaign: req.campaign, force: true });
   res.json(updated);
 }));
 
 registrations.delete("/:id", requireSuperAdmin, wrap((req, res) => {
-  const deleted = deleteRegistrationCrusade(req.params.id);
-  scheduleRegistrationDashboardRefresh({ force: true });
+  const deleted = deleteRegistrationCrusade(req.campaign, req.params.id);
+  scheduleRegistrationDashboardRefresh({ campaign: req.campaign, force: true });
   res.json(deleted);
 }));
 
 registrations.post("/:id/report", requirePageAccess("registrations"), withReportPhotoUpload(wrap((req, res) => {
-  ensureReportingOpen();
+  ensureReportingOpen(req.campaign);
   const files = req.files || [];
   const item = db.prepare(`
     SELECT i.*, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username
     FROM registration_items i JOIN registrations r ON r.id = i.registration_id
-    WHERE i.id = ?
-  `).get(req.params.id);
+    WHERE i.id = ? AND i.campaign = ? AND r.campaign = ?
+  `).get(req.params.id, req.campaign, req.campaign);
   if (!item) {
     removeUploadedFiles(files);
     throw new ApiError(404, "NOT_FOUND", "Registered crusade not found.");
@@ -557,60 +573,61 @@ const REGISTRATION_FILTER_OPTION_COLS = ["zone", "group_name", "church_name", "c
 
 // Values for the admin table dropdowns come from all public registration
 // records, rather than only the currently filtered page.
-export function registrationFilterOptions() {
-  return cachedDashboardData("registration-filter-options", () => Object.fromEntries(REGISTRATION_FILTER_OPTION_COLS.map((column) => [
+export function registrationFilterOptions(campaign = DEFAULT_CAMPAIGN) {
+  assertCampaign(campaign);
+  return cachedDashboardData(`registration-filter-options:${campaign}`, () => Object.fromEntries(REGISTRATION_FILTER_OPTION_COLS.map((column) => [
     column,
     db.prepare(
       `SELECT DISTINCT TRIM(${column}) AS value
        FROM registration_items i
-       WHERE ${PUBLIC_PROGRAM_FILTER} AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
+       WHERE i.campaign = ? AND ${PUBLIC_PROGRAM_FILTER} AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
        ORDER BY value COLLATE NOCASE LIMIT 500`
-    ).all().map((row) => row.value),
+    ).all(campaign).map((row) => row.value),
   ])), 300_000);
 }
 
 const CELLULAR_DIMENSIONS = new Set(["zone", "group_name", "church_name"]);
-export function cellularRegistrationsBy(column) {
+export function cellularRegistrationsBy(column, campaign = DEFAULT_CAMPAIGN) {
   if (!CELLULAR_DIMENSIONS.has(column)) throw new Error(`Unsupported cellular dimension: ${column}`);
   return db.prepare(
     `SELECT ${column} AS key, COALESCE(SUM(planned_count), 0) AS planned,
             COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
-     WHERE ${PUBLIC_PROGRAM_FILTER}
+     WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
        AND ${CELLULAR_ITEM_FILTER}
        AND ${column} IS NOT NULL AND TRIM(${column}) <> ''
      GROUP BY ${column} COLLATE NOCASE
      ORDER BY planned DESC, key COLLATE NOCASE`
-  ).all();
+  ).all({ campaign: assertCampaign(campaign) });
 }
 
-export function registrationTypeBreakdown() {
+export function registrationTypeBreakdown(campaign = DEFAULT_CAMPAIGN) {
   return db.prepare(
     `SELECT event_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
-     WHERE ${PUBLIC_PROGRAM_FILTER} AND event_type <> 'rabah'
+     WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND event_type <> 'rabah'
      GROUP BY event_type
      UNION ALL
      SELECT 'cellular' AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
-     WHERE ${PUBLIC_PROGRAM_FILTER} AND ${CELLULAR_ITEM_FILTER}
+     WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND ${CELLULAR_ITEM_FILTER}
      HAVING COUNT(*) > 0
      ORDER BY planned DESC`
-  ).all();
+  ).all({ campaign: assertCampaign(campaign) });
 }
 
-export function cellRegistrationsByZone() {
+export function cellRegistrationsByZone(campaign = DEFAULT_CAMPAIGN) {
   return db.prepare(
     `SELECT zone, group_name, church_name, cell_name AS key, COALESCE(SUM(planned_count), 0) AS planned,
             COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
-     WHERE ${PUBLIC_PROGRAM_FILTER}
+     WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
        AND ${CELLULAR_ITEM_FILTER}
        AND zone IS NOT NULL AND TRIM(zone) <> ''
        AND cell_name IS NOT NULL AND TRIM(cell_name) <> ''
      GROUP BY zone COLLATE NOCASE, group_name COLLATE NOCASE, church_name COLLATE NOCASE, cell_name COLLATE NOCASE
      ORDER BY zone COLLATE NOCASE, group_name COLLATE NOCASE, planned DESC, key COLLATE NOCASE`
-  ).all();
+  ).all({ campaign: assertCampaign(campaign) });
 }
 
 export function attachCellRegions(rows, directory) {
@@ -637,17 +654,18 @@ export function buildZoneCrusadeBreakdown(typeRows, cellularRows) {
   return [...zones.values()].sort((a, b) => b.total - a.total || a.zone.localeCompare(b.zone));
 }
 
-async function crusadeAnalysisData() {
+async function crusadeAnalysisData(campaign) {
+  assertCampaign(campaign);
   const typeRows = db.prepare(
     `SELECT zone, event_type, COALESCE(SUM(planned_count), 0) AS planned
      FROM registration_items i
-     WHERE ${PUBLIC_PROGRAM_FILTER}
+     WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
        AND zone IS NOT NULL AND TRIM(zone) <> ''
        AND event_type IS NOT NULL AND TRIM(event_type) <> ''
      GROUP BY zone COLLATE NOCASE, event_type
      ORDER BY zone COLLATE NOCASE, planned DESC`
-  ).all();
-  const cellularByZone = cellularRegistrationsBy("zone");
+  ).all({ campaign });
+  const cellularByZone = cellularRegistrationsBy("zone", campaign);
   const zoneTypeBreakdown = buildZoneCrusadeBreakdown(
     typeRows,
     cellularByZone.map((row) => ({ zone: row.key, planned: row.planned }))
@@ -658,28 +676,28 @@ async function crusadeAnalysisData() {
             COALESCE(SUM(CASE WHEN event_type = 'online' THEN planned_count ELSE 0 END), 0) AS online,
             COALESCE(SUM(CASE WHEN ${CELLULAR_ITEM_FILTER} THEN planned_count ELSE 0 END), 0) AS cellular,
             COUNT(DISTINCT CASE WHEN zone IS NOT NULL AND TRIM(zone) <> '' THEN zone END) AS zones
-     FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}`
-  ).get();
+     FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}`
+  ).get({ campaign });
   return {
     summary,
     cellular: {
       by_zone: cellularByZone,
-      by_group: cellularRegistrationsBy("group_name"),
-      by_church: cellularRegistrationsBy("church_name"),
-      by_cell: attachCellRegions(cellRegistrationsByZone(), await loadZones()),
+      by_group: cellularRegistrationsBy("group_name", campaign),
+      by_church: cellularRegistrationsBy("church_name", campaign),
+      by_cell: attachCellRegions(cellRegistrationsByZone(campaign), await loadZones()),
     },
     zone_type_breakdown: zoneTypeBreakdown,
     active_types: CRUSADE_TYPES.filter(([key]) => key !== "rabah" && typeRows.some((row) => row.event_type === key)),
   };
 }
 
-registrations.get("/crusade-analysis", requirePageAccess("dashboard/crusade-analysis"), wrap(async (_req, res) => {
+registrations.get("/crusade-analysis", requirePageAccess("dashboard/crusade-analysis"), wrap(async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=30");
-  res.json(await cachedDashboardData("crusade-analysis", crusadeAnalysisData));
+  res.json(await cachedDashboardData(`crusade-analysis:${req.campaign}`, () => crusadeAnalysisData(req.campaign)));
 }));
 
 registrations.get("/crusade-analysis/export", requirePageAccess("dashboard/crusade-analysis"), wrap(async (req, res) => {
-  const data = await crusadeAnalysisData();
+  const data = await crusadeAnalysisData(req.campaign);
   const format = ["xlsx", "pdf"].includes(req.query.format) ? req.query.format : "csv";
   if (req.query.view === "cellular") {
     const level = ["group", "church"].includes(req.query.level) ? req.query.level : "zone";
@@ -720,9 +738,10 @@ registrations.get("/crusade-analysis/export", requirePageAccess("dashboard/crusa
   });
 }));
 
-export function buildRegistrationLiveData() {
+export function buildRegistrationLiveData(campaign = DEFAULT_CAMPAIGN) {
+  assertCampaign(campaign);
   const totals = db.prepare(`
-    SELECT (SELECT COUNT(*) FROM registrations WHERE program = 'public' OR program IS NULL) AS registrations,
+    SELECT (SELECT COUNT(*) FROM registrations WHERE campaign = @campaign AND (program = 'public' OR program IS NULL)) AS registrations,
            COALESCE(SUM(planned_count), 0)      AS planned,
            COUNT(*)                             AS items,
            COUNT(DISTINCT zone)                 AS zones,
@@ -740,15 +759,15 @@ export function buildRegistrationLiveData() {
            SUM(CASE WHEN organization_type = 'church' THEN planned_count ELSE 0 END)  AS church_crusades,
            SUM(CASE WHEN organization_type = 'cell' THEN planned_count ELSE 0 END)    AS cell_crusades,
            SUM(CASE WHEN organization_type = 'network' THEN planned_count ELSE 0 END) AS network_crusades,
-           (SELECT COUNT(*) FROM crusades c JOIN registration_items i ON c.registration_item_id = i.id WHERE ${PUBLIC_PROGRAM_FILTER}) AS reported,
-           COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades c JOIN registration_items i ON c.registration_item_id = i.id WHERE ${PUBLIC_PROGRAM_FILTER}) AS awaiting
-    FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
-  `).get();
+           (SELECT COUNT(*) FROM crusades c JOIN registration_items linked ON c.registration_item_id = linked.id WHERE c.campaign = @campaign AND linked.campaign = @campaign AND (linked.program = 'public' OR linked.program IS NULL)) AS reported,
+           COALESCE(SUM(planned_count), 0) - (SELECT COUNT(*) FROM crusades c JOIN registration_items linked ON c.registration_item_id = linked.id WHERE c.campaign = @campaign AND linked.campaign = @campaign AND (linked.program = 'public' OR linked.program IS NULL)) AS awaiting
+    FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
+  `).get({ campaign });
 
   const byCountryRaw = db.prepare(
     `SELECT country AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-     FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY country ORDER BY planned DESC`
-  ).all();
+     FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} GROUP BY country ORDER BY planned DESC`
+  ).all({ campaign });
   const byCountry = byCountryRaw
     .map((row) => ({ ...row, key: resolveCountryName(row.key) || row.key }))
     .sort((a, b) => b.planned - a.planned || a.key.localeCompare(b.key));
@@ -763,86 +782,86 @@ export function buildRegistrationLiveData() {
       // are not nations and must not inflate the canonical country KPI.
       countries: Math.min(canonicalCountryCount, COUNTRIES.length),
     },
-    by_type: registrationTypeBreakdown(),
+    by_type: registrationTypeBreakdown(campaign),
     by_country: byCountry,
     by_zone: db.prepare(
       `SELECT zone AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
-    ).all().slice(0, 100),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND zone IS NOT NULL GROUP BY zone ORDER BY planned DESC`
+    ).all({ campaign }).slice(0, 100),
     by_network: db.prepare(
       `SELECT i.network_name AS key,
               SUM(i.planned_count) AS planned, COUNT(DISTINCT i.registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER}
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER}
          AND i.network_name IS NOT NULL AND TRIM(i.network_name) <> ''
        GROUP BY key ORDER BY planned DESC LIMIT 100`
-    ).all(),
+    ).all({ campaign }),
     by_group: db.prepare(
       `SELECT group_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC LIMIT 100`
-    ).all(),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND group_name IS NOT NULL GROUP BY group_name ORDER BY planned DESC LIMIT 100`
+    ).all({ campaign }),
     by_church: db.prepare(
       `SELECT church_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC LIMIT 100`
-    ).all(),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND church_name IS NOT NULL GROUP BY church_name ORDER BY planned DESC LIMIT 100`
+    ).all({ campaign }),
     by_cell: db.prepare(
       `SELECT cell_name AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC LIMIT 500`
-    ).all(),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND cell_name IS NOT NULL GROUP BY cell_name ORDER BY planned DESC LIMIT 500`
+    ).all({ campaign }),
     by_city: db.prepare(
       `SELECT city AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city IS NOT NULL GROUP BY city ORDER BY planned DESC LIMIT 1000`
-    ).all(),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND city IS NOT NULL GROUP BY city ORDER BY planned DESC LIMIT 1000`
+    ).all({ campaign }),
     by_org_type: db.prepare(
       `SELECT organization_type AS key, SUM(planned_count) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY organization_type ORDER BY planned DESC`
-    ).all(),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} GROUP BY organization_type ORDER BY planned DESC`
+    ).all({ campaign }),
     by_readiness: db.prepare(
       `SELECT readiness_status AS key, COUNT(*) AS planned, COUNT(DISTINCT registration_id) AS registrations
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} GROUP BY readiness_status ORDER BY planned DESC`
-    ).all(),
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} GROUP BY readiness_status ORDER BY planned DESC`
+    ).all({ campaign }),
     // Real city points (geocoded) for the coverage map.
     geo: db.prepare(
       `SELECT city AS key, country, MAX(city_lat) AS lat, MAX(city_lng) AS lng, SUM(planned_count) AS planned
-       FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND city_lat IS NOT NULL
+       FROM registration_items i WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND city_lat IS NOT NULL
        GROUP BY city, country ORDER BY planned DESC LIMIT 1000`
-    ).all(),
+    ).all({ campaign }),
     // The live feed: latest registrations with their own totals.
     recent: db.prepare(
       `SELECT r.id, r.created_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name, r.network_name, r.country, r.plan_date,
               ${ORG_LABEL} AS org,
               COALESCE(SUM(i.planned_count), 0) AS planned, COUNT(i.id) AS types
-       FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id
-       WHERE (r.program = 'public' OR r.program IS NULL)
+       FROM registrations r LEFT JOIN registration_items i ON i.registration_id = r.id AND i.campaign = @campaign
+       WHERE r.campaign = @campaign AND (r.program = 'public' OR r.program IS NULL)
        GROUP BY r.id ORDER BY r.created_at DESC, r.id DESC LIMIT 25`
-    ).all(),
+    ).all({ campaign }),
   };
 }
 
-registrations.get("/live", requirePageAccess("registrations/live"), wrap((_req, res) => {
-  const data = registrationDashboardData(buildRegistrationLiveData);
+registrations.get("/live", requirePageAccess("registrations/live"), wrap((req, res) => {
+  const data = registrationDashboardData(req.campaign, buildRegistrationLiveData);
   res.setHeader("Cache-Control", "private, max-age=30");
   res.json(data);
 }));
 
 // Returns all countries without any registrations.
-registrations.get("/countries-without-registrations", requirePageAccess("dashboard/crusade-analysis"), wrap((_req, res) => {
+registrations.get("/countries-without-registrations", requirePageAccess("dashboard/crusade-analysis"), wrap((req, res) => {
   const registeredCountries = new Set(
     db.prepare(
-      `SELECT DISTINCT country FROM registration_items i WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
-    ).all().map((row) => resolveCountryName(row.country)).filter(Boolean)
+      `SELECT DISTINCT country FROM registration_items i WHERE i.campaign = ? AND ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL`
+    ).all(req.campaign).map((row) => resolveCountryName(row.country)).filter(Boolean)
   );
   const missing = COUNTRIES.filter((c) => !registeredCountries.has(c.name)).sort((a, b) => a.name.localeCompare(b.name));
   res.json({ countries: missing, total: missing.length });
 }));
 
-registrations.get("/country-report.pdf", requirePageAccess("dashboard/crusade-analysis"), wrap(async (_req, res) => {
+registrations.get("/country-report.pdf", requirePageAccess("dashboard/crusade-analysis"), wrap(async (req, res) => {
   const continentByCountry = new Map(COUNTRIES.map((country) => [country.name.toLowerCase(), country.continent || "Other"]));
   const raw = db.prepare(
     `SELECT country, COALESCE(SUM(planned_count), 0) AS crusades, COUNT(DISTINCT registration_id) AS registrations
      FROM registration_items i
-     WHERE ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL AND TRIM(country) <> ''
+     WHERE i.campaign = @campaign AND ${PUBLIC_PROGRAM_FILTER} AND country IS NOT NULL AND TRIM(country) <> ''
      GROUP BY country COLLATE NOCASE`
-  ).all();
+  ).all({ campaign: req.campaign });
   const byCanonical = new Map();
   for (const row of raw) {
     const key = resolveCountryName(row.country) || row.country;
@@ -877,9 +896,11 @@ registrations.get("/country-report.pdf", requirePageAccess("dashboard/crusade-an
 // Shared WHERE clause for the registrations table and its export.
 // Always scoped to public registrations (NULL allowed for pre-migration rows)
 // so Blue Elite rows never appear in the original admin table.
-export function registrationFilters(query) {
-  const where = ["(r.program = 'public' OR r.program IS NULL)"];
-  const params = {};
+export function registrationFilters(campaignOrQuery, maybeQuery) {
+  const campaign = maybeQuery === undefined ? DEFAULT_CAMPAIGN : assertCampaign(campaignOrQuery);
+  const query = maybeQuery === undefined ? campaignOrQuery : maybeQuery;
+  const where = ["r.campaign = @campaign", "i.campaign = @campaign", "(r.program = 'public' OR r.program IS NULL)"];
+  const params = { campaign };
   for (const col of ["organization_type", "zone", "group_name", "church_name", "cell_name", "network_name"]) {
     if (query[col]) { where.push(`r.${col} = @${col}`); params[col] = String(query[col]); }
   }
@@ -887,8 +908,8 @@ export function registrationFilters(query) {
   if (query.country) { where.push("i.country = @country"); params.country = String(query.country); }
   if (query.city) { where.push("i.city = @city"); params.city = String(query.city); }
   if (query.readiness_status) { where.push("i.readiness_status = @readiness_status"); params.readiness_status = String(query.readiness_status); }
-  if (query.report_status === "reported") where.push("EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
-  if (query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id)");
+  if (query.report_status === "reported") where.push("EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign)");
+  if (query.report_status === "unreported") where.push("NOT EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign)");
   if (query.cellular === "1") where.push(CELLULAR_ITEM_FILTER);
   if (query.event_type) { where.push("i.event_type = @event_type"); params.event_type = String(query.event_type); }
   const excludedTypes = [...new Set(String(query.exclude_event_type || "").split(",")
@@ -934,7 +955,7 @@ const REGISTRATION_EXPORT_SELECT =
           i.crusade_collaborators, i.zone_contribution, i.estimated_budget, i.rhapsody_copies_confirmed, i.permits_obtained, i.media_coverage_plan,
           r.created_at AS registered_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name, r.network_name,
           r.contact_name, r.contact_email, r.phone_country_code, r.phone_number, r.kingschat_username,
-          EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+          EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign) AS report_submitted
    FROM registration_items i JOIN registrations r ON r.id = i.registration_id`;
 
 const REGISTRATION_EXPORT_COLUMNS = [
@@ -971,14 +992,14 @@ const REGISTRATION_EXPORT_COLUMNS = [
 
 // GET /api/registrations/export?format=csv|xlsx — all rows matching the current filters.
 registrations.get("/export", requirePageAccess("registrations"), wrap(async (req, res) => {
-  const { clause, params } = registrationFilters(req.query);
+  const { clause, params } = registrationFilters(req.campaign, req.query);
   const rows = db.prepare(`${REGISTRATION_EXPORT_SELECT} ${clause} ORDER BY i.id DESC`).iterate(params);
   await sendStreamingExport(res, req.query.format === "xlsx" ? "xlsx" : "csv", "registered-crusades", REGISTRATION_EXPORT_COLUMNS, rows);
 }));
 
 // GET /api/registrations — paginated, filtered, sorted table for the admin view.
 registrations.get("/", requireExternalOrPageAccess(["registrations"]), wrap((req, res) => {
-  const { clause, params } = registrationFilters(req.query);
+  const { clause, params } = registrationFilters(req.campaign, req.query);
   if (req.externalApi) {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
     const cursor = Math.max(parseInt(req.query.cursor, 10) || 0, 0);
@@ -989,7 +1010,7 @@ registrations.get("/", requireExternalOrPageAccess(["registrations"]), wrap((req
               i.city, i.city_place_id, i.readiness_status, i.readiness_notes, i.readiness_updated_at,
               i.crusade_collaborators, i.zone_contribution, i.estimated_budget, i.rhapsody_copies_confirmed,
               i.permits_obtained, i.media_coverage_plan,
-              EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted
+              EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign) AS report_submitted
        FROM registration_items i JOIN registrations r ON r.id = i.registration_id
        ${clause}${clause ? " AND" : " WHERE"} (@cursor = 0 OR i.id < @cursor)
        ORDER BY i.id DESC LIMIT @limit_plus_one`
@@ -1020,11 +1041,11 @@ registrations.get("/", requireExternalOrPageAccess(["registrations"]), wrap((req
             r.created_at AS registered_at, r.organization_type, r.zone, r.group_name, r.church_name, r.cell_name,
             r.network_name, r.country, r.contact_name, r.contact_email, r.phone_country_code, r.phone_number,
             r.kingschat_username, ${ORG_LABEL} AS org,
-            EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id) AS report_submitted,
-            (SELECT c.id FROM crusades c WHERE c.registration_item_id = i.id LIMIT 1) AS report_crusade_id
+            EXISTS (SELECT 1 FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign) AS report_submitted,
+            (SELECT c.id FROM crusades c WHERE c.registration_item_id = i.id AND c.campaign = @campaign LIMIT 1) AS report_crusade_id
      FROM registration_items i JOIN registrations r ON r.id = i.registration_id
      ${clause} ORDER BY ${sortCol} ${dir}, i.id DESC LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
 
-  res.json({ rows, total, page, page_size: pageSize, filter_options: registrationFilterOptions() });
+  res.json({ rows, total, page, page_size: pageSize, filter_options: registrationFilterOptions(req.campaign) });
 }));

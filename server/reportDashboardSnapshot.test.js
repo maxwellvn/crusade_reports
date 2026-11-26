@@ -13,14 +13,14 @@ test("reports dashboard serves its persisted snapshot without rebuilding", async
   try {
     db.prepare("DELETE FROM registration_dashboard_snapshots WHERE key = ?").run(REPORT_DASHBOARD_SNAPSHOT_KEY);
     let builds = 1;
-    saveReportDashboardSnapshot({ marker: builds });
-    const second = await reportDashboardData(() => ({ marker: ++builds }));
+    saveReportDashboardSnapshot("notc", { marker: builds });
+    const second = await reportDashboardData("notc", () => ({ marker: ++builds }));
     assert.deepEqual(second, { marker: 1 });
     assert.equal(builds, 1);
-    assert.deepEqual(readReportDashboardSnapshot().data, { marker: 1 });
+    assert.deepEqual(readReportDashboardSnapshot("notc").data, { marker: 1 });
 
-    saveReportDashboardSnapshot({ marker: 2 });
-    assert.deepEqual(readReportDashboardSnapshot().data, { marker: 2 });
+    saveReportDashboardSnapshot("notc", { marker: 2 });
+    assert.deepEqual(readReportDashboardSnapshot("notc").data, { marker: 2 });
   } finally {
     db.exec("ROLLBACK");
   }

@@ -650,6 +650,7 @@ test("account management middleware rejects every approved user except maxwellvn
       json: async () => ({ profile: { user: { username: options.headers.Authorization.endsWith("super-token") ? "maxwellvn" : "ordinary.admin" } } }),
     });
     const run = (token) => new Promise((resolve) => requireSuperAdmin({
+      campaign: "notc",
       headers: {},
       get: (name) => name === "authorization" ? `Bearer ${token}` : "",
     }, {}, (error) => resolve(error)));
@@ -673,6 +674,7 @@ test("page access middleware honors the Mission nations permission", async () =>
       json: async () => ({ profile: { user: { username: "mission.admin" } } }),
     });
     const run = () => new Promise((resolve) => requirePageAccess("dashboard/mission-nations")({
+      campaign: "notc",
       headers: {},
       get: (name) => name === "authorization" ? "Bearer mission-page-token" : "",
     }, {}, (error) => resolve(error)));
@@ -718,6 +720,7 @@ test("assignable admin pages use their delegated permission middleware", async (
       assert.ok(layer, `${method.toUpperCase()} ${path} route exists`);
       const middleware = layer.route.stack[0].handle;
       const error = await new Promise((resolve) => middleware({
+        campaign: "notc",
         headers: {},
         get: (name) => name === "authorization" ? `Bearer assigned-${pageKey}` : "",
       }, {}, (nextError) => resolve(nextError)));
@@ -726,6 +729,7 @@ test("assignable admin pages use their delegated permission middleware", async (
       db.prepare("DELETE FROM dashboard_permissions WHERE username = ? COLLATE NOCASE").run(username);
       db.prepare("INSERT INTO dashboard_permissions (username, page_key) VALUES (?, 'dashboard/resources')").run(username);
       const denied = await new Promise((resolve) => middleware({
+        campaign: "notc",
         headers: {},
         get: (name) => name === "authorization" ? `Bearer denied-${pageKey}` : "",
       }, {}, (nextError) => resolve(nextError)));
@@ -742,7 +746,7 @@ test("an explicitly empty delegated permission set stays empty", () => {
   db.exec("BEGIN");
   try {
     db.prepare("INSERT INTO dashboard_accounts (username, created_by, permissions_configured) VALUES (?, 'test', 1)").run(username);
-    assert.equal(canAccessPage({ username, is_super_admin: false }, "dashboard"), false);
+    assert.equal(canAccessPage({ campaign: "notc", username, is_super_admin: false }, "dashboard"), false);
   } finally {
     db.exec("ROLLBACK");
   }
@@ -982,7 +986,7 @@ test("planned versus held counts only reports linked to registered crusades", ()
        VALUES (?, 'zone', ?, 'Nigeria', 'mega', 'Lagos', '2026-08-01')`
     ).run(reportId, marker);
 
-    const row = registrationProgress("zone").find((item) => item.key === marker);
+    const row = registrationProgress("notc", "zone").find((item) => item.key === marker);
     assert.deepEqual({ planned: row.planned, items: row.items, held: row.held }, { planned: 2, items: 2, held: 1 });
   } finally {
     db.exec("ROLLBACK");
@@ -1003,7 +1007,7 @@ test("explicit network ownership takes priority over Youths Aglow fallback attri
        VALUES (?, 'network', 'BLW Test Zone', ?, 'Nigeria', '2026-08-01', 'youths-aglow', 1, 'TNI ownership test', '2026-08-01', 'Test venue', 100)`
     ).run(registrationId, network);
 
-    const row = registrationProgress("network_name").find((item) => item.key === network);
+    const row = registrationProgress("notc", "network_name").find((item) => item.key === network);
     assert.deepEqual({ planned: row?.planned, items: row?.items }, { planned: 1, items: 1 });
   } finally {
     db.exec("ROLLBACK");
@@ -1013,11 +1017,11 @@ test("explicit network ownership takes priority over Youths Aglow fallback attri
 test("reporting access can be closed and is enforced server-side", () => {
   db.exec("BEGIN");
   try {
-    setReportingOpen(false);
-    assert.equal(isReportingOpen(), false);
-    assert.throws(ensureReportingOpen, (error) => error.code === "REPORTING_CLOSED" && error.status === 403);
-    setReportingOpen(true);
-    assert.doesNotThrow(ensureReportingOpen);
+    setReportingOpen("notc", false);
+    assert.equal(isReportingOpen("notc"), false);
+    assert.throws(() => ensureReportingOpen("notc"), (error) => error.code === "REPORTING_CLOSED" && error.status === 403);
+    setReportingOpen("notc", true);
+    assert.doesNotThrow(() => ensureReportingOpen("notc"));
   } finally {
     db.exec("ROLLBACK");
   }
@@ -1026,13 +1030,13 @@ test("reporting access can be closed and is enforced server-side", () => {
 test("unrelated campaign settings updates preserve reporting access", () => {
   db.exec("BEGIN");
   try {
-    setReportingOpen(true);
-    const updated = updateCampaignSettings({ manual_cities_enabled: false });
+    setReportingOpen("notc", true);
+    const updated = updateCampaignSettings("notc", { manual_cities_enabled: false });
     assert.equal(updated.reporting_open, true);
-    assert.equal(isReportingOpen(), true);
+    assert.equal(isReportingOpen("notc"), true);
 
-    updateCampaignSettings({ reporting_open: false });
-    assert.equal(isReportingOpen(), false);
+    updateCampaignSettings("notc", { reporting_open: false });
+    assert.equal(isReportingOpen("notc"), false);
   } finally {
     db.exec("ROLLBACK");
   }
@@ -1073,7 +1077,7 @@ test("cell and RABAH registrations merge into one cellular category without doub
   db.exec("BEGIN");
   try {
     const liveBefore = new Map(registrationTypeBreakdown().map((row) => [row.key, row]));
-    const progressBefore = new Map(registrationProgress("event_type").map((row) => [row.key, row]));
+    const progressBefore = new Map(registrationProgress("notc", "event_type").map((row) => [row.key, row]));
     const insertRegistration = db.prepare(
       `INSERT INTO registrations (organization_type, zone, country, plan_date)
        VALUES (?, ?, 'Nigeria', '2026-08-28')`
@@ -1109,7 +1113,7 @@ test("cell and RABAH registrations merge into one cellular category without doub
     assert.equal(filteredRows.length, 3);
 
     const liveAfter = new Map(registrationTypeBreakdown().map((row) => [row.key, row]));
-    const progressAfter = new Map(registrationProgress("event_type").map((row) => [row.key, row]));
+    const progressAfter = new Map(registrationProgress("notc", "event_type").map((row) => [row.key, row]));
     assert.equal(liveAfter.has("rabah"), false);
     assert.equal(progressAfter.has("rabah"), false);
     assert.equal(liveAfter.get("cellular").planned - (liveBefore.get("cellular")?.planned || 0), 10);

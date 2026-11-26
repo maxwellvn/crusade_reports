@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "../auth.js";
 import { wrap, ApiError } from "../logger.js";
 import { backupDatabase } from "../databaseProtection.js";
 import { COUNTRIES, resolveCountryName } from "./countries.js";
+import { DEFAULT_CAMPAIGN, assertCampaign } from "../campaigns.js";
 
 // Tool for collapsing duplicate / variant country names left behind by bulk
 // uploads. Reads are already hardened to normalize on the fly (dashboards can
@@ -18,10 +19,11 @@ const COUNTRY_SOURCES = [
   { table: "registrations", column: "country" },
 ];
 
-function distinctStoredCountries() {
+function distinctStoredCountries(campaign = DEFAULT_CAMPAIGN) {
+  const selectedCampaign = assertCampaign(campaign);
   const set = new Set();
   for (const { table, column } of COUNTRY_SOURCES) {
-    const rows = db.prepare(`SELECT DISTINCT ${column} AS c FROM ${table} WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''`).all();
+    const rows = db.prepare(`SELECT DISTINCT ${column} AS c FROM ${table} WHERE campaign = ? AND ${column} IS NOT NULL AND TRIM(${column}) <> ''`).all(selectedCampaign);
     for (const row of rows) set.add(row.c);
   }
   return [...set];
@@ -29,8 +31,9 @@ function distinctStoredCountries() {
 
 // Returns the variants that resolve to a canonical country plus any values that
 // resolve to nothing (unresolvable) — the two kinds of rows an admin must review.
-function analyze() {
-  const stored = distinctStoredCountries();
+function analyze(campaign = DEFAULT_CAMPAIGN) {
+  const selectedCampaign = assertCampaign(campaign);
+  const stored = distinctStoredCountries(selectedCampaign);
   const canonicalCount = new Set(stored.map((name) => resolveCountryName(name)).filter(Boolean)).size;
   const variantGroups = [];
   const unresolvable = [];
@@ -52,8 +55,8 @@ function analyze() {
   for (const name of stored) {
     const canonical = resolveCountryName(name);
     if (!canonical || canonical === name) continue;
-    const itemRows = db.prepare("SELECT COUNT(*) AS n FROM registration_items WHERE country = ?").get(name).n;
-    const regRows = db.prepare("SELECT COUNT(*) AS n FROM registrations WHERE country = ?").get(name).n;
+    const itemRows = db.prepare("SELECT COUNT(*) AS n FROM registration_items WHERE campaign = ? AND country = ?").get(selectedCampaign, name).n;
+    const regRows = db.prepare("SELECT COUNT(*) AS n FROM registrations WHERE campaign = ? AND country = ?").get(selectedCampaign, name).n;
     affectedItems += itemRows;
     affectedRegistrations += regRows;
   }
@@ -69,34 +72,35 @@ function analyze() {
   };
 }
 
-countryConsolidation.get("/", requireSuperAdmin, wrap((_req, res) => {
-  res.json(analyze());
+countryConsolidation.get("/", requireSuperAdmin, wrap((req, res) => {
+  res.json(analyze(req.campaign));
 }));
 
 countryConsolidation.post("/apply", requireSuperAdmin, wrap(async (req, res) => {
   const { confirm } = req.body || {};
   if (confirm !== true) throw new ApiError(422, "CONFIRM_REQUIRED", "Pass confirm: true to apply the consolidation.");
 
-  const analysis = analyze();
+  const campaign = assertCampaign(req.campaign);
+  const analysis = analyze(campaign);
   const backup = await backupDatabase("pre-country-consolidation");
   let itemsUpdated = 0;
   let registrationsUpdated = 0;
 
   db.transaction(() => {
     for (const { table, column } of COUNTRY_SOURCES) {
-      const rows = db.prepare(`SELECT DISTINCT ${column} AS c FROM ${table} WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''`).all();
-      const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`);
+      const rows = db.prepare(`SELECT DISTINCT ${column} AS c FROM ${table} WHERE campaign = ? AND ${column} IS NOT NULL AND TRIM(${column}) <> ''`).all(campaign);
+      const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE campaign = ? AND ${column} = ?`);
       for (const row of rows) {
         const canonical = resolveCountryName(row.c);
         if (!canonical || canonical === row.c) continue;
-        const result = update.run(canonical, row.c);
+        const result = update.run(canonical, campaign, row.c);
         if (table === "registration_items") itemsUpdated += result.changes;
         else registrationsUpdated += result.changes;
       }
     }
   })();
 
-  const after = analyze();
+  const after = analyze(campaign);
   res.json({
     ok: true,
     backup: { name: backup.name, bytes: backup.bytes },

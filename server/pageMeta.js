@@ -1,4 +1,7 @@
+import { DEFAULT_CAMPAIGN } from "./campaigns.js";
+
 const BRAND = "Rhapsody End-Time Teaching Crusades";
+const AAC_BRAND = "Angels at Christmas";
 
 const PAGES = [
   [/^\/$/, "A Night of a Thousand Crusades", "Register and prepare for A Night of a Thousand Crusades, a global mobilisation of simultaneous gospel crusades.", "/", "/logo.png"],
@@ -17,6 +20,17 @@ const PAGES = [
   [/^\/terms\/?$/, "Terms of Service", "The terms governing your use of the Night of a Thousand Crusades platform.", "/terms", "/logo.png"],
 ];
 
+const AAC_PAGES = [
+  [/^\/$/, "Angels at Christmas", "Register, prepare and report Angels at Christmas Celebration Crusades throughout December 2026.", "/", "/angels-at-christmas-emblem.png"],
+  [/^\/crusade-registration\/register\/?$/, "Register an Angels Crusade", "Register a confirmed Angels at Christmas Celebration Crusade taking place from 1 to 31 December 2026.", "/crusade-registration/register", "/angels-at-christmas-emblem.png"],
+  [/^\/crusade-registration\/?$/, "Angels at Christmas", "Register, prepare and report Angels at Christmas Celebration Crusades throughout December 2026.", "/crusade-registration", "/angels-at-christmas-emblem.png"],
+  [/^\/crusade-registration\/find\/?$/, "Find Your Angels Crusade", "Find a registered Angels at Christmas crusade and submit its completed report.", "/crusade-registration/find", "/angels-at-christmas-emblem.png"],
+  [/^\/report\/?$/, "Report an Angels Crusade", "Submit the verified outcome of a completed Angels at Christmas Celebration Crusade.", "/report", "/angels-at-christmas-emblem.png"],
+  [/^\/resources\/?$/, "Angels at Christmas Resources", "Access approved Angels at Christmas resources for crusade preparation and execution.", "/resources", "/angels-at-christmas-emblem.png"],
+  [/^\/privacy\/?$/, "Privacy Policy", "How the Angels at Christmas portal collects, uses, stores and protects your personal information.", "/privacy", "/angels-at-christmas-emblem.png"],
+  [/^\/terms\/?$/, "Terms of Service", "The terms governing your use of the Angels at Christmas portal.", "/terms", "/angels-at-christmas-emblem.png"],
+];
+
 const escapeAttribute = (value) => String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
 function replaceMeta(html, attribute, key, tag) {
@@ -24,11 +38,12 @@ function replaceMeta(html, attribute, key, tag) {
   return pattern.test(html) ? html.replace(pattern, tag) : html.replace("</head>", `    ${tag}\n  </head>`);
 }
 
-export function renderPageMetadata(template, pathname, origin) {
-  const page = PAGES.find(([pattern]) => pattern.test(pathname));
+export function renderPageMetadata(template, pathname, origin, campaign = DEFAULT_CAMPAIGN) {
+  const isAac = campaign === "aac";
+  const page = (isAac ? AAC_PAGES : PAGES).find(([pattern]) => pattern.test(pathname));
   if (!page) return template;
   const [, heading, description, canonicalPath, imagePath] = page;
-  const title = `${heading} — ${BRAND}`;
+  const title = `${heading} — ${isAac ? AAC_BRAND : BRAND}`;
   const canonical = `${origin}${canonicalPath}`;
   const image = `${origin}${imagePath}`;
   const meta = {

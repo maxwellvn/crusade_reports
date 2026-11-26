@@ -157,7 +157,7 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
     phone_country_code: String(req.body.phone_country_code || "").trim(),
     phone_number: String(req.body.phone_number || "").trim(),
     kingschat_username: String(req.body.kingschat_username || "").trim(),
-  }, portalToken);
+  }, portalToken, req.campaign);
 
   // Bulk upload is open to every organization type.
 
@@ -253,8 +253,8 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   let canonical;
   try {
     canonical = validateRegistrationOrganization(reg, directory, {
-      manualZonesEnabled: isManualZonesEnabled(),
-      manualGroupsEnabled: isManualGroupsEnabled(),
+      manualZonesEnabled: isManualZonesEnabled(req.campaign),
+      manualGroupsEnabled: isManualGroupsEnabled(req.campaign),
       trustedZone: Boolean(portalToken),
     });
   } catch (e) {
@@ -330,12 +330,12 @@ registrationImporter.post("/", upload.single("file"), wrap(async (req, res) => {
   // same insert transaction — so imported rows are indistinguishable from manual
   // registrations. city_place_id was already geocoded above.
   if (directCommit) {
-    const registration = { ...parsed.data, items: parsed.data.items };
+    const registration = { ...parsed.data, items: parsed.data.items, campaign: req.campaign };
     const id = insertRegistration(registration);
     // Fire-and-forget housekeeping, same as the manual POST /registrations.
     import("./places.js").then(({ backfillCityCoords }) => backfillCityCoords().catch(() => {}));
     import("./registrations.js").then(({ backupDatabaseRolling }) => backupDatabaseRolling().catch((error) => logger.error({ err: error }, "registration backup failed")));
-    import("../registrationDashboardSnapshot.js").then(({ scheduleRegistrationDashboardRefresh }) => scheduleRegistrationDashboardRefresh({ force: true }));
+    import("../registrationDashboardSnapshot.js").then(({ scheduleRegistrationDashboardRefresh }) => scheduleRegistrationDashboardRefresh({ campaign: req.campaign, force: true }));
     logger.info({ ...summary, id }, "registration import committed");
     return res.status(201).json({ ok: true, committed: true, id, count: items.length, summary });
   }
